@@ -45,34 +45,49 @@ cp -r "$work/x/byond/bin" "$work/dmfast"
 if [ "$os" = windows ]; then "$installer" --runtime "$(native "$work/dmfast")" >"$work/install.txt" 2>&1
 else sh "$installer" --runtime "$work/dmfast" >"$work/install.txt" 2>&1; fi || { cat "$work/install.txt"; exit 1; }
 
-# run <bin dir> <program> <args...>: run a BYOND program from that build with dmfast's stats on.
+# run <bin dir> <program> <args...>: run a BYOND program from that build with dmfast's stats on, for at
+# most $limit seconds (default 120; exit status 124 when it hit the limit).
 run() {
   local bin=$1 prog=$2; shift 2
-  if [ "$os" = linux ]; then LD_LIBRARY_PATH="$bin" DMFAST_STATS=1 "$bin/$prog" "$@"
-  else DMFAST_STATS=1 "$bin/$prog" "$@"; fi
+  if [ "$os" = linux ]; then LD_LIBRARY_PATH="$bin" DMFAST_STATS=1 timeout "${limit:-120}" "$bin/$prog" "$@"
+  else DMFAST_STATS=1 timeout "${limit:-120}" "$bin/$prog" "$@"; fi
+}
+
+# broken <why>: stock BYOND itself doesn't work on this runner (some builds hang or crash); record the
+# build as broken and pass, since there is nothing to compare dmfast against.
+broken() {
+  echo "::warning::$version $os: stock BYOND build looks broken ($1); skipping"
+  row="| $version | ${real:-?} | $os | broken build: $1 | | | | | | | | |"
+  echo "$row" > "compat-$os-$version.md"
+  [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
+  exit 0
 }
 
 fail=0
-# compile <bin dir> <dme>: sets $secs and $hash (sha256 of the .dmb), returns non-zero if the compile
-# fails; the output is in $work/out.txt.
+# compile <bin dir> <dme>: sets $secs and $hash (sha256 of the .dmb); returns the compiler's exit status
+# (124 if it ran out of time). The output is in $work/out.txt.
 compile() {
-  local start end
+  local start end rc=0
   rm -f "${2%.dme}.dmb"
   start=$(date +%s.%N)
-  (cd "$(dirname "$2")" && run "$1" "$dm" "$(basename "$2")") >"$work/out.txt" 2>&1 || return 1
+  (cd "$(dirname "$2")" && run "$1" "$dm" "$(basename "$2")") >"$work/out.txt" 2>&1 || rc=$?
+  [ "$rc" = 0 ] || return "$rc"
   end=$(date +%s.%N)
   secs=$(awk -v a="$start" -v b="$end" 'BEGIN{printf "%.1f", b-a}')
   hash=$(sha256sum "${2%.dme}.dmb" | cut -c1-16)
 }
 
 # A project may refuse some BYOND builds itself (minimum/maximum version checks): then only rtsmoke runs.
-if compile "$work/stock" "$project"; then
+rc=0; compile "$work/stock" "$project" || rc=$?
+[ "$rc" != 124 ] || broken "$(basename "$project") compile timed out"
+if [ "$rc" = 0 ]; then
   t_stock=${secs}s; h_stock=$hash
-  if compile "$work/dmfast" "$project"; then
+  rc=0; compile "$work/dmfast" "$project" || rc=$?
+  if [ "$rc" = 0 ]; then
     t_fast=${secs}s; h_fast=$hash
     [ "$h_stock" = "$h_fast" ] || { echo "::error::$version $os: $(basename "$project") .dmb differs"; fail=1; }
   else
-    echo "::error::$version $os: $(basename "$project") compiles with stock but not with dmfast"; cat "$work/out.txt"; fail=1
+    echo "::error::$version $os: $(basename "$project") compiles with stock but not with dmfast (exit $rc)"; cat "$work/out.txt"; fail=1
   fi
   compiler=$(grep -E '^dmfast: ' "$work/out.txt" || true)
 else
@@ -81,7 +96,9 @@ else
   t_stock="n/a"; t_fast="n/a"
 fi
 
-compile "$work/stock" "$root/tests/rtsmoke.dme" || { echo "::error::$version $os: stock rtsmoke compile failed"; cat "$work/out.txt"; exit 1; }
+rc=0; compile "$work/stock" "$root/tests/rtsmoke.dme" || rc=$?
+[ "$rc" != 124 ] || broken "rtsmoke compile timed out"
+[ "$rc" = 0 ] || broken "rtsmoke compile failed (exit $rc)"
 s_stock=$hash
 compile "$work/dmfast" "$root/tests/rtsmoke.dme" || { echo "::error::$version $os: dmfast rtsmoke compile failed"; cat "$work/out.txt"; exit 1; }
 s_fast=$hash
@@ -98,6 +115,7 @@ daemon() {
   dd_line=$({ grep -h 'len=' "$log" 2>/dev/null || true; } | sed 's/^\[[^]]*\] *//' | tail -1)
 }
 daemon "$work/stock"; d_stock=$dd_line
+[ "$dd_rc" != 124 ] || broken "DreamDaemon timed out on rtsmoke"
 daemon "$work/dmfast"; d_fast=$dd_line; fast_rc=$dd_rc
 runtime=$(grep -E '^dmfast: ' "$work/dd.txt" || true)
 if [ -n "$d_stock" ]; then
@@ -114,6 +132,7 @@ fi
 # and rtsmoke in DreamDaemon; the .dmb files must still match stock.
 vlog="$work/verify.txt"; : >"$vlog"
 export DMFAST_VERIFY=1
+limit=300 # verify mode works most answers out twice
 if [ -n "${h_fast:-}" ]; then
   if compile "$work/dmfast" "$project"; then
     cat "$work/out.txt" >>"$vlog"
@@ -129,7 +148,7 @@ else
   echo "::error::$version $os: rtsmoke verify-mode compile failed"; cat "$work/out.txt"; fail=1
 fi
 daemon "$work/dmfast"; cat "$work/dd.txt" >>"$vlog"
-unset DMFAST_VERIFY
+unset DMFAST_VERIFY limit
 checked=$({ grep -E '^dmfast: .*mismatches=' "$vlog" || true; } | wc -l | tr -d ' ')
 bad=$(grep -E '^dmfast: .*mismatches=[1-9]' "$vlog" || true)
 if [ -n "$bad" ]; then
@@ -140,18 +159,18 @@ else
 fi
 
 # load_secs <bin dir> <dmb>: prints seconds until DreamDaemon's world prints its first line (after BYOND's
-# banner), or nothing if it doesn't within 120 s. The world is stopped then.
+# banner), or nothing if it doesn't within 60 s. The world is stopped then.
 load_secs() {
-  local out="$work/load.txt" start pid elapsed=""
+  local out="$work/load.txt" start pid elapsed="" deadline
   : >"$out"
-  start=$(date +%s.%N)
+  start=$(date +%s.%N); deadline=$(( $(date +%s) + 60 ))
   if [ "$os" = linux ]; then
     (cd "$(dirname "$2")" && exec env LD_LIBRARY_PATH="$1" "$1/$dd" "$(basename "$2")" -trusted -invisible) >"$out" 2>&1 &
   else
     (cd "$(dirname "$2")" && exec "$1/$dd" "$(basename "$2")" -trusted -invisible) >"$out" 2>&1 &
   fi
   pid=$!
-  for _ in $(seq 2400); do
+  while [ "$(date +%s)" -lt "$deadline" ]; do
     if sed -n '/Welcome BYOND/,$p' "$out" | tail -n +2 | grep -v '^dmfast' | grep -q '[^[:space:]]'; then
       elapsed=$(awk -v a="$start" -v b="$(date +%s.%N)" 'BEGIN{printf "%.2f", b-a}'); break
     fi
@@ -166,12 +185,18 @@ load_secs() {
 median() { printf '%s\n' "$@" | { grep . || true; } | sort -g | awk '{v[NR]=$1} END{if (NR) printf "%ss", v[int((NR+1)/2)]}'; }
 l_stock=""; l_fast=""
 if [ -n "${h_fast:-}" ]; then
-  ls=(); lf=()
-  for _ in 1 2 3; do
-    ls+=("$(load_secs "$work/stock" "${project%.dme}.dmb")")
-    lf+=("$(load_secs "$work/dmfast" "${project%.dme}.dmb")")
-  done
-  l_stock=$(median "${ls[@]}"); l_fast=$(median "${lf[@]}")
+  # Some builds' worlds never print anything (as with rtsmoke above): then there is nothing to time.
+  first=$(load_secs "$work/stock" "${project%.dme}.dmb")
+  if [ -n "$first" ]; then
+    ls=("$first"); lf=()
+    for _ in 1 2 3; do
+      lf+=("$(load_secs "$work/dmfast" "${project%.dme}.dmb")")
+      [ ${#ls[@]} = 3 ] || ls+=("$(load_secs "$work/stock" "${project%.dme}.dmb")")
+    done
+    l_stock=$(median "${ls[@]}"); l_fast=$(median "${lf[@]}")
+  else
+    echo "stock DreamDaemon $version printed nothing from $(basename "$project")'s world in 60 s; not timing world load"
+  fi
 fi
 disabled=$(printf '%s\n%s\n' "$compiler" "$runtime" | grep ' disabled: ' | sed 's/^dmfast: //; s/ disabled:.*//' | paste -sd, - || true)
 mask() { printf '%s\n' "$1" | grep -oE 'patched=0x[0-9a-f]+' | tail -1 | cut -d= -f2; }

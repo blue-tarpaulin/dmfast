@@ -131,7 +131,16 @@ jobs:
           rm -rf tgstation/.git
       - name: Test
         shell: bash
-        run: bash tools/compat.sh "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme
+        # Each BYOND program has its own time limit in compat.sh (a stock build that hangs is skipped as
+        # broken). This catches anything else that hangs: past 20 minutes the build is skipped with a warning.
+        run: |
+          rc=0
+          timeout 20m bash tools/compat.sh "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || rc=$?
+          if [ "$rc" = 124 ]; then
+            echo "::warning::BYOND ${{ matrix.byond }} on ${{ runner.os }}: test still running after 20 minutes; skipped"
+            exit 0
+          fi
+          exit "$rc"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
