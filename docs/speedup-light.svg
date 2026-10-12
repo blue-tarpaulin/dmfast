@@ -1,25 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="334" viewBox="0 0 720 334" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="dmfast speedups: large-codebase compile 6.1x faster on Windows, 7.9x on Linux; DreamDaemon startup 4.6x and 1.9x">
-  <text x="0" y="24" font-size="15" font-weight="600" fill="#1f2328">Large codebase compile <tspan font-weight="400" fill="#59636e" font-size="13">dm.exe / DreamMaker</tspan></text>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="350" viewBox="0 0 720 350" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="dmfast speedups over four large SS13 codebases: compile 6.6x faster on Windows and 10.2x on Linux; DreamDaemon world load 4.3x and 2.1x faster">
+  <text x="0" y="24" font-size="15" font-weight="600" fill="#1f2328">SS13 codebase compile <tspan font-weight="400" fill="#59636e" font-size="13">dm.exe / DreamMaker, average of four codebases</tspan></text>
   <text x="0" y="64.0" font-size="13" fill="#1f2328">Windows</text>
-  <rect x="92" y="38" width="352.1" height="18" rx="3" fill="#d1d9e0"/>
-  <text x="450.1" y="51" font-size="12" fill="#59636e">stock 27.4 s</text>
-  <rect x="92" y="62" width="57.8" height="18" rx="3" fill="#1f883d"/>
-  <text x="155.8" y="75" font-size="12" fill="#1f2328"><tspan font-weight="600">dmfast 4.5 s</tspan> <tspan fill="#1f883d" font-weight="700">6.1x faster</tspan></text>
+  <rect x="92" y="38" width="324.9" height="18" rx="3" fill="#d1d9e0"/>
+  <text x="422.9" y="51" font-size="12" fill="#59636e">stock 27.3 s</text>
+  <rect x="92" y="62" width="49.2" height="18" rx="3" fill="#1f883d"/>
+  <text x="147.2" y="75" font-size="12" fill="#1f2328"><tspan font-weight="600">dmfast 4.14 s</tspan> <tspan fill="#1f883d" font-weight="700">6.6x faster</tspan></text>
   <text x="0" y="122.0" font-size="13" fill="#1f2328">Linux</text>
   <rect x="92" y="96" width="478.0" height="18" rx="3" fill="#d1d9e0"/>
-  <text x="576.0" y="109" font-size="12" fill="#59636e">stock 37.2 s</text>
-  <rect x="92" y="120" width="60.4" height="18" rx="3" fill="#1f883d"/>
-  <text x="158.4" y="133" font-size="12" fill="#1f2328"><tspan font-weight="600">dmfast 4.7 s</tspan> <tspan fill="#1f883d" font-weight="700">7.9x faster</tspan></text>
-  <text x="0" y="180" font-size="15" font-weight="600" fill="#1f2328">DreamDaemon startup <tspan font-weight="400" fill="#59636e" font-size="13">to “Starting new round”</tspan></text>
+  <text x="576.0" y="109" font-size="12" fill="#59636e">stock 40.2 s</text>
+  <rect x="92" y="120" width="47.0" height="18" rx="3" fill="#1f883d"/>
+  <text x="145.0" y="133" font-size="12" fill="#1f2328"><tspan font-weight="600">dmfast 3.95 s</tspan> <tspan fill="#1f883d" font-weight="700">10.2x faster</tspan></text>
+  <text x="0" y="180" font-size="15" font-weight="600" fill="#1f2328">DreamDaemon world load <tspan font-weight="400" fill="#59636e" font-size="13">until world/New runs, average</tspan></text>
   <text x="0" y="220.0" font-size="13" fill="#1f2328">Windows</text>
   <rect x="92" y="194" width="478.0" height="18" rx="3" fill="#d1d9e0"/>
-  <text x="576.0" y="207" font-size="12" fill="#59636e">stock 3.15 s</text>
-  <rect x="92" y="218" width="104.7" height="18" rx="3" fill="#1f883d"/>
-  <text x="202.7" y="231" font-size="12" fill="#1f2328"><tspan font-weight="600">dmfast 0.69 s</tspan> <tspan fill="#1f883d" font-weight="700">4.6x faster</tspan></text>
+  <text x="576.0" y="207" font-size="12" fill="#59636e">stock 3.77 s</text>
+  <rect x="92" y="218" width="109.6" height="18" rx="3" fill="#1f883d"/>
+  <text x="207.6" y="231" font-size="12" fill="#1f2328"><tspan font-weight="600">dmfast 0.86 s</tspan> <tspan fill="#1f883d" font-weight="700">4.4x faster</tspan></text>
   <text x="0" y="278.0" font-size="13" fill="#1f2328">Linux</text>
-  <rect x="92" y="252" width="247.3" height="18" rx="3" fill="#d1d9e0"/>
-  <text x="345.3" y="265" font-size="12" fill="#59636e">stock 1.63 s</text>
-  <rect x="92" y="276" width="132.0" height="18" rx="3" fill="#1f883d"/>
-  <text x="230.0" y="289" font-size="12" fill="#1f2328"><tspan font-weight="600">dmfast 0.87 s</tspan> <tspan fill="#1f883d" font-weight="700">1.9x faster</tspan></text>
-  <text x="0" y="326" font-size="11" fill="#59636e">dmfast 4.4.0 vs stock BYOND 516.1688, large codebase, one run each. Output .dmb is byte-identical.</text>
+  <rect x="92" y="252" width="223.3" height="18" rx="3" fill="#d1d9e0"/>
+  <text x="321.3" y="265" font-size="12" fill="#59636e">stock 1.76 s</text>
+  <rect x="92" y="276" width="107.4" height="18" rx="3" fill="#1f883d"/>
+  <text x="205.4" y="289" font-size="12" fill="#1f2328"><tspan font-weight="600">dmfast 0.85 s</tspan> <tspan fill="#1f883d" font-weight="700">2.1x faster</tspan></text>
+  <text x="0" y="326" font-size="11" fill="#59636e">dmfast 4.4.0 vs stock BYOND 516.1688 (one codebase on 516.1673, the newest it accepts), on one machine.</text>
+  <text x="0" y="341" font-size="11" fill="#59636e">Gains vary by computer: slower machines tend to gain more.</text>
 </svg>

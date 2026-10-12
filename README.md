@@ -4,10 +4,27 @@ Makes `dm.exe` compile at lightspeed.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/speedup-dark.svg">
-  <img alt="dmfast speedups on large codebases: compile 6.1x faster on Windows and 7.9x on Linux; DreamDaemon startup 4.6x and 1.9x faster" src="docs/speedup-light.svg">
+  <img alt="dmfast speedups, average of four large SS13 codebases: compile 6.6x faster on Windows and 10.2x on Linux; DreamDaemon world load 4.4x and 2.1x faster" src="docs/speedup-light.svg">
 </picture>
 
+How much faster depends on the computer. Some real compiles: 2 min to 20 s, 60 s to 12 s, 27 s to 10 s.
+
 Contains multiple patches that will self-disable if not compatible.
+
+## Supported BYOND versions
+
+Every release is tested on Windows and Linux against a spread of builds from
+[byond-builds.dm-lang.org](https://byond-builds.dm-lang.org/), including the latest:
+
+| BYOND | Windows | Linux |
+|---|---|---|
+| 516.1665 and newer (tested up to 516.1688) | all patches | all patches |
+| 516.1660 | all patches | all but the name filter |
+| 516.1648 - 516.1655 | all but the progress poll | some patches off |
+| 515.1647 | most patches | some patches off |
+
+Patches that don't match a build disable themselves, so older builds are just less sped up. Output is
+identical to stock on every tested build. BYOND 517 betas are untested.
 
 ## Install
 
@@ -29,7 +46,7 @@ The path is your BYOND `bin` folder (or `dm.exe` in it) - dragging onto the exe 
 
 Run it with no arguments for help. Re-run after BYOND updates.
 
-Add `--runtime` to also speed up DreamDaemon (faster world startup by 4.5×-2×).
+Add `--runtime` to also speed up DreamDaemon (worlds load about 4x faster on Windows, 2x on Linux).
 Installing again without `--runtime` puts back the stock DreamDaemon.
 
 ## Uninstall
