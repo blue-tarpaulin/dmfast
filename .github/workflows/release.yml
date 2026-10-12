@@ -115,7 +115,7 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libc6:i386 libstdc++6:i386 libgcc-s1:i386 zlib1g:i386 unzip
+          sudo apt-get install -y -qq libc6:i386 libstdc++6:i386 libgcc-s1:i386 zlib1g:i386 libssl-dev:i386 libcurl4:i386 unzip
       - uses: actions/cache@v6
         id: tg
         with:
