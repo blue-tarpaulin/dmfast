@@ -1,4 +1,4 @@
-# dmfast
+<img alt="dmfast" src="docs/banner.png" alt="" height="150">
 
 Robusts BYOND's compiler.
 
