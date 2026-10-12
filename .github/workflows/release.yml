@@ -2,7 +2,7 @@
 # Manual runs keep it as a workflow artifact; pushing a `v*` tag also attests its build provenance and
 # publishes it as a GitHub release.
 #
-# The dmfast/ submodule is the private blue-tarpaulin/dmfast-patches repo, fetched with a read-only deploy
+# The patches/ submodule is the private blue-tarpaulin/dmfast-patches repo, fetched with a read-only deploy
 # key (secret DMFAST_PATCHES_KEY).
 name: release
 
@@ -30,7 +30,7 @@ jobs:
           mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/dmfast_patches && chmod 600 ~/.ssh/dmfast_patches
           git -c url."git@github.com:".insteadOf="https://github.com/" \
               -c core.sshCommand="ssh -i $HOME/.ssh/dmfast_patches -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-              submodule update --init dmfast
+              submodule update --init patches
       - name: Build
         shell: bash
         run: |
@@ -61,7 +61,7 @@ jobs:
           mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/dmfast_patches && chmod 600 ~/.ssh/dmfast_patches
           git -c url."git@github.com:".insteadOf="https://github.com/" \
               -c core.sshCommand="ssh -i $HOME/.ssh/dmfast_patches -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-              submodule update --init dmfast
+              submodule update --init patches
       - name: Build
         shell: bash
         run: |
@@ -92,7 +92,7 @@ jobs:
           mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/dmfast_patches && chmod 600 ~/.ssh/dmfast_patches
           git -c url."git@github.com:".insteadOf="https://github.com/" \
               -c core.sshCommand="ssh -i $HOME/.ssh/dmfast_patches -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-              submodule update --init dmfast
+              submodule update --init patches
       - uses: actions/download-artifact@v8
         with:
           path: parts

@@ -32,7 +32,7 @@ fn main() {
     assert!(status.success(), "building {file} failed");
     let lib = target_dir.join(triple).join("release").join(file);
     println!("cargo:rustc-env=DMFAST_LIB={}", lib.display());
-    println!("cargo:rerun-if-changed={}", root.join("dmfast").display());
+    println!("cargo:rerun-if-changed={}", root.join("patches").display());
     if !windows {
         check_glibc(&lib);
         return;

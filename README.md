@@ -6,9 +6,7 @@ Contains multiple patches that will self-disable if not compatible.
 
 ## Install
 
-Download `dmfast-install.exe` from [Releases](https://github.com/blue-tarpaulin/dmfast/releases). Each
-release is built by GitHub Actions from this repo; check that yours was with
-`gh attestation verify dmfast-install.exe -R blue-tarpaulin/dmfast`.
+Download `dmfast-install.exe` from [Releases](https://github.com/blue-tarpaulin/dmfast/releases).
 
 Close BYOND, then:
 
@@ -24,11 +22,9 @@ sh dmfast-install.exe ~/byond/bin
 
 The path is your BYOND `bin` folder (or `dm.exe` in it) - dragging onto the exe works too.
 
-Run it with no arguments for help.
-Asks for admin if needed. Re-run after BYOND updates.
+Run it with no arguments for help. Re-run after BYOND updates.
 
-Add `--runtime` to also speed up DreamDaemon (faster world startup; a large codebase reaches the lobby about 4.5×
-faster than stock on Windows, about 2× on Linux). DreamSeeker is not patched yet.
+Add `--runtime` to also speed up DreamDaemon (faster world startup by 4.5×-2×).
 Installing again without `--runtime` puts back the stock DreamDaemon.
 
 ## Uninstall
@@ -52,7 +48,7 @@ Anything that doesn't match your BYOND version prints `disabled` and runs stock.
 
 ## Build
 
-The patches live in a private submodule (`dmfast/`, blue-tarpaulin/dmfast-patches); building needs
+The patches live in a private submodule (`patches/`, blue-tarpaulin/dmfast-patches); building needs
 access to it:
 
 ```
@@ -68,8 +64,7 @@ cargo build --release -p dmfast-install
 
 Output: `target/release/dmfast-install.exe` (self-contained).
 
-Linux (needs 32-bit glibc dev files, e.g. `gcc-multilib`, and glibc 2.34 or older so the result runs
-everywhere BYOND 516 does: Debian 12 works; the build fails if the library would need a newer glibc):
+Linux (needs 32-bit glibc dev files, e.g. `gcc-multilib`, and glibc 2.34 or older):
 
 ```
 rustup target add i686-unknown-linux-gnu
