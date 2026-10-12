@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="334" viewBox="0 0 720 334" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="dmfast speedups on SS13 codebases: compile 6.6x faster on Windows and 9.9x on Linux; DreamDaemon world load 8.4x and 4.2x faster">
+  <text x="0" y="24" font-size="15" font-weight="600" fill="#1f2328">SS13 codebase compile <tspan font-weight="400" fill="#59636e" font-size="13">dm.exe / DreamMaker</tspan></text>
+  <text x="0" y="64.0" font-size="13" fill="#1f2328">Windows</text>
+  <rect x="92" y="38" width="340.8" height="18" rx="3" fill="#d1d9e0"/>
+  <text x="438.8" y="51" font-size="12" fill="#59636e">stock 27.3 s</text>
+  <rect x="92" y="62" width="51.6" height="18" rx="3" fill="#2E46D5"/>
+  <text x="149.6" y="75" font-size="12" fill="#1f2328"><tspan font-weight="600">dmfast 4.14 s</tspan> <tspan fill="#2E46D5" font-weight="700">6.6x faster</tspan></text>
+  <text x="0" y="122.0" font-size="13" fill="#1f2328">Linux</text>
+  <rect x="92" y="96" width="478.0" height="18" rx="3" fill="#d1d9e0"/>
+  <text x="576.0" y="109" font-size="12" fill="#59636e">stock 38.3 s</text>
+  <rect x="92" y="120" width="48.4" height="18" rx="3" fill="#2E46D5"/>
+  <text x="146.4" y="133" font-size="12" fill="#1f2328"><tspan font-weight="600">dmfast 3.88 s</tspan> <tspan fill="#2E46D5" font-weight="700">9.9x faster</tspan></text>
+  <text x="0" y="180" font-size="15" font-weight="600" fill="#1f2328">DreamDaemon world load <tspan font-weight="400" fill="#59636e" font-size="13">until world/New</tspan></text>
+  <text x="0" y="220.0" font-size="13" fill="#1f2328">Windows</text>
+  <rect x="92" y="194" width="478.0" height="18" rx="3" fill="#d1d9e0"/>
+  <text x="576.0" y="207" font-size="12" fill="#59636e">stock 3.80 s</text>
+  <rect x="92" y="218" width="56.9" height="18" rx="3" fill="#2E46D5"/>
+  <text x="154.9" y="231" font-size="12" fill="#1f2328"><tspan font-weight="600">dmfast 0.45 s</tspan> <tspan fill="#2E46D5" font-weight="700">8.4x faster</tspan></text>
+  <text x="0" y="278.0" font-size="13" fill="#1f2328">Linux</text>
+  <rect x="92" y="252" width="219.8" height="18" rx="3" fill="#d1d9e0"/>
+  <text x="317.8" y="265" font-size="12" fill="#59636e">stock 1.75 s</text>
+  <rect x="92" y="276" width="52.5" height="18" rx="3" fill="#2E46D5"/>
+  <text x="150.5" y="289" font-size="12" fill="#1f2328"><tspan font-weight="600">dmfast 0.42 s</tspan> <tspan fill="#2E46D5" font-weight="700">4.2x faster</tspan></text>
+  <text x="0" y="326" font-size="11" fill="#59636e">dmfast 4.8.0 vs BYOND 516.1688 (Paradise on 516.1673), four SS13 codebases</text>
+</svg>

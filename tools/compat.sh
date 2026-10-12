@@ -41,9 +41,9 @@ mkdir -p "$work/x"
 if [ "$os" = windows ]; then "$SYSTEMROOT/System32/tar.exe" -xf "$(native "$work/byond.zip")" -C "$(native "$work/x")"
 else unzip -q -d "$work/x" "$work/byond.zip"; fi
 cp -r "$work/x/byond/bin" "$work/stock"
-cp -r "$work/x/byond/bin" "$work/dmfast"
-if [ "$os" = windows ]; then "$installer" --runtime "$(native "$work/dmfast")" >"$work/install.txt" 2>&1
-else sh "$installer" --runtime "$work/dmfast" >"$work/install.txt" 2>&1; fi || { cat "$work/install.txt"; exit 1; }
+mkdir -p "$work/fast" && cp -r "$work/x/byond/bin" "$work/fast/bin"
+if [ "$os" = windows ]; then "$installer" --runtime "$(native "$work/fast/bin")" >"$work/install.txt" 2>&1
+else sh "$installer" --runtime "$work/fast/bin" >"$work/install.txt" 2>&1; fi || { cat "$work/install.txt"; exit 1; }
 
 # run <bin dir> <program> <args...>: run a BYOND program from that build with dmfast's stats on, for at
 # most $limit seconds (default 120; exit status 124 when it hit the limit).
@@ -82,7 +82,7 @@ rc=0; compile "$work/stock" "$project" || rc=$?
 [ "$rc" != 124 ] || broken "$(basename "$project") compile timed out"
 if [ "$rc" = 0 ]; then
   t_stock=${secs}s; h_stock=$hash
-  rc=0; compile "$work/dmfast" "$project" || rc=$?
+  rc=0; compile "$work/fast/bin" "$project" || rc=$?
   if [ "$rc" = 0 ]; then
     t_fast=${secs}s; h_fast=$hash
     [ "$h_stock" = "$h_fast" ] || { echo "::error::$version $os: $(basename "$project") .dmb differs"; fail=1; }
@@ -100,7 +100,7 @@ rc=0; compile "$work/stock" "$root/tests/rtsmoke.dme" || rc=$?
 [ "$rc" != 124 ] || broken "rtsmoke compile timed out"
 [ "$rc" = 0 ] || broken "rtsmoke compile failed (exit $rc)"
 s_stock=$hash
-compile "$work/dmfast" "$root/tests/rtsmoke.dme" || { echo "::error::$version $os: dmfast rtsmoke compile failed"; cat "$work/out.txt"; exit 1; }
+compile "$work/fast/bin" "$root/tests/rtsmoke.dme" || { echo "::error::$version $os: dmfast rtsmoke compile failed"; cat "$work/out.txt"; exit 1; }
 s_fast=$hash
 [ -n "${compiler:-}" ] || compiler=$(grep -E '^dmfast: ' "$work/out.txt" || true)
 [ "$s_stock" = "$s_fast" ] || { echo "::error::$version $os: rtsmoke .dmb differs"; fail=1; }
@@ -111,12 +111,13 @@ daemon() {
   [ "$os" = linux ] && env+=(LD_LIBRARY_PATH="$1")
   rm -f "$log"
   dd_rc=0
-  (cd "$root/tests" && env "${env[@]}" timeout 120 "$1/$dd" rtsmoke.dmb -trusted -invisible -logself >"$work/dd.txt" 2>&1) || dd_rc=$?
+  # -ip 127.0.0.1: listen on loopback only, so Windows doesn't ask for a firewall rule for every fresh copy.
+  (cd "$root/tests" && env "${env[@]}" timeout 120 "$1/$dd" rtsmoke.dmb -trusted -invisible -logself -ip 127.0.0.1 >"$work/dd.txt" 2>&1) || dd_rc=$?
   dd_line=$({ grep -h 'len=' "$log" 2>/dev/null || true; } | sed 's/^\[[^]]*\] *//' | tail -1)
 }
 daemon "$work/stock"; d_stock=$dd_line
 [ "$dd_rc" != 124 ] || broken "DreamDaemon timed out on rtsmoke"
-daemon "$work/dmfast"; d_fast=$dd_line; fast_rc=$dd_rc
+daemon "$work/fast/bin"; d_fast=$dd_line; fast_rc=$dd_rc
 runtime=$(grep -E '^dmfast: ' "$work/dd.txt" || true)
 if [ -n "$d_stock" ]; then
   [ "$d_stock" = "$d_fast" ] || { echo "::error::$version $os: DreamDaemon result differs ('$d_stock' vs '$d_fast')"; fail=1; }
@@ -134,20 +135,20 @@ vlog="$work/verify.txt"; : >"$vlog"
 export DMFAST_VERIFY=1
 limit=300 # verify mode works most answers out twice
 if [ -n "${h_fast:-}" ]; then
-  if compile "$work/dmfast" "$project"; then
+  if compile "$work/fast/bin" "$project"; then
     cat "$work/out.txt" >>"$vlog"
     [ "$hash" = "$h_stock" ] || { echo "::error::$version $os: $(basename "$project") .dmb differs in verify mode"; fail=1; }
   else
     echo "::error::$version $os: $(basename "$project") verify-mode compile failed"; cat "$work/out.txt"; fail=1
   fi
 fi
-if compile "$work/dmfast" "$root/tests/rtsmoke.dme"; then
+if compile "$work/fast/bin" "$root/tests/rtsmoke.dme"; then
   cat "$work/out.txt" >>"$vlog"
   [ "$hash" = "$s_stock" ] || { echo "::error::$version $os: rtsmoke .dmb differs in verify mode"; fail=1; }
 else
   echo "::error::$version $os: rtsmoke verify-mode compile failed"; cat "$work/out.txt"; fail=1
 fi
-daemon "$work/dmfast"; cat "$work/dd.txt" >>"$vlog"
+daemon "$work/fast/bin"; cat "$work/dd.txt" >>"$vlog"
 unset DMFAST_VERIFY limit
 checked=$({ grep -E '^dmfast: .*mismatches=' "$vlog" || true; } | wc -l | tr -d ' ')
 bad=$(grep -E '^dmfast: .*mismatches=[1-9]' "$vlog" || true)
@@ -165,9 +166,9 @@ load_secs() {
   : >"$out"
   start=$(date +%s.%N); deadline=$(( $(date +%s) + 60 ))
   if [ "$os" = linux ]; then
-    (cd "$(dirname "$2")" && exec env LD_LIBRARY_PATH="$1" "$1/$dd" "$(basename "$2")" -trusted -invisible) >"$out" 2>&1 &
+    (cd "$(dirname "$2")" && exec env LD_LIBRARY_PATH="$1" "$1/$dd" "$(basename "$2")" -trusted -invisible -ip 127.0.0.1) >"$out" 2>&1 &
   else
-    (cd "$(dirname "$2")" && exec "$1/$dd" "$(basename "$2")" -trusted -invisible) >"$out" 2>&1 &
+    (cd "$(dirname "$2")" && exec "$1/$dd" "$(basename "$2")" -trusted -invisible -ip 127.0.0.1) >"$out" 2>&1 &
   fi
   pid=$!
   while [ "$(date +%s)" -lt "$deadline" ]; do
@@ -190,7 +191,7 @@ if [ -n "${h_fast:-}" ]; then
   if [ -n "$first" ]; then
     ls=("$first"); lf=()
     for _ in 1 2 3; do
-      lf+=("$(load_secs "$work/dmfast" "${project%.dme}.dmb")")
+      lf+=("$(load_secs "$work/fast/bin" "${project%.dme}.dmb")")
       [ ${#ls[@]} = 3 ] || ls+=("$(load_secs "$work/stock" "${project%.dme}.dmb")")
     done
     l_stock=$(median "${ls[@]}"); l_fast=$(median "${lf[@]}")

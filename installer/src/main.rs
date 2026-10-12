@@ -28,7 +28,7 @@ const VERSION: &str = concat!(
 struct Opts {
     target: Option<PathBuf>,
     uninstall: bool,
-    /// Also patch DreamDaemon/DreamSeeker.
+    /// Also patch DreamDaemon.
     runtime: bool,
     /// Windows: this is the relaunched admin copy.
     #[cfg(windows)]
@@ -44,7 +44,7 @@ const HELP: &str = concat!(
 dmfast-install [options] <BYOND bin folder or dm.exe>
   options:
      --uninstall        remove dmfast (restores the original programs)
-     --runtime          also speed up DreamDaemon and DreamSeeker
+     --runtime          also speed up DreamDaemon
      --version          show version and licenses
      -h, --help         view this help
 
@@ -54,7 +54,7 @@ dmfast-install [options] <BYOND bin folder or dm.exe>
      dmfast-install --uninstall "C:\Program Files (x86)\BYOND\bin"
 
 Close BYOND first. You can also drag dm.exe or the bin folder onto dmfast-install.exe.
-Re-run the install after a BYOND update. Installing without --runtime puts back stock DreamDaemon and DreamSeeker."#
+Re-run the install after a BYOND update. Installing without --runtime puts back stock DreamDaemon."#
 );
 #[cfg(not(windows))]
 const HELP: &str = concat!(

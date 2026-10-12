@@ -10,7 +10,7 @@ Each patch can be turned off for one run with `DMFAST_DISABLE=<key>` (comma-sepa
 |---|---|---|---|---|
 | Version banner | `banner` | both | - | Adds a dmfast line to the version banner |
 | String table | `strings` | both | ~48% | Hinted free-slot search, geometric string table growth |
-| Dir listing | `dirs` | Linux | ~39% (Linux) | Caches directory listings; skips opening non-directories |
+| Dir listing | `dirs` | Linux | ~39% (Linux) | Caches directory listings, without changing into cached directories; skips opening non-directories |
 | Stdio | `stdio` | both | ~4% | Unlocked file I/O; cached ftell in .dmb writer |
 | File cache | `fscache` | Windows | ~2% | Caches file existence, attribute and listing lookups |
 | Name filter | `filter` | both | ~2% | Skips scopes that can't contain the name |
@@ -32,14 +32,12 @@ Each patch can be turned off for one run with `DMFAST_DISABLE=<key>` (comma-sepa
 | Child index | `children` | both | <1% | Indexes children by name for path resolution |
 | Progress poll | `poll` | both | up to 0.25 s | Progress thread polls every 10 ms, not 250 |
 
-## DreamDaemon and DreamSeeker (installed with `--runtime`)
-
-DreamSeeker (client and local server) runs the same set; on Windows it loads dmfast through a `WebView2Loader.dll` stand-in (see the README).
+## DreamDaemon (installed with `--runtime`)
 
 | Patch | Key | Platforms | Saves | What it does |
 |---|---|---|---|---|
 | mimalloc | - | both | ~29% | Faster memory allocator |
-| .dmb reader | `dmbread` | Windows | ~17% | Whole-value .dmb reads from the file buffer; id arrays in one read; ftell without a syscall |
+| .dmb reader | `dmbread` | both | ~17%, ~40% (Linux) | Whole-value .dmb reads from the file buffer; id arrays in one read; ftell without a syscall |
 | Resource-ID index | `resids` | both | ~14% | Hash index for resource ID find-or-add |
 | Sorted map insert | `sortmap` | both | ~6% | Fast appends; grows sorted maps geometrically |
 | Sorted map merge | `sortmerge` | both | ~9% | Merges sorted maps in one pass |
@@ -48,3 +46,4 @@ DreamSeeker (client and local server) runs the same set; on Windows it loads dmf
 | String table load | `strtable` | Windows | ~3% | Native pass over the string table at world load; drops the redundant rebuild after it (needs `strtree` and `crc`) |
 | .dmb buffer | `dmbbuf` | Windows | <1% | 1 MB read buffer for the .dmb |
 | Var list inheritance | `varlist` | Windows | ~3% | A type with no vars of its own reuses its parent's interned var list instead of rebuilding it |
+| Icon state name compare | `dmicmp` | Windows | ~0.1 s of world init | Table-based case-insensitive compare for .dmi metadata, skipping two locale lookups per character |

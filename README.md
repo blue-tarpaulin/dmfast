@@ -3,8 +3,8 @@
 Robusts BYOND's compiler.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/speedup-5dd664d4-dark.svg">
-  <img alt="dmfast speedups on SS13 codebases: compile 6.6x faster on Windows and 10.2x on Linux; DreamDaemon world load 6.7x and 2.4x faster" src="docs/speedup-5dd664d4-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/speedup-e42038e7-dark.svg">
+  <img alt="dmfast speedups on SS13 codebases: compile 6.6x faster on Windows and 9.9x on Linux; DreamDaemon world load 8.4x and 4.2x faster" src="docs/speedup-e42038e7-light.svg">
 </picture>
 
 How much faster depends on the computer and codebase, but expect significant gains.
@@ -31,15 +31,15 @@ The path is your BYOND `bin` folder (or `dm.exe`) - dragging the exe onto the in
 
 Run it with no arguments for help. Re-run after BYOND updates.
 
-Add `--runtime` to also speed up DreamDaemon and DreamSeeker (while it's in beta):
+Add `--runtime` to also speed up DreamDaemon (while it's in beta):
 
 ```
 dmfast-install.exe --runtime "C:\Program Files (x86)\BYOND\bin"
 ```
 
-On Windows, DreamSeeker is not modified: dmfast replaces `bin\WebView2Loader.dll` with a small stand-in that forwards to the original loader and loads dmfast (both kept in a `dmfast` folder next to `bin`). DreamSeeker misbehaves if it finds unknown DLLs inside `bin`, hence the separate folder.
+DreamSeeker support is in development and not installed yet.
 
-Installing again without `--runtime` puts back the stock DreamDaemon and DreamSeeker.
+Installing again without `--runtime` puts back the stock DreamDaemon.
 
 ## Uninstall
 
