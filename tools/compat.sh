@@ -5,6 +5,8 @@
 # and checks it against an untouched copy of the same build:
 #   - compiling <project.dme> and tests/rtsmoke.dme gives byte-identical .dmb files;
 #   - DreamDaemon running tests/rtsmoke.dmb logs the same result line.
+# Also times the compile and how long DreamDaemon takes to load the project's world (until the world
+# prints its first line), stock vs dmfast.
 # Prints which patch groups installed or disabled themselves. Appends a Markdown row to
 # $GITHUB_STEP_SUMMARY when set and writes it to compat-<os>-<version>.md. Exits non-zero on any
 # difference.
@@ -27,7 +29,7 @@ if ! curl -sSfL -o "$work/byond.zip" "$url"; then
   # Client-only BYOND updates ship no Linux build.
   if [ "$os" = linux ] && [ "$(curl -s -o /dev/null -w '%{http_code}' "$url")" = 404 ]; then
     echo "== $version $os: skipped (no Linux build)"
-    row="| $version | - | $os | no Linux build | | | | | |"
+    row="| $version | - | $os | no Linux build | | | | | | | |"
     echo "$row" > "compat-$os-$version.md"
     [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
     exit 0
@@ -106,6 +108,40 @@ else
   [ "$fast_rc" = 0 ] || { echo "::error::$version $os: DreamDaemon with dmfast exited $fast_rc"; fail=1; }
 fi
 
+# load_secs <bin dir> <dmb>: prints seconds until DreamDaemon's world prints its first line (after BYOND's
+# banner), or nothing if it doesn't within 120 s. The world is stopped then.
+load_secs() {
+  local out="$work/load.txt" start pid elapsed=""
+  : >"$out"
+  start=$(date +%s.%N)
+  if [ "$os" = linux ]; then
+    (cd "$(dirname "$2")" && exec env LD_LIBRARY_PATH="$1" "$1/$dd" "$(basename "$2")" -trusted -invisible) >"$out" 2>&1 &
+  else
+    (cd "$(dirname "$2")" && exec "$1/$dd" "$(basename "$2")" -trusted -invisible) >"$out" 2>&1 &
+  fi
+  pid=$!
+  for _ in $(seq 2400); do
+    if sed -n '/Welcome BYOND/,$p' "$out" | tail -n +2 | grep -v '^dmfast' | grep -q '[^[:space:]]'; then
+      elapsed=$(awk -v a="$start" -v b="$(date +%s.%N)" 'BEGIN{printf "%.2f", b-a}'); break
+    fi
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.05
+  done
+  if [ "$os" = windows ]; then taskkill //F //T //PID "$(cat "/proc/$pid/winpid")" >/dev/null 2>&1 || true
+  else kill "$pid" 2>/dev/null || true; fi
+  wait "$pid" 2>/dev/null || true
+  printf '%s\n' "$elapsed"
+}
+median() { printf '%s\n' "$@" | { grep . || true; } | sort -g | awk '{v[NR]=$1} END{if (NR) printf "%ss", v[int((NR+1)/2)]}'; }
+l_stock=""; l_fast=""
+if [ -n "${h_fast:-}" ]; then
+  ls=(); lf=()
+  for _ in 1 2 3; do
+    ls+=("$(load_secs "$work/stock" "${project%.dme}.dmb")")
+    lf+=("$(load_secs "$work/dmfast" "${project%.dme}.dmb")")
+  done
+  l_stock=$(median "${ls[@]}"); l_fast=$(median "${lf[@]}")
+fi
 disabled=$(printf '%s\n%s\n' "$compiler" "$runtime" | grep ' disabled: ' | sed 's/^dmfast: //; s/ disabled:.*//' | paste -sd, - || true)
 mask() { printf '%s\n' "$1" | grep -oE 'patched=0x[0-9a-f]+' | tail -1 | cut -d= -f2; }
 real=$(run "$work/stock" "$dm" 2>&1 | grep -oE '[0-9]{3}\.[0-9]{4}' | head -1 || true)
@@ -113,10 +149,11 @@ result=$([ $fail = 0 ] && echo pass || echo FAIL)
 
 echo "== $version ($real) $os: $result"
 echo "compile $(basename "$project"): stock $t_stock, dmfast $t_fast, .dmb ${h_stock:-n/a} / ${h_fast:-n/a}"
+echo "world load: stock ${l_stock:-n/a}, dmfast ${l_fast:-n/a}"
 echo "compiler groups: $(mask "$compiler"); runtime groups: $(mask "$runtime"); disabled: ${disabled:-none}"
 printf '%s\n' "$compiler" "$runtime"
 
-row="| $version | ${real:-?} | $os | $result | $t_stock | $t_fast | $(mask "$compiler") | $(mask "$runtime") | ${disabled:-none} |"
+row="| $version | ${real:-?} | $os | $result | $t_stock | $t_fast | $(mask "$compiler") | $(mask "$runtime") | ${disabled:-none} | ${l_stock:-n/a} | ${l_fast:-n/a} |"
 echo "$row" > "compat-$os-$version.md"
 [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
 exit $fail

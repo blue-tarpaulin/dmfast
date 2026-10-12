@@ -153,8 +153,8 @@ jobs:
           {
             echo "### BYOND compatibility"
             echo
-            echo "| Requested | Build | OS | Result | tgstation stock | tgstation dmfast | Compiler groups | Runtime groups | Disabled |"
-            echo "|---|---|---|---|---|---|---|---|---|"
+            echo "| Requested | Build | OS | Result | tgstation stock | tgstation dmfast | Compiler groups | Runtime groups | Disabled | World load stock | World load dmfast |"
+            echo "|---|---|---|---|---|---|---|---|---|---|---|"
             cat compat-*.md 2>/dev/null | sort -t'|' -k4,4 -k2,2V
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -213,14 +213,28 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: dmfast-install
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: compat-*
+          merge-multiple: true
+          path: compat
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: dmfast-install.exe
+      - name: Write release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash tools/release-notes.sh compat > notes.md
+          echo >> notes.md
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$GITHUB_REF_NAME" --jq .body >> notes.md
+          cat notes.md
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dmfast-install.exe --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dmfast-install.exe --repo "$GITHUB_REPOSITORY" --title "dmfast ${GITHUB_REF_NAME#v}" --notes-file notes.md

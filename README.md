@@ -61,3 +61,13 @@ Anything that's not working prints `disabled` and runs stock.
 ## Build
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+dmfast is licensed under the BSD 3-Clause License, © 2026 Greytide Worldwide; see [LICENSE](LICENSE). It bundles
+[mimalloc](https://github.com/microsoft/mimalloc) (MIT, Microsoft Corporation; see
+[vendor/mimalloc-x86/LICENSE.txt](vendor/mimalloc-x86/LICENSE.txt)).
+
+This repository contains no BYOND code or binaries. dmfast changes your own installed copy of BYOND in
+memory while it runs. The installer only makes the BYOND programs load dmfast and keeps their originals,
+so uninstalling restores stock BYOND. dmfast is not affiliated with or endorsed by BYOND.
