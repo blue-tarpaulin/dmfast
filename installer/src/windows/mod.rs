@@ -98,7 +98,7 @@ pub fn install(dir: &Path, runtime: bool) -> Result<String, Failure> {
     let core = dir.join("byondcore.dll");
     let compiler_data = read(&dir.join(COMPILER))?;
     if pe::has_section(&compiler_data, b".dmimp") || (core.is_file() && pe::has_section(&read(&core)?, b".dmfast")) {
-        return Err("this BYOND has the old on-disk byond-fastdm patches; \
+        return Err("this BYOND has dmfast's old on-disk patches; \
                     put byondcore.dll.orig and dm.exe.orig back first"
             .into());
     }
