@@ -45,14 +45,15 @@ fn main() {
         .set("CompanyName", "Greytide Worldwide")
         .set("LegalCopyright", "dmfast contributors; bundles mimalloc (MIT, Microsoft Corporation)")
         .set("OriginalFilename", "dmfast-install.exe")
-        .set_manifest(MANIFEST);
+        .set_manifest(&MANIFEST.replace("{version}", &format!("{}.0", env!("CARGO_PKG_VERSION"))));
     res.compile().expect("embedding version info / manifest");
 }
 
-/// Runs as the invoking user (it relaunches itself elevated only when the target needs it).
+/// Runs as the invoking user (it relaunches itself elevated only when the target needs it). `{version}`
+/// becomes the package version as four parts.
 const MANIFEST: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-  <assemblyIdentity type="win32" name="GreytideWorldwide.dmfast.install" version="4.6.0.0"/>
+  <assemblyIdentity type="win32" name="GreytideWorldwide.dmfast.install" version="{version}"/>
   <description>dmfast installer</description>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>

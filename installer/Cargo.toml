@@ -1,6 +1,6 @@
 [package]
 name = "dmfast-install"
-version = "4.6.0"
+version.workspace = true
 edition = "2024"
 
 [dependencies]
