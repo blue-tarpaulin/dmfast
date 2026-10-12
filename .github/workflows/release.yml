@@ -21,7 +21,7 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Fetch dmfast-patches
         shell: bash
         env:
@@ -36,7 +36,7 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --target i686-pc-windows-msvc
           cargo build --release --locked -p dmfast-install
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: target/release/dmfast-install.exe
@@ -51,7 +51,7 @@ jobs:
         run: |
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends git openssh-client ca-certificates curl build-essential gcc-multilib
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Fetch dmfast-patches
         shell: bash
         env:
@@ -69,7 +69,7 @@ jobs:
           . "$HOME/.cargo/env"
           cargo build --release --locked -p dmfast-install
           cp target/release/dmfast-install dmfast-install-linux
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux
           path: dmfast-install-linux
@@ -83,7 +83,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Fetch dmfast-patches
         shell: bash
         env:
@@ -93,7 +93,7 @@ jobs:
           git -c url."git@github.com:".insteadOf="https://github.com/" \
               -c core.sshCommand="ssh -i $HOME/.ssh/dmfast_patches -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
               submodule update --init dmfast
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: parts
       - name: Pack
@@ -101,14 +101,14 @@ jobs:
           mkdir -p dist
           cargo run -q --release --locked -p dmfast-pack -- parts/windows/dmfast-install.exe parts/linux/dmfast-install-linux dist/dmfast-install.exe
           sha256sum dist/dmfast-install.exe
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dmfast-install
           path: dist/dmfast-install.exe
           if-no-files-found: error
       - name: Attest build provenance
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/dmfast-install.exe
       - name: Publish release
