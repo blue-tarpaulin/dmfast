@@ -3,8 +3,8 @@
 Robusts BYOND's compiler.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/speedup-e42038e7-dark.svg">
-  <img alt="dmfast speedups on SS13 codebases: compile 6.6x faster on Windows and 9.9x on Linux; DreamDaemon world load 8.4x and 4.2x faster" src="docs/speedup-e42038e7-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/speedup-88ceda1d-dark.svg">
+  <img alt="dmfast speedups on SS13 codebases: compile 6.6x faster on Windows and 9.9x on Linux; DreamDaemon world load 8.4x and 4.2x faster" src="docs/speedup-88ceda1d-light.svg">
 </picture>
 
 How much faster depends on the computer and codebase, but expect significant gains.
