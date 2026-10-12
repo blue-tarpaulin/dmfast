@@ -22,7 +22,18 @@ esac
 # Paths handed to Windows programs.
 native() { if [ "$os" = windows ]; then cygpath -w "$1"; else printf '%s\n' "$1"; fi; }
 
-curl -sSfL -o "$work/byond.zip" "https://byond-builds.dm-lang.org/${version%%.*}/$zip"
+url="https://byond-builds.dm-lang.org/${version%%.*}/$zip"
+if ! curl -sSfL -o "$work/byond.zip" "$url"; then
+  # Client-only BYOND updates ship no Linux build.
+  if [ "$os" = linux ] && [ "$(curl -s -o /dev/null -w '%{http_code}' "$url")" = 404 ]; then
+    echo "== $version $os: skipped (no Linux build)"
+    row="| $version | - | $os | no Linux build | | | | | |"
+    echo "$row" > "compat-$os-$version.md"
+    [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
+    exit 0
+  fi
+  echo "::error::$version $os: download failed ($url)"; exit 1
+fi
 mkdir -p "$work/x"
 if [ "$os" = windows ]; then "$SYSTEMROOT/System32/tar.exe" -xf "$(native "$work/byond.zip")" -C "$(native "$work/x")"
 else unzip -q -d "$work/x" "$work/byond.zip"; fi
