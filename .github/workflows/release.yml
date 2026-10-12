@@ -1,4 +1,5 @@
-# Builds the combined Windows + Linux installer (dmfast-install.exe) and scans it with Windows Defender.
+# Builds the combined Windows + Linux installer (dmfast-install.exe), tests it against a spread of BYOND
+# builds and scans it with Windows Defender.
 # Manual runs keep it as a workflow artifact; pushing a `v*` tag also attests its build provenance and
 # publishes it as a GitHub release (only if the scan is clean).
 #
@@ -91,6 +92,72 @@ jobs:
           path: dist/dmfast-install.exe
           if-no-files-found: error
 
+  # The packed installer against a spread of BYOND builds from byond-builds.dm-lang.org, on both OSes:
+  # each must install, compile tgstation and tests/rtsmoke.dme to the same .dmb as stock and run the same
+  # in DreamDaemon. Patches that don't match a build disable themselves; the report lists which.
+  compat:
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        byond: ["515.1647", "516.1648", "516.1655", "516.1660", "516.1665", "516.1670", "516.1675", "516.1680", "516.1684", "516.1688", "516.latest"]
+    runs-on: ${{ matrix.os }}
+    env:
+      TG_COMMIT: 1568dbe1daeba67dc20939c6307d07522967e89c
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: dmfast-install
+      - name: Install 32-bit runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libc6:i386 libstdc++6:i386 libgcc-s1:i386 zlib1g:i386 unzip
+      - uses: actions/cache@v6
+        id: tg
+        with:
+          path: tgstation
+          key: tgstation-${{ env.TG_COMMIT }}
+      - name: Fetch tgstation
+        if: steps.tg.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          git init -q tgstation
+          git -C tgstation fetch -q --depth 1 https://github.com/tgstation/tgstation.git "$TG_COMMIT"
+          git -C tgstation checkout -q FETCH_HEAD
+          rm -rf tgstation/.git
+      - name: Test
+        shell: bash
+        run: bash tools/compat.sh "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: compat-${{ runner.os }}-${{ matrix.byond }}
+          path: compat-*.md
+          if-no-files-found: ignore
+
+  compat-report:
+    needs: compat
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: compat-*
+          merge-multiple: true
+      - name: Report
+        run: |
+          {
+            echo "### BYOND compatibility"
+            echo
+            echo "| Requested | Build | OS | Result | tgstation stock | tgstation dmfast | Compiler groups | Runtime groups | Disabled |"
+            echo "|---|---|---|---|---|---|---|---|---|"
+            cat compat-*.md 2>/dev/null | sort -t'|' -k4,4 -k2,2V
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
   # Windows Defender scan of the packed installer. A detection opens an issue (submit the file at
   # https://www.microsoft.com/wdsi/filesubmission; there is no API for that) and fails the run, so a
   # flagged installer is never released.
@@ -138,7 +205,7 @@ jobs:
           exit 1
 
   release:
-    needs: scan
+    needs: [scan, compat]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
