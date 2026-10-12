@@ -9,12 +9,7 @@ Robusts BYOND's compiler.
 
 How much faster depends on the computer. Some real compiles: 2 min to 20 s, 60 s to 12 s, 27 s to 10 s.
 
-Contains multiple patches that will self-disable if not compatible.
-
 ## Supported BYOND versions
-
-Every release is tested on Windows and Linux against a spread of builds from
-[byond-builds.dm-lang.org](https://byond-builds.dm-lang.org/), including the latest:
 
 | BYOND | Windows | Linux |
 |---|---|---|
@@ -23,8 +18,7 @@ Every release is tested on Windows and Linux against a spread of builds from
 | 516.1648 - 516.1655 | all but the progress poll | some patches off |
 | 515.1647 | most patches | some patches off |
 
-Patches that don't match a build disable themselves, so older builds are just less sped up. Output is
-identical to stock on every tested build. BYOND 517 betas are untested.
+Patches that don't match a build disable themselves, so older builds are just less sped up.
 
 ## Install
 
@@ -47,6 +41,7 @@ The path is your BYOND `bin` folder (or `dm.exe` in it) - dragging onto the exe 
 Run it with no arguments for help. Re-run after BYOND updates.
 
 Add `--runtime` to also speed up DreamDaemon (worlds load about 4x faster on Windows, 2x on Linux).
+
 Installing again without `--runtime` puts back the stock DreamDaemon.
 
 ## Uninstall
@@ -71,8 +66,3 @@ Anything that doesn't match your BYOND version prints `disabled` and runs stock.
 ## Build
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Release
-
-Push a `v*` tag (e.g. `v4.4.0`).
-

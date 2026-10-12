@@ -34,3 +34,7 @@ py tools/release.py --distro Debian
 ```
 
 Output: `dist/dmfast-install.exe` - works on both operating systems.
+
+## Release
+
+Push a `v*` tag (e.g. `v4.4.0`).
