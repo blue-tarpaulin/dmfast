@@ -41,7 +41,7 @@ fn main() {
 
     let mut res = winresource::WindowsResource::new();
     res.set("ProductName", "fastdm")
-        .set("FileDescription", "Makes dm.exe compile at lightspeed.")
+        .set("FileDescription", "Robusts BYOND's compiler.")
         .set("CompanyName", "Greytide Worldwide")
         .set("LegalCopyright", "fastdm contributors; bundles mimalloc (MIT, Microsoft Corporation)")
         .set("OriginalFilename", "dmfast-install.exe")

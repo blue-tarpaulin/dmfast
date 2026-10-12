@@ -1,6 +1,6 @@
 # dmfast
 
-Makes `dm.exe` compile at lightspeed.
+Robusts BYOND's compiler.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/speedup-dark.svg">

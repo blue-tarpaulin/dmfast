@@ -39,7 +39,7 @@ struct Opts {
 const HELP: &str = concat!(
     "dmfast ",
     env!("CARGO_PKG_VERSION"),
-    r#": Makes dm.exe compile at lightspeed - Greytide Worldwide 2026
+    r#": Robusts BYOND's compiler - Greytide Worldwide 2026
 
 dmfast-install [options] <BYOND bin folder or dm.exe>
   options:
@@ -60,7 +60,7 @@ Re-run the install after a BYOND update. Installing without --runtime puts back 
 const HELP: &str = concat!(
     "dmfast ",
     env!("CARGO_PKG_VERSION"),
-    r#": Makes DreamMaker compile at lightspeed - Greytide Worldwide 2026
+    r#": Robusts BYOND's compiler - Greytide Worldwide 2026
 
 dmfast-install [options] <BYOND bin folder or DreamMaker>
   options:
