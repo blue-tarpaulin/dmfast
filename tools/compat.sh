@@ -50,37 +50,61 @@ run() {
 }
 
 fail=0
-# compile <bin dir> <dme>: sets $secs and $hash (sha256 of the .dmb); the output is in $work/out.txt.
+# compile <bin dir> <dme>: sets $secs and $hash (sha256 of the .dmb), returns non-zero if the compile
+# fails; the output is in $work/out.txt.
 compile() {
   local start end
   rm -f "${2%.dme}.dmb"
   start=$(date +%s.%N)
-  (cd "$(dirname "$2")" && run "$1" "$dm" "$(basename "$2")") >"$work/out.txt" 2>&1 || { echo "compile failed ($1, $2)" >&2; cat "$work/out.txt" >&2; exit 1; }
+  (cd "$(dirname "$2")" && run "$1" "$dm" "$(basename "$2")") >"$work/out.txt" 2>&1 || return 1
   end=$(date +%s.%N)
   secs=$(awk -v a="$start" -v b="$end" 'BEGIN{printf "%.1f", b-a}')
   hash=$(sha256sum "${2%.dme}.dmb" | cut -c1-16)
 }
 
-compile "$work/stock" "$project"; t_stock=$secs; h_stock=$hash
-compile "$work/dmfast" "$project"; t_fast=$secs; h_fast=$hash
-compiler=$(grep -E '^dmfast: ' "$work/out.txt" || true)
-[ "$h_stock" = "$h_fast" ] || { echo "::error::$version $os: $(basename "$project") .dmb differs"; fail=1; }
+# A project may refuse some BYOND builds itself (minimum/maximum version checks): then only rtsmoke runs.
+if compile "$work/stock" "$project"; then
+  t_stock=${secs}s; h_stock=$hash
+  if compile "$work/dmfast" "$project"; then
+    t_fast=${secs}s; h_fast=$hash
+    [ "$h_stock" = "$h_fast" ] || { echo "::error::$version $os: $(basename "$project") .dmb differs"; fail=1; }
+  else
+    echo "::error::$version $os: $(basename "$project") compiles with stock but not with dmfast"; cat "$work/out.txt"; fail=1
+  fi
+  compiler=$(grep -E '^dmfast: ' "$work/out.txt" || true)
+else
+  echo "stock BYOND $version does not compile $(basename "$project"); testing rtsmoke only:"
+  grep -iE 'error' "$work/out.txt" | head -3 || true
+  t_stock="n/a"; t_fast="n/a"
+fi
 
-compile "$work/stock" "$root/tests/rtsmoke.dme"; s_stock=$hash
-compile "$work/dmfast" "$root/tests/rtsmoke.dme"; s_fast=$hash
+compile "$work/stock" "$root/tests/rtsmoke.dme" || { echo "::error::$version $os: stock rtsmoke compile failed"; cat "$work/out.txt"; exit 1; }
+s_stock=$hash
+compile "$work/dmfast" "$root/tests/rtsmoke.dme" || { echo "::error::$version $os: dmfast rtsmoke compile failed"; cat "$work/out.txt"; exit 1; }
+s_fast=$hash
+[ -n "${compiler:-}" ] || compiler=$(grep -E '^dmfast: ' "$work/out.txt" || true)
 [ "$s_stock" = "$s_fast" ] || { echo "::error::$version $os: rtsmoke .dmb differs"; fail=1; }
 
-daemon() { # daemon <bin dir> -> the world's result line
+# daemon <bin dir>: sets $dd_rc (DreamDaemon's exit code) and $dd_line (the world's result line, if any).
+daemon() {
   local log="$root/tests/rtsmoke.log" env=(DMFAST_STATS=1)
   [ "$os" = linux ] && env+=(LD_LIBRARY_PATH="$1")
   rm -f "$log"
-  (cd "$root/tests" && env "${env[@]}" timeout 120 "$1/$dd" rtsmoke.dmb -trusted -invisible -logself >"$work/dd.txt" 2>&1) || true
-  grep -h 'len=' "$log" 2>/dev/null | sed 's/^\[[^]]*\] *//' | tail -1
+  dd_rc=0
+  (cd "$root/tests" && env "${env[@]}" timeout 120 "$1/$dd" rtsmoke.dmb -trusted -invisible -logself >"$work/dd.txt" 2>&1) || dd_rc=$?
+  dd_line=$({ grep -h 'len=' "$log" 2>/dev/null || true; } | sed 's/^\[[^]]*\] *//' | tail -1)
 }
-d_stock=$(daemon "$work/stock")
-d_fast=$(daemon "$work/dmfast")
+daemon "$work/stock"; d_stock=$dd_line
+daemon "$work/dmfast"; d_fast=$dd_line; fast_rc=$dd_rc
 runtime=$(grep -E '^dmfast: ' "$work/dd.txt" || true)
-[ -n "$d_stock" ] && [ "$d_stock" = "$d_fast" ] || { echo "::error::$version $os: DreamDaemon result differs ('$d_stock' vs '$d_fast')"; fail=1; }
+if [ -n "$d_stock" ]; then
+  [ "$d_stock" = "$d_fast" ] || { echo "::error::$version $os: DreamDaemon result differs ('$d_stock' vs '$d_fast')"; fail=1; }
+else
+  # Some builds (around 516.1660-1665) print nothing from world/New even on stock: then only check
+  # that dmfast's DreamDaemon exits cleanly.
+  echo "stock DreamDaemon $version printed no result; checking dmfast exits cleanly (exit $fast_rc)"
+  [ "$fast_rc" = 0 ] || { echo "::error::$version $os: DreamDaemon with dmfast exited $fast_rc"; fail=1; }
+fi
 
 disabled=$(printf '%s\n%s\n' "$compiler" "$runtime" | grep ' disabled: ' | sed 's/^dmfast: //; s/ disabled:.*//' | paste -sd, - || true)
 mask() { printf '%s\n' "$1" | grep -oE 'patched=0x[0-9a-f]+' | tail -1 | cut -d= -f2; }
@@ -88,11 +112,11 @@ real=$(run "$work/stock" "$dm" 2>&1 | grep -oE '[0-9]{3}\.[0-9]{4}' | head -1 ||
 result=$([ $fail = 0 ] && echo pass || echo FAIL)
 
 echo "== $version ($real) $os: $result"
-echo "compile: stock ${t_stock}s, dmfast ${t_fast}s, .dmb $h_stock / $h_fast"
+echo "compile $(basename "$project"): stock $t_stock, dmfast $t_fast, .dmb ${h_stock:-n/a} / ${h_fast:-n/a}"
 echo "compiler groups: $(mask "$compiler"); runtime groups: $(mask "$runtime"); disabled: ${disabled:-none}"
 printf '%s\n' "$compiler" "$runtime"
 
-row="| $version | ${real:-?} | $os | $result | ${t_stock}s | ${t_fast}s | $(mask "$compiler") | $(mask "$runtime") | ${disabled:-none} |"
+row="| $version | ${real:-?} | $os | $result | $t_stock | $t_fast | $(mask "$compiler") | $(mask "$runtime") | ${disabled:-none} |"
 echo "$row" > "compat-$os-$version.md"
 [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
 exit $fail
