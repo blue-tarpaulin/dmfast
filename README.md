@@ -7,16 +7,9 @@ Robusts BYOND's compiler.
   <img alt="dmfast speedups on SS13 codebases: compile 6.6x faster on Windows and 10.2x on Linux; DreamDaemon world load 4.4x and 2.1x faster" src="docs/speedup-de113620-light.svg">
 </picture>
 
-How much faster depends on the computer. Some real compiles: 2 min to 20 s, 60 s to 12 s, 27 s to 10 s.
+How much faster depends on the computer and codebase, but expect significant gains.
 
-## Supported BYOND versions
-
-| BYOND | Windows | Linux |
-|---|---|---|
-| 516.1648 and newer | all patches | all patches |
-| 515 | almost all | majority |
-
-Patches that don't match a build disable themselves, so older builds are just less sped up.
+Byond 515 and 516 are supported. Patches that don't work will just disable themselves.
 
 ## Install
 
@@ -38,13 +31,17 @@ The path is your BYOND `bin` folder (or `dm.exe` in it) - dragging onto the exe 
 
 Run it with no arguments for help. Re-run after BYOND updates.
 
-Add `--runtime` to also speed up DreamDaemon (worlds load about 4x faster on Windows, 2x on Linux).
+Add `--runtime` to also speed up DreamDaemon:
+
+```
+dmfast-install.exe --runtime "C:\Program Files (x86)\BYOND\bin"
+```
 
 Installing again without `--runtime` puts back the stock DreamDaemon.
 
 ## Uninstall
 
-You can delete the modified compiler and rename the `_orig` one, or for a full uninstall:
+You can delete each modified program and rename the `_orig` copy back, or for a full uninstall:
 
 ```
 dmfast-install.exe --uninstall "C:\Program Files (x86)\BYOND\bin"
@@ -59,7 +56,7 @@ set DMFAST_STATS=1
 dm.exe yourgame.dme
 ```
 
-Anything that doesn't match your BYOND version prints `disabled` and runs stock.
+Anything that's not working prints `disabled` and runs stock.
 
 ## Build
 
