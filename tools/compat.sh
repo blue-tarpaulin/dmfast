@@ -26,7 +26,7 @@ esac
 native() { if [ "$os" = windows ]; then cygpath -w "$1"; else printf '%s\n' "$1"; fi; }
 
 url="https://byond-builds.dm-lang.org/${version%%.*}/$zip"
-if ! curl -sSfL -o "$work/byond.zip" "$url"; then
+if ! curl -sSfL --connect-timeout 15 --retry 4 --retry-delay 5 --retry-all-errors -o "$work/byond.zip" "$url"; then
   # Client-only BYOND updates ship no Linux build.
   if [ "$os" = linux ] && [ "$(curl -s -o /dev/null -w '%{http_code}' "$url")" = 404 ]; then
     echo "== $version $os: skipped (no Linux build)"

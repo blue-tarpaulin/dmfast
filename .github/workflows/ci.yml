@@ -28,9 +28,10 @@ jobs:
       - uses: ./.github/actions/patches
         with:
           key: ${{ secrets.DMFAST_PATCHES_KEY }}
-      - name: Install Rust
+      # The runner image's preinstalled stable: adding to it skips the channel sync and full toolchain download.
+      - name: Add Rust target
         shell: bash
-        run: rustup toolchain install stable --profile minimal --component clippy --target i686-pc-windows-msvc
+        run: rustup component add clippy && rustup target add i686-pc-windows-msvc
       - uses: Swatinem/rust-cache@v2
       - name: Clippy (dmfast.dll)
         shell: bash
@@ -56,11 +57,9 @@ jobs:
       - uses: ./.github/actions/patches
         with:
           key: ${{ secrets.DMFAST_PATCHES_KEY }}
-      - name: Install Rust
-        shell: bash
-        run: |
-          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --component clippy --target i686-unknown-linux-gnu
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - uses: ./.github/actions/rust-linux
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Clippy (libdmfast.so)
         shell: bash
