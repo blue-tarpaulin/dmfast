@@ -13,10 +13,9 @@ How much faster depends on the computer. Some real compiles: 2 min to 20 s, 60 s
 
 | BYOND | Windows | Linux |
 |---|---|---|
-| 516.1665 and newer | all patches | all patches |
-| 516.1660 | all patches | all but the name filter |
-| 516.1648 - 516.1655 | all patches | all but fast exit and the name filter |
-| 515.1647 | all but the name filter | some patches off |
+| 516.1660 and newer | all patches | all patches |
+| 516.1648 - 516.1655 | all patches | all but fast exit |
+| 515 | almost all | majority |
 
 Patches that don't match a build disable themselves, so older builds are just less sped up.
 
