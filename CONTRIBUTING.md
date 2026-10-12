@@ -2,8 +2,7 @@
 
 ## Build
 
-The patches live in a private submodule (`patches/`, blue-tarpaulin/dmfast-patches); building needs
-access to it:
+The patches live in a private submodule (`patches`); building needs access to it:
 
 ```
 git clone --recurse-submodules https://github.com/blue-tarpaulin/dmfast.git

@@ -2,7 +2,7 @@
 
 Each patch can be turned off for one run with `DMFAST_DISABLE=<key>` (comma-separated).
 
-**Saves** is roughly how much of a speedup we get on tgstation. Patches overlap and the numbers vary by codebase, so treat them as rough.
+**Saves** is roughly how much tg gets faster. Patches overlap & numbers vary by codebase, so treat them as rough.
 
 ## Compiler (`dm.exe` / `DreamMaker`)
 
