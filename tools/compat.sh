@@ -4,7 +4,8 @@
 # Installs dmfast (with --runtime) into a fresh copy of that BYOND build from byond-builds.dm-lang.org
 # and checks it against an untouched copy of the same build:
 #   - compiling <project.dme> and tests/rtsmoke.dme gives byte-identical .dmb files;
-#   - DreamDaemon running tests/rtsmoke.dmb logs the same result line.
+#   - DreamDaemon running tests/rtsmoke.dmb logs the same result line;
+#   - in verify mode (DMFAST_VERIFY=1) no patch disagrees with the original code.
 # Also times the compile and how long DreamDaemon takes to load the project's world (until the world
 # prints its first line), stock vs dmfast.
 # Prints which patch groups installed or disabled themselves. Appends a Markdown row to
@@ -29,7 +30,7 @@ if ! curl -sSfL -o "$work/byond.zip" "$url"; then
   # Client-only BYOND updates ship no Linux build.
   if [ "$os" = linux ] && [ "$(curl -s -o /dev/null -w '%{http_code}' "$url")" = 404 ]; then
     echo "== $version $os: skipped (no Linux build)"
-    row="| $version | - | $os | no Linux build | | | | | | | |"
+    row="| $version | - | $os | no Linux build | | | | | | | | |"
     echo "$row" > "compat-$os-$version.md"
     [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
     exit 0
@@ -108,6 +109,36 @@ else
   [ "$fast_rc" = 0 ] || { echo "::error::$version $os: DreamDaemon with dmfast exited $fast_rc"; fail=1; }
 fi
 
+# Verify mode: every patch that has one also works out each answer the original way and counts
+# disagreements (DMFAST_STATS lines end in mismatches=N). Run on the project's compile, rtsmoke's compile
+# and rtsmoke in DreamDaemon; the .dmb files must still match stock.
+vlog="$work/verify.txt"; : >"$vlog"
+export DMFAST_VERIFY=1
+if [ -n "${h_fast:-}" ]; then
+  if compile "$work/dmfast" "$project"; then
+    cat "$work/out.txt" >>"$vlog"
+    [ "$hash" = "$h_stock" ] || { echo "::error::$version $os: $(basename "$project") .dmb differs in verify mode"; fail=1; }
+  else
+    echo "::error::$version $os: $(basename "$project") verify-mode compile failed"; cat "$work/out.txt"; fail=1
+  fi
+fi
+if compile "$work/dmfast" "$root/tests/rtsmoke.dme"; then
+  cat "$work/out.txt" >>"$vlog"
+  [ "$hash" = "$s_stock" ] || { echo "::error::$version $os: rtsmoke .dmb differs in verify mode"; fail=1; }
+else
+  echo "::error::$version $os: rtsmoke verify-mode compile failed"; cat "$work/out.txt"; fail=1
+fi
+daemon "$work/dmfast"; cat "$work/dd.txt" >>"$vlog"
+unset DMFAST_VERIFY
+checked=$({ grep -E '^dmfast: .*mismatches=' "$vlog" || true; } | wc -l | tr -d ' ')
+bad=$(grep -E '^dmfast: .*mismatches=[1-9]' "$vlog" || true)
+if [ -n "$bad" ]; then
+  echo "::error::$version $os: verify mode found mismatches"; printf '%s\n' "$bad"; fail=1
+  verify="FAIL"
+else
+  verify="ok ($checked checks)"
+fi
+
 # load_secs <bin dir> <dmb>: prints seconds until DreamDaemon's world prints its first line (after BYOND's
 # banner), or nothing if it doesn't within 120 s. The world is stopped then.
 load_secs() {
@@ -150,10 +181,11 @@ result=$([ $fail = 0 ] && echo pass || echo FAIL)
 echo "== $version ($real) $os: $result"
 echo "compile $(basename "$project"): stock $t_stock, dmfast $t_fast, .dmb ${h_stock:-n/a} / ${h_fast:-n/a}"
 echo "world load: stock ${l_stock:-n/a}, dmfast ${l_fast:-n/a}"
+echo "verify mode: $verify"
 echo "compiler groups: $(mask "$compiler"); runtime groups: $(mask "$runtime"); disabled: ${disabled:-none}"
 printf '%s\n' "$compiler" "$runtime"
 
-row="| $version | ${real:-?} | $os | $result | $t_stock | $t_fast | $(mask "$compiler") | $(mask "$runtime") | ${disabled:-none} | ${l_stock:-n/a} | ${l_fast:-n/a} |"
+row="| $version | ${real:-?} | $os | $result | $t_stock | $t_fast | $(mask "$compiler") | $(mask "$runtime") | ${disabled:-none} | ${l_stock:-n/a} | ${l_fast:-n/a} | $verify |"
 echo "$row" > "compat-$os-$version.md"
 [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
 exit $fail
