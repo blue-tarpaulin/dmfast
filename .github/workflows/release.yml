@@ -1,0 +1,118 @@
+# Builds the combined Windows + Linux installer (dmfast-install.exe).
+# Manual runs keep it as a workflow artifact; pushing a `v*` tag also attests its build provenance and
+# publishes it as a GitHub release.
+#
+# The dmfast/ submodule is the private blue-tarpaulin/dmfast-patches repo, fetched with a read-only deploy
+# key (secret DMFAST_PATCHES_KEY).
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: never
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch dmfast-patches
+        shell: bash
+        env:
+          KEY: ${{ secrets.DMFAST_PATCHES_KEY }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/dmfast_patches && chmod 600 ~/.ssh/dmfast_patches
+          git -c url."git@github.com:".insteadOf="https://github.com/" \
+              -c core.sshCommand="ssh -i $HOME/.ssh/dmfast_patches -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+              submodule update --init dmfast
+      - name: Build
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal --target i686-pc-windows-msvc
+          cargo build --release --locked -p dmfast-install
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: target/release/dmfast-install.exe
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    # Debian 12: BYOND 516 needs glibc 2.34; the installer's build script checks libdmfast.so needs no newer symbols.
+    container: debian:12
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends git openssh-client ca-certificates curl build-essential gcc-multilib
+      - uses: actions/checkout@v4
+      - name: Fetch dmfast-patches
+        shell: bash
+        env:
+          KEY: ${{ secrets.DMFAST_PATCHES_KEY }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/dmfast_patches && chmod 600 ~/.ssh/dmfast_patches
+          git -c url."git@github.com:".insteadOf="https://github.com/" \
+              -c core.sshCommand="ssh -i $HOME/.ssh/dmfast_patches -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+              submodule update --init dmfast
+      - name: Build
+        shell: bash
+        run: |
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --target i686-unknown-linux-gnu
+          . "$HOME/.cargo/env"
+          cargo build --release --locked -p dmfast-install
+          cp target/release/dmfast-install dmfast-install-linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dmfast-install-linux
+          if-no-files-found: error
+
+  pack:
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch dmfast-patches
+        shell: bash
+        env:
+          KEY: ${{ secrets.DMFAST_PATCHES_KEY }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/dmfast_patches && chmod 600 ~/.ssh/dmfast_patches
+          git -c url."git@github.com:".insteadOf="https://github.com/" \
+              -c core.sshCommand="ssh -i $HOME/.ssh/dmfast_patches -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+              submodule update --init dmfast
+      - uses: actions/download-artifact@v4
+        with:
+          path: parts
+      - name: Pack
+        run: |
+          mkdir -p dist
+          cargo run -q --release --locked -p dmfast-pack -- parts/windows/dmfast-install.exe parts/linux/dmfast-install-linux dist/dmfast-install.exe
+          sha256sum dist/dmfast-install.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmfast-install
+          path: dist/dmfast-install.exe
+          if-no-files-found: error
+      - name: Attest build provenance
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/dmfast-install.exe
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/dmfast-install.exe --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

@@ -1,0 +1,4 @@
+[submodule "dmfast"]
+	path = dmfast
+	url = https://github.com/blue-tarpaulin/dmfast-patches.git
+	branch = main

@@ -1,0 +1,10 @@
+work/
+target/
+dist/
+__pycache__/
+*.dmb
+*.rsc
+*.int
+*.lk
+*.log
+unversioned/

@@ -1,0 +1,8 @@
+[package]
+name = "dmfast-pack"
+version = "1.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+flate2 = "1"

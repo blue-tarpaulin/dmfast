@@ -1,0 +1,18 @@
+[workspace]
+resolver = "3"
+members = ["dmfast", "installer", "packer"]
+# dmfast is i686-only (inline x86 asm); the installer's build script builds it for that target.
+default-members = ["installer"]
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+
+# The installer runs once per install: optimise it for size. (dmfast itself stays at full speed.)
+[profile.release.package.dmfast-install]
+opt-level = "z"
+strip = true
+
+[profile.dev]
+panic = "abort"
