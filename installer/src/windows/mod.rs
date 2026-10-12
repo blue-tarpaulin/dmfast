@@ -2,6 +2,11 @@
 //! (and pulls in mimalloc). dm.exe is always patched; with `--runtime` also DreamDaemon (`dreamdaemon.exe`,
 //! `dd.exe`). Each patched program's original is kept as `<name>_orig.exe`; byondcore.dll and every
 //! other program stay stock.
+//!
+//! DreamSeeker is not rewritten: it refuses to run properly when an unknown DLL from `bin\` is loaded, so with
+//! `--runtime` `bin\WebView2Loader.dll` (which DreamSeeker's byondwin.dll imports first) is replaced by a
+//! proxy ([`PROXY`]) that forwards to the stock loader and loads dmfast.dll, both kept in `<byond>\dmfast\`
+//! outside `bin\`.
 
 mod elevate;
 mod pe;
@@ -18,17 +23,23 @@ const MIMALLOC: [(&str, &[u8]); 2] = [
     ("mimalloc.dll", include_bytes!("../../../vendor/mimalloc-x86/mimalloc.dll")),
     ("mimalloc-redirect32.dll", include_bytes!("../../../vendor/mimalloc-x86/mimalloc-redirect32.dll")),
 ];
+/// Stand-in for WebView2Loader.dll that loads dmfast into DreamSeeker (marked by the [`PROXY_MARKER`] export).
+const PROXY: &[u8] = include_bytes!(env!("SEEKERPROXY_LIB"));
+const PROXY_MARKER: &[u8] = b"dmfast_seekerproxy";
+const LOADER: &str = "WebView2Loader.dll";
+/// Sibling of `bin\` holding what DreamSeeker's proxy loads: the stock loader, dmfast.dll and mimalloc.
+const SIDE_DIR: &str = "dmfast";
+const SEEKER: &str = "dreamseeker.exe";
 const DLL: &str = "dmfast.dll";
 const COMPILER: &str = "dm.exe";
 /// Patched with `--runtime`. Missing ones are skipped (not every BYOND build ships all of them).
 ///
-/// DreamSeeker is left out for now: any rewrite of its import table (even one importing a DLL that does
-/// nothing) makes it crash during MFC startup in `DMString::operator=`. The DLL side already handles it
-/// (`Host::Runtime`); re-add `"dreamseeker.exe"` here once it can be loaded another way.
+/// DreamSeeker is not in this list: any rewrite of its import table, or any unknown DLL in `bin\`, trips
+/// its loaded-module scan and it crashes later in `DMString::operator=`. See [`install_seeker`].
 const RUNTIME: [&str; 2] = ["dreamdaemon.exe", "dd.exe"];
 /// Programs an earlier build may have patched that are no longer installed into; install and uninstall
-/// put them back to stock if they find them patched.
-const RETIRED: [&str; 1] = ["dreamseeker.exe"];
+/// put them back to stock if they find them patched (DreamSeeker's import rewrite crashed it).
+const RETIRED: [&str; 1] = [SEEKER];
 
 fn backup_of(dir: &Path, exe: &str) -> PathBuf {
     dir.join(format!("{}_orig.exe", exe.trim_end_matches(".exe")))
@@ -52,6 +63,66 @@ pub fn bin_dir(target: &Path) -> Result<PathBuf, Failure> {
 fn targets(dir: &Path, runtime: bool) -> Vec<&'static str> {
     let rt = RUNTIME.into_iter().filter(|e| runtime && dir.join(e).is_file());
     std::iter::once(COMPILER).chain(rt).collect()
+}
+
+/// `<byond>\dmfast\`, where the proxy looks for what it loads.
+fn side_dir(dir: &Path) -> PathBuf {
+    dir.parent().unwrap_or(Path::new(".")).join(SIDE_DIR)
+}
+
+fn is_proxy(p: &Path) -> Result<bool, Failure> {
+    Ok(p.is_file() && pe::exports(&read(p)?, PROXY_MARKER))
+}
+
+/// Load dmfast into DreamSeeker: stock loader, dmfast.dll and mimalloc go to `<byond>\dmfast\`, the proxy
+/// takes the loader's place in `bin\`. Returns false (nothing done) if this BYOND has no DreamSeeker.
+fn install_seeker(dir: &Path) -> Result<bool, Failure> {
+    let loader = dir.join(LOADER);
+    if !dir.join(SEEKER).is_file() || !loader.is_file() {
+        return Ok(false);
+    }
+    ensure_not_in_use(&loader)?;
+    let side = side_dir(dir);
+    let stock = side.join(LOADER);
+    let proxied = is_proxy(&loader)?;
+    if proxied && !stock.is_file() {
+        return Err(format!("{} is missing; reinstall BYOND to restore {LOADER}", stock.display()).into());
+    }
+    fs::create_dir_all(&side).map_err(|e| io_err("cannot create", &side, e))?;
+    write(&side.join(DLL), DMFAST_DLL)?;
+    for (name, data) in MIMALLOC {
+        write(&side.join(name), data)?;
+    }
+    if !proxied {
+        // Whatever is in bin\ is BYOND's own (possibly newer than an older copy kept here).
+        rename_retry(&loader, &stock).map_err(|e| io_err("cannot move", &loader, e))?;
+    }
+    write(&loader, PROXY)?;
+    Ok(true)
+}
+
+/// Put the stock loader back and remove `<byond>\dmfast\`. Returns whether the proxy was installed.
+fn uninstall_seeker(dir: &Path) -> Result<bool, Failure> {
+    let loader = dir.join(LOADER);
+    let side = side_dir(dir);
+    let stock = side.join(LOADER);
+    let proxied = is_proxy(&loader)?;
+    if proxied {
+        ensure_not_in_use(&loader)?;
+        if !stock.is_file() {
+            return Err(format!("{} is missing; reinstall BYOND to restore {LOADER}", stock.display()).into());
+        }
+        rename_retry(&stock, &loader).map_err(|e| io_err("cannot restore", &loader, e))?;
+    }
+    for name in [DLL, LOADER].into_iter().chain(MIMALLOC.map(|(n, _)| n)) {
+        let p = side.join(name);
+        if p.is_file() {
+            fs::remove_file(&p).map_err(|e| io_err("cannot remove", &p, e))?;
+        }
+    }
+    // Only if empty: it is ours, but never delete what someone else put there.
+    let _ = fs::remove_dir(&side);
+    Ok(proxied)
 }
 
 /// Rewrite one program to import dmfast.dll first, keeping the stock one as its `_orig` backup.
@@ -124,7 +195,13 @@ pub fn install(dir: &Path, runtime: bool) -> Result<String, Failure> {
     for (name, data) in MIMALLOC {
         write(&dir.join(name), data)?;
     }
-    let mut msg = format!("installed {ours} in {} (was {before}) for {}", dir.display(), names.join(", "));
+    let mut programs = names.join(", ");
+    if runtime && install_seeker(dir)? {
+        programs += ", dreamseeker.exe (via WebView2Loader.dll)";
+    } else if uninstall_seeker(dir)? {
+        unpatched.push("dreamseeker.exe (WebView2Loader.dll)");
+    }
+    let mut msg = format!("installed {ours} in {} (was {before}) for {programs}", dir.display());
     if !unpatched.is_empty() {
         msg += &format!("; restored stock {}", unpatched.join(", "));
     }
@@ -146,6 +223,9 @@ pub fn uninstall(dir: &Path) -> Result<String, Failure> {
         if restore(dir, name)? {
             restored.push(name);
         }
+    }
+    if uninstall_seeker(dir)? {
+        restored.push(LOADER);
     }
     if restored.is_empty() {
         return Ok(format!("dmfast is not installed in {}", dir.display()));

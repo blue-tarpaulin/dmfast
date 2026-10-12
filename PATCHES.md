@@ -32,7 +32,9 @@ Each patch can be turned off for one run with `DMFAST_DISABLE=<key>` (comma-sepa
 | Child index | `children` | both | <1% | Indexes children by name for path resolution |
 | Progress poll | `poll` | both | up to 0.25 s | Progress thread polls every 10 ms, not 250 |
 
-## DreamDaemon (installed with `--runtime`)
+## DreamDaemon and DreamSeeker (installed with `--runtime`)
+
+DreamSeeker (client and local server) runs the same set; on Windows it loads dmfast through a `WebView2Loader.dll` stand-in (see the README).
 
 | Patch | Key | Platforms | Saves | What it does |
 |---|---|---|---|---|
@@ -43,4 +45,6 @@ Each patch can be turned off for one run with `DMFAST_DISABLE=<key>` (comma-sepa
 | Sorted map merge | `sortmerge` | both | ~9% | Merges sorted maps in one pass |
 | String tree | `strtree` | both | ~2% | Hash index replaces string tree walks |
 | CRC-32 | `crc` | both | <1% | Checksums eight bytes per step |
+| String table load | `strtable` | Windows | ~3% | Native pass over the string table at world load; drops the redundant rebuild after it (needs `strtree` and `crc`) |
 | .dmb buffer | `dmbbuf` | Windows | <1% | 1 MB read buffer for the .dmb |
+| Var list inheritance | `varlist` | Windows | ~3% | A type with no vars of its own reuses its parent's interned var list instead of rebuilding it |

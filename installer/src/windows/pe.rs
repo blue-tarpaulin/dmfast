@@ -1,4 +1,4 @@
-//! Minimal PE32 reading/editing: section names, canary export, and prepending an import descriptor.
+//! Minimal PE32 reading/editing: section names, exports (the canary), and prepending an import descriptor.
 
 use object::read::pe::{ExportTarget, PeFile32};
 
@@ -39,6 +39,13 @@ pub fn canary(data: &[u8]) -> Option<String> {
     let bytes = pe.section_table().pe_data_at(data, rva)?;
     let end = bytes.iter().position(|&b| b == 0)?;
     Some(String::from_utf8_lossy(&bytes[..end]).into_owned())
+}
+
+/// Whether the image exports `name`.
+pub fn exports(data: &[u8], name: &[u8]) -> bool {
+    let Ok(pe) = parse(data) else { return false };
+    let Ok(Some(table)) = pe.export_table() else { return false };
+    table.exports().is_ok_and(|all| all.into_iter().any(|e| e.name == Some(name)))
 }
 
 fn u16_at(d: &[u8], o: usize) -> u16 {

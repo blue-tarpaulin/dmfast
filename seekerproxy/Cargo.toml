@@ -1,0 +1,13 @@
+[package]
+name = "dmfast-seekerproxy"
+version.workspace = true
+edition = "2024"
+publish = false
+description = "WebView2Loader.dll stand-in that loads dmfast into DreamSeeker"
+
+[lib]
+name = "WebView2Loader"
+crate-type = ["cdylib"]
+
+[dependencies]
+windows-sys = { version = "0.61.2", default-features = false, features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_SystemServices"] }

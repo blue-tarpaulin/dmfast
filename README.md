@@ -31,13 +31,15 @@ The path is your BYOND `bin` folder (or `dm.exe`) - dragging the exe onto the in
 
 Run it with no arguments for help. Re-run after BYOND updates.
 
-Add `--runtime` to also speed up DreamDaemon (while it's in beta):
+Add `--runtime` to also speed up DreamDaemon and DreamSeeker (while it's in beta):
 
 ```
 dmfast-install.exe --runtime "C:\Program Files (x86)\BYOND\bin"
 ```
 
-Installing again without `--runtime` puts back the stock DreamDaemon.
+On Windows, DreamSeeker is not modified: dmfast replaces `bin\WebView2Loader.dll` with a small stand-in that forwards to the original loader and loads dmfast (both kept in a `dmfast` folder next to `bin`). DreamSeeker misbehaves if it finds unknown DLLs inside `bin`, hence the separate folder.
+
+Installing again without `--runtime` puts back the stock DreamDaemon and DreamSeeker.
 
 ## Uninstall
 

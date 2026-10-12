@@ -41,7 +41,7 @@ checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
 
 [[package]]
 name = "dmfast"
-version = "4.6.2"
+version = "4.7.0"
 dependencies = [
  "libc",
  "libmimalloc-sys",
@@ -53,7 +53,7 @@ dependencies = [
 
 [[package]]
 name = "dmfast-install"
-version = "4.6.2"
+version = "4.7.0"
 dependencies = [
  "object",
  "windows-sys",
@@ -65,6 +65,13 @@ name = "dmfast-pack"
 version = "1.0.0"
 dependencies = [
  "flate2",
+]
+
+[[package]]
+name = "dmfast-seekerproxy"
+version = "4.7.0"
+dependencies = [
+ "windows-sys",
 ]
 
 [[package]]

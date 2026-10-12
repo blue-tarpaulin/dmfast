@@ -44,7 +44,7 @@ const HELP: &str = concat!(
 dmfast-install [options] <BYOND bin folder or dm.exe>
   options:
      --uninstall        remove dmfast (restores the original programs)
-     --runtime          also speed up DreamDaemon (world startup)
+     --runtime          also speed up DreamDaemon and DreamSeeker
      --version          show version and licenses
      -h, --help         view this help
 
@@ -54,7 +54,7 @@ dmfast-install [options] <BYOND bin folder or dm.exe>
      dmfast-install --uninstall "C:\Program Files (x86)\BYOND\bin"
 
 Close BYOND first. You can also drag dm.exe or the bin folder onto dmfast-install.exe.
-Re-run the install after a BYOND update. Installing without --runtime puts back stock DreamDaemon."#
+Re-run the install after a BYOND update. Installing without --runtime puts back stock DreamDaemon and DreamSeeker."#
 );
 #[cfg(not(windows))]
 const HELP: &str = concat!(

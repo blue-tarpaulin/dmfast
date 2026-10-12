@@ -19,18 +19,7 @@ fn main() {
         if windows { ("i686-pc-windows-msvc", "dmfast.dll") } else { ("i686-unknown-linux-gnu", "libdmfast.so") };
     let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("..");
     let target_dir = PathBuf::from(env::var("OUT_DIR").unwrap()).join("dmfast-target");
-    let status = Command::new(env::var("CARGO").unwrap())
-        .args(["build", "--release", "--target", triple, "-p", "dmfast", "--target-dir"])
-        .arg(&target_dir)
-        // The embedded copy needs no symbol table (development builds keep theirs for profiling).
-        .args(["--config", "profile.release.strip=true"])
-        .current_dir(&root)
-        .env_remove("CARGO_ENCODED_RUSTFLAGS")
-        .env_remove("RUSTFLAGS")
-        .status()
-        .expect("failed to run cargo for dmfast");
-    assert!(status.success(), "building {file} failed");
-    let lib = target_dir.join(triple).join("release").join(file);
+    let lib = build_x86(&root, &target_dir, triple, "dmfast", file);
     println!("cargo:rustc-env=DMFAST_LIB={}", lib.display());
     println!("cargo:rerun-if-changed={}", root.join("patches").display());
     if !windows {
@@ -38,6 +27,10 @@ fn main() {
         return;
     }
     println!("cargo:rerun-if-changed={}", root.join("vendor").join("mimalloc-x86").display());
+    // The WebView2Loader.dll stand-in that loads dmfast into DreamSeeker.
+    let proxy = build_x86(&root, &target_dir, triple, "dmfast-seekerproxy", "WebView2Loader.dll");
+    println!("cargo:rustc-env=SEEKERPROXY_LIB={}", proxy.display());
+    println!("cargo:rerun-if-changed={}", root.join("seekerproxy").display());
 
     let mut res = winresource::WindowsResource::new();
     res.set("ProductName", "dmfast")
@@ -47,6 +40,22 @@ fn main() {
         .set("OriginalFilename", "dmfast-install.exe")
         .set_manifest(&MANIFEST.replace("{version}", &format!("{}.0", env!("CARGO_PKG_VERSION"))));
     res.compile().expect("embedding version info / manifest");
+}
+
+/// Builds workspace package `package` for `triple` into `target_dir` and returns the path of `file`.
+fn build_x86(root: &std::path::Path, target_dir: &std::path::Path, triple: &str, package: &str, file: &str) -> PathBuf {
+    let status = Command::new(env::var("CARGO").unwrap())
+        .args(["build", "--release", "--target", triple, "-p", package, "--target-dir"])
+        .arg(target_dir)
+        // The embedded copy needs no symbol table (development builds keep theirs for profiling).
+        .args(["--config", "profile.release.strip=true"])
+        .current_dir(root)
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .env_remove("RUSTFLAGS")
+        .status()
+        .unwrap_or_else(|e| panic!("failed to run cargo for {package}: {e}"));
+    assert!(status.success(), "building {file} failed");
+    target_dir.join(triple).join("release").join(file)
 }
 
 /// Runs as the invoking user (it relaunches itself elevated only when the target needs it). `{version}`

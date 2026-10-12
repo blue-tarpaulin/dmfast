@@ -1,11 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["patches", "installer", "packer"]
+members = ["patches", "installer", "packer", "seekerproxy"]
 # dmfast is i686-only (inline x86 asm); the installer's build script builds it for that target.
 default-members = ["installer"]
 
 [workspace.package]
-version = "4.6.2"
+version = "4.7.0"
 
 [profile.release]
 panic = "abort"
@@ -14,6 +14,10 @@ codegen-units = 1
 
 # The installer runs once per install: optimise it for size. (dmfast itself stays at full speed.)
 [profile.release.package.dmfast-install]
+opt-level = "z"
+strip = true
+
+[profile.release.package.dmfast-seekerproxy]
 opt-level = "z"
 strip = true
 
