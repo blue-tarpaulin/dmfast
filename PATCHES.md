@@ -2,6 +2,11 @@
 
 Each patch can be turned off for one run with `DMFAST_DISABLE=<key>` (comma-separated).
 
+Each patch finds the code it changes by signature and turns itself off if anything doesn't match, so a
+new BYOND build loses only the patches it broke. Patches made of independent parts (`stdio`, `slots`,
+`fscache`, `dirs`, `banner`, `dmbread`) also keep whichever parts still match and print which ones are
+missing.
+
 **Saves** is roughly how much tg gets faster. Patches overlap & numbers vary by codebase, so treat them as rough.
 
 ## Compiler (`dm.exe` / `DreamMaker`)
@@ -11,7 +16,8 @@ Each patch can be turned off for one run with `DMFAST_DISABLE=<key>` (comma-sepa
 | Version banner | `banner` | both | - | Adds a dmfast line to the version banner |
 | String table | `strings` | both | ~48% | Hinted free-slot search, geometric string table growth |
 | Dir listing | `dirs` | Linux | ~39% (Linux) | Caches directory listings; skips needless chdir and opens |
-| Stdio | `stdio` | both | ~4% | Unlocked file I/O; cached ftell in .dmb writer |
+| Stdio | `stdio` | both | ~4% | Unlocked file reads and writes |
+| ftell cache | `ftell` | both | <1% | ftell without a seek syscall in the .dmb writer |
 | File cache | `fscache` | Windows | ~2% | Caches file existence, attribute and listing lookups |
 | Name filter | `filter` | both | ~2% | Skips scopes that can't contain the name |
 | mimalloc | - | both | ~2% | Faster memory allocator |
