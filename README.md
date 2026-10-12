@@ -27,11 +27,11 @@ The same file installs on Linux:
 sh dmfast-install.exe ~/byond/bin
 ```
 
-The path is your BYOND `bin` folder (or `dm.exe` in it) - dragging onto the exe works too.
+The path is your BYOND `bin` folder (or `dm.exe`) - dragging the exe onto the installer works too.
 
 Run it with no arguments for help. Re-run after BYOND updates.
 
-Add `--runtime` to also speed up DreamDaemon:
+Add `--runtime` to also speed up DreamDaemon (while it's in beta):
 
 ```
 dmfast-install.exe --runtime "C:\Program Files (x86)\BYOND\bin"
@@ -49,14 +49,14 @@ dmfast-install.exe --uninstall "C:\Program Files (x86)\BYOND\bin"
 
 On Linux: `sh dmfast-install.exe --uninstall ~/byond/bin`.
 
-## Check it's on
+## Check it's working
+
+You can just run the compiler as normal, or:
 
 ```
 set DMFAST_STATS=1
 dm.exe yourgame.dme
 ```
-
-Anything that's not working prints `disabled` and runs stock.
 
 ## Build
 
@@ -64,10 +64,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-dmfast is licensed under the BSD 3-Clause License, © 2026 Greytide Worldwide; see [LICENSE](LICENSE). It bundles
-[mimalloc](https://github.com/microsoft/mimalloc) (MIT, Microsoft Corporation; see
-[vendor/mimalloc-x86/LICENSE.txt](vendor/mimalloc-x86/LICENSE.txt)).
+dmfast is licensed under the BSD 3-Clause License, © 2026 Greytide Worldwide; see [LICENSE](LICENSE).
 
-This repository contains no BYOND code or binaries. dmfast changes your own installed copy of BYOND in
-memory while it runs. The installer only makes the BYOND programs load dmfast and keeps their originals,
-so uninstalling restores stock BYOND. dmfast is not affiliated with or endorsed by BYOND.
+It bundles [mimalloc](https://github.com/microsoft/mimalloc) (MIT, Microsoft Corporation & Daan Leijen - [vendor/mimalloc-x86/LICENSE.txt](vendor/mimalloc-x86/LICENSE.txt)).
+
+This repository contains no BYOND code or binaries. 
+
+dmfast changes your own installed copy of BYOND in memory while it runs. 
+The installer only makes the BYOND programs load dmfast and keeps their originals, so uninstalling restores stock BYOND.
+
+dmfast is not affiliated with or endorsed by BYOND in any way.
