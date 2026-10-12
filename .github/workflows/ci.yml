@@ -1,0 +1,73 @@
+# Lints and builds both platforms on pull requests and pushes to main.
+#
+# Needs the private patches/ submodule (secret DMFAST_PATCHES_KEY). GitHub does not give secrets to
+# pull requests from forks, so those are skipped; open PRs from a branch of this repo instead.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+
+jobs:
+  windows:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/patches
+        with:
+          key: ${{ secrets.DMFAST_PATCHES_KEY }}
+      - name: Install Rust
+        shell: bash
+        run: rustup toolchain install stable --profile minimal --component clippy --target i686-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy (dmfast.dll)
+        shell: bash
+        run: cargo clippy --release --locked -p dmfast --target i686-pc-windows-msvc -- -D warnings
+      - name: Clippy (installer, packer)
+        shell: bash
+        run: cargo clippy --release --locked -p dmfast-install -p dmfast-pack -- -D warnings
+      - name: Build installer
+        shell: bash
+        run: cargo build --release --locked -p dmfast-install
+
+  linux:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    # Same image as releases: the installer's build script checks libdmfast.so needs no glibc newer than 2.34.
+    container: debian:12
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends git openssh-client ca-certificates curl build-essential gcc-multilib
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/patches
+        with:
+          key: ${{ secrets.DMFAST_PATCHES_KEY }}
+      - name: Install Rust
+        shell: bash
+        run: |
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --component clippy --target i686-unknown-linux-gnu
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy (libdmfast.so)
+        shell: bash
+        run: cargo clippy --release --locked -p dmfast --target i686-unknown-linux-gnu -- -D warnings
+      - name: Clippy (installer, packer)
+        shell: bash
+        run: cargo clippy --release --locked -p dmfast-install -p dmfast-pack -- -D warnings
+      - name: Build installer
+        shell: bash
+        run: cargo build --release --locked -p dmfast-install

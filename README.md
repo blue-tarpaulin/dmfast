@@ -2,6 +2,11 @@
 
 Makes `dm.exe` compile at lightspeed.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/speedup-dark.svg">
+  <img alt="dmfast speedups on large codebases: compile 6.1x faster on Windows and 7.9x on Linux; DreamDaemon startup 4.6x and 1.9x faster" src="docs/speedup-light.svg">
+</picture>
+
 Contains multiple patches that will self-disable if not compatible.
 
 ## Install

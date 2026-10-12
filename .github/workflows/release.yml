@@ -2,8 +2,8 @@
 # Manual runs keep it as a workflow artifact; pushing a `v*` tag also attests its build provenance and
 # publishes it as a GitHub release (only if the scan is clean).
 #
-# The patches/ submodule is the private blue-tarpaulin/dmfast-patches repo, fetched with a read-only deploy
-# key (secret DMFAST_PATCHES_KEY).
+# The patches/ submodule is the private blue-tarpaulin/dmfast-patches repo, fetched by
+# .github/actions/patches with a read-only deploy key (secret DMFAST_PATCHES_KEY).
 name: release
 
 on:
@@ -22,20 +22,16 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Fetch dmfast-patches
+      - uses: ./.github/actions/patches
+        with:
+          key: ${{ secrets.DMFAST_PATCHES_KEY }}
+      - name: Install Rust
         shell: bash
-        env:
-          KEY: ${{ secrets.DMFAST_PATCHES_KEY }}
-        run: |
-          mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/dmfast_patches && chmod 600 ~/.ssh/dmfast_patches
-          git -c url."git@github.com:".insteadOf="https://github.com/" \
-              -c core.sshCommand="ssh -i $HOME/.ssh/dmfast_patches -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-              submodule update --init patches
+        run: rustup toolchain install stable --profile minimal --target i686-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
       - name: Build
         shell: bash
-        run: |
-          rustup toolchain install stable --profile minimal --target i686-pc-windows-msvc
-          cargo build --release --locked -p dmfast-install
+        run: cargo build --release --locked -p dmfast-install
       - uses: actions/upload-artifact@v7
         with:
           name: windows
@@ -52,21 +48,18 @@ jobs:
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends git openssh-client ca-certificates curl build-essential gcc-multilib
       - uses: actions/checkout@v7
-      - name: Fetch dmfast-patches
-        shell: bash
-        env:
-          KEY: ${{ secrets.DMFAST_PATCHES_KEY }}
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/dmfast_patches && chmod 600 ~/.ssh/dmfast_patches
-          git -c url."git@github.com:".insteadOf="https://github.com/" \
-              -c core.sshCommand="ssh -i $HOME/.ssh/dmfast_patches -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-              submodule update --init patches
-      - name: Build
+      - uses: ./.github/actions/patches
+        with:
+          key: ${{ secrets.DMFAST_PATCHES_KEY }}
+      - name: Install Rust
         shell: bash
         run: |
           curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --target i686-unknown-linux-gnu
-          . "$HOME/.cargo/env"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        shell: bash
+        run: |
           cargo build --release --locked -p dmfast-install
           cp target/release/dmfast-install dmfast-install-linux
       - uses: actions/upload-artifact@v7
@@ -80,15 +73,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Fetch dmfast-patches
-        shell: bash
-        env:
-          KEY: ${{ secrets.DMFAST_PATCHES_KEY }}
-        run: |
-          mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/dmfast_patches && chmod 600 ~/.ssh/dmfast_patches
-          git -c url."git@github.com:".insteadOf="https://github.com/" \
-              -c core.sshCommand="ssh -i $HOME/.ssh/dmfast_patches -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-              submodule update --init patches
+      - uses: ./.github/actions/patches
+        with:
+          key: ${{ secrets.DMFAST_PATCHES_KEY }}
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/download-artifact@v8
         with:
           path: parts
