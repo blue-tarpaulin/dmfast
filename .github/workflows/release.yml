@@ -1,6 +1,6 @@
-# Builds the combined Windows + Linux installer (dmfast-install.exe).
+# Builds the combined Windows + Linux installer (dmfast-install.exe) and scans it with Windows Defender.
 # Manual runs keep it as a workflow artifact; pushing a `v*` tag also attests its build provenance and
-# publishes it as a GitHub release.
+# publishes it as a GitHub release (only if the scan is clean).
 #
 # The patches/ submodule is the private blue-tarpaulin/dmfast-patches repo, fetched with a read-only deploy
 # key (secret DMFAST_PATCHES_KEY).
@@ -78,10 +78,6 @@ jobs:
   pack:
     needs: [windows, linux]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@v7
       - name: Fetch dmfast-patches
@@ -106,13 +102,70 @@ jobs:
           name: dmfast-install
           path: dist/dmfast-install.exe
           if-no-files-found: error
-      - name: Attest build provenance
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/attest-build-provenance@v4
+
+  # Windows Defender scan of the packed installer. A detection opens an issue (submit the file at
+  # https://www.microsoft.com/wdsi/filesubmission; there is no API for that) and fails the run, so a
+  # flagged installer is never released.
+  scan:
+    needs: pack
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/download-artifact@v8
         with:
-          subject-path: dist/dmfast-install.exe
-      - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+          name: dmfast-install
+      - name: Scan with Windows Defender
+        id: scan
+        shell: pwsh
+        run: |
+          $mp = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+          & $mp -SignatureUpdate | Out-Null
+          $exe = (Resolve-Path dmfast-install.exe).Path
+          $out = & $mp -Scan -ScanType 3 -File $exe -DisableRemediation 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          $out | Out-File -FilePath defender_output.txt -Encoding utf8
+          # MpCmdRun: 0 = clean, 2 = threat found, anything else = the scan itself failed.
+          if ($code -eq 2) {
+            Write-Host "::error::Windows Defender flagged dmfast-install.exe"
+            "detection=true" >> $env:GITHUB_OUTPUT
+          } elseif ($code -ne 0) {
+            Write-Host "::error::Windows Defender scan failed (exit code $code)"
+            exit 1
+          } else {
+            "detection=false" >> $env:GITHUB_OUTPUT
+          }
+      - name: Open an issue for the detection
+        if: steps.scan.outputs.detection == 'true'
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/dmfast-install.exe --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Windows Defender flagged dmfast-install.exe (${GITHUB_REF_NAME})" \
+            --body "$(printf 'Windows Defender flagged the installer built by %s (ref `%s`, sha256 `%s`).\n\nSubmit it as a false positive (software developer) at https://www.microsoft.com/wdsi/filesubmission; it is attached to the run as the `dmfast-install` artifact.\n\n```\n%s\n```\n' "$RUN_URL" "$GITHUB_REF_NAME" "$(sha256sum dmfast-install.exe | cut -d' ' -f1)" "$(cat defender_output.txt)")"
+          exit 1
+
+  release:
+    needs: scan
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dmfast-install
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dmfast-install.exe
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dmfast-install.exe --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

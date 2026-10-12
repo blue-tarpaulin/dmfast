@@ -79,11 +79,9 @@ Single installer for both:
 py tools/release.py --distro Debian
 ```
 
-Output: `dist/dmfast-install.exe`. It is the Windows installer with the Linux one appended (gzipped) and a short shell launcher in its DOS header, so Windows runs it as usual and `sh` runs the Linux installer from it (see `packer/src/main.rs`). 
+Output: `dist/dmfast-install.exe` - works on both operating systems.
 
 ## Release
 
-Push a `v*` tag (e.g. `v4.4.0`). `.github/workflows/release.yml` builds both installers, packs them,
-attests the build provenance and publishes the release. Running the workflow by hand builds the same
-file as a workflow artifact without publishing it.
+Push a `v*` tag (e.g. `v4.4.0`).
 
