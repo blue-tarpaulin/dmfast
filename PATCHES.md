@@ -37,10 +37,10 @@ Each patch can be turned off for one run with `DMFAST_DISABLE=<key>` (comma-sepa
 | Patch | Key | Platforms | Saves | What it does |
 |---|---|---|---|---|
 | mimalloc | - | both | ~29% | Faster memory allocator |
-| .dmb reader | `dmbread` | Windows | ~14% | Whole-value .dmb reads from the file buffer; ftell without a syscall |
+| .dmb reader | `dmbread` | Windows | ~17% | Whole-value .dmb reads from the file buffer; id arrays in one read; ftell without a syscall |
 | Resource-ID index | `resids` | both | ~14% | Hash index for resource ID find-or-add |
 | Sorted map insert | `sortmap` | both | ~6% | Fast appends; grows sorted maps geometrically |
-| Sorted map merge | `sortmerge` | both | ~4% | Merges sorted maps in one pass |
+| Sorted map merge | `sortmerge` | both | ~9% | Merges sorted maps in one pass |
 | String tree | `strtree` | both | ~2% | Hash index replaces string tree walks |
 | CRC-32 | `crc` | both | <1% | Checksums eight bytes per step |
 | .dmb buffer | `dmbbuf` | Windows | <1% | 1 MB read buffer for the .dmb |
