@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # usage: compat.sh <BYOND version, e.g. 516.1688 or 516.latest> <dmfast-install.exe> <project.dme>
 #
-# Installs dmfast (with --runtime) into a fresh copy of that BYOND build from byond-builds.dm-lang.org
+# Installs dmfast (compiler and DreamDaemon) into a fresh copy of that BYOND build from byond-builds.dm-lang.org
 # and checks it against an untouched copy of the same build:
 #   - compiling <project.dme> and tests/rtsmoke.dme gives byte-identical .dmb files;
 #   - DreamDaemon running tests/rtsmoke.dmb logs the same result line;
@@ -44,8 +44,8 @@ if [ "$os" = windows ]; then "$SYSTEMROOT/System32/tar.exe" -xf "$(native "$work
 else unzip -q -d "$work/x" "$work/byond.zip"; fi
 cp -r "$work/x/byond/bin" "$work/stock"
 mkdir -p "$work/fast" && cp -r "$work/x/byond/bin" "$work/fast/bin"
-if [ "$os" = windows ]; then "$installer" --runtime "$(native "$work/fast/bin")" >"$work/install.txt" 2>&1
-else sh "$installer" --runtime "$work/fast/bin" >"$work/install.txt" 2>&1; fi || { cat "$work/install.txt"; exit 1; }
+if [ "$os" = windows ]; then "$installer" "$(native "$work/fast/bin")" >"$work/install.txt" 2>&1
+else sh "$installer" "$work/fast/bin" >"$work/install.txt" 2>&1; fi || { cat "$work/install.txt"; exit 1; }
 
 # run <bin dir> <program> <args...>: run a BYOND program from that build with dmfast's stats on, for at
 # most $limit seconds (default 120; exit status 124 when it hit the limit).

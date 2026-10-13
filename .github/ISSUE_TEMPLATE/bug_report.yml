@@ -35,7 +35,7 @@ body:
       label: Program
       options:
         - Compiler (dm.exe / DreamMaker)
-        - DreamDaemon (installed with --runtime)
+        - DreamDaemon
         - Installer
     validations:
       required: true

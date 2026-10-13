@@ -1,6 +1,6 @@
 //! Windows: give BYOND programs an extra import, `dmfast.dll`, which patches byondcore.dll in memory and
 //! pulls in `mimalloc.dll`, dmfast's allocator (mimalloc for small blocks, the process heap for large
-//! ones; source in `vendor/mimalloc-x86`). dm.exe is always patched; with `--runtime` also DreamDaemon
+//! ones; source in `vendor/mimalloc-x86`). dm.exe is always patched, and DreamDaemon unless `--no-runtime` is given
 //! (`dreamdaemon.exe`, `dd.exe`). Each patched program's original is kept as `<name>_orig.exe`;
 //! byondcore.dll and every other program stay stock.
 //!
@@ -29,7 +29,7 @@ const LOADER: &str = "WebView2Loader.dll";
 const SIDE_DIR: &str = "dmfast";
 const DLL: &str = "dmfast.dll";
 const COMPILER: &str = "dm.exe";
-/// Patched with `--runtime`. Missing ones are skipped (not every BYOND build ships all of them).
+/// Patched unless `--no-runtime` is given. Missing ones are skipped (not every BYOND build ships all of them).
 const RUNTIME: [&str; 2] = ["dreamdaemon.exe", "dd.exe"];
 /// Programs an earlier build may have patched that are no longer installed into; install and uninstall
 /// put them back to stock if they find them patched (DreamSeeker's import rewrite crashed it).
@@ -152,7 +152,7 @@ pub fn install(dir: &Path, runtime: bool) -> Result<String, Failure> {
             before = b;
         }
     }
-    // Without --runtime, a previous runtime install is undone (re-running the plain install means
+    // With --no-runtime, a previous runtime install is undone (re-running with it means
     // "compiler only").
     let mut unpatched = Vec::new();
     for name in RUNTIME.into_iter().chain(RETIRED).filter(|n| !names.contains(n)) {

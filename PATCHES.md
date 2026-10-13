@@ -35,7 +35,7 @@ Each patch finds the code it changes by signature and turns itself off if anythi
 | Child index | `children` | both | <1% | Indexes children by name for path resolution |
 | Progress poll | `poll` | both | up to 0.25 s | Progress thread polls every 10 ms, not 250 |
 
-## DreamDaemon (installed with `--runtime`)
+## DreamDaemon (unless installed with `--no-runtime`)
 
 | Patch | Key | OS | Saves | What it does |
 |---|---|---|---|---|

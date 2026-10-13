@@ -1,6 +1,6 @@
 //! Linux: write `libdmfast.so` and replace BYOND programs with a small sh wrapper that runs the stock
-//! binary (kept as `<name>_orig`) with the library in `LD_PRELOAD`. `DreamMaker` is always wrapped; with
-//! `--runtime` also `DreamDaemon`. libbyond.so and every other program stay stock. BYOND's own
+//! binary (kept as `<name>_orig`) with the library in `LD_PRELOAD`. `DreamMaker` is always wrapped, and
+//! `DreamDaemon` unless `--no-runtime` is given. libbyond.so and every other program stay stock. BYOND's own
 //! `byondexec` launcher runs the wrappers like any program.
 
 use std::fs;
@@ -13,7 +13,7 @@ use crate::files::{Failure, io_err, read, rename_retry, write, write_executable}
 const DMFAST_SO: &[u8] = include_bytes!(env!("DMFAST_LIB"));
 const LIB: &str = "libdmfast.so";
 const COMPILER: &str = "DreamMaker";
-/// Wrapped with `--runtime`.
+/// Wrapped unless `--no-runtime` is given.
 const RUNTIME: [&str; 1] = ["DreamDaemon"];
 /// First lines of the wrapper; how an installed program is recognised.
 const WRAPPER_TAG: &str = "#!/bin/sh\n# dmfast:";
@@ -109,7 +109,7 @@ pub fn install(dir: &Path, runtime: bool) -> Result<String, Failure> {
             before = b;
         }
     }
-    // Without --runtime, a previous runtime install is undone (the plain install means "compiler only").
+    // With --no-runtime, a previous runtime install is undone.
     let mut unwrapped = Vec::new();
     for name in RUNTIME.into_iter().filter(|n| !names.contains(n)) {
         if unwrap(dir, name)? {

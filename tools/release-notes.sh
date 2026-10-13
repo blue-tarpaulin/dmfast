@@ -39,7 +39,7 @@ cat <<EOF
 | | Windows | Linux |
 |---|---|---|
 | Compile | $(speedup "$(field windows 6)" "$(field windows 7)") | $(speedup "$(field linux 6)" "$(field linux 7)") |
-| DreamDaemon world load (\`--runtime\`) | $(speedup "$(field windows 11)" "$(field windows 12)") | $(speedup "$(field linux 11)" "$(field linux 12)") |
+| DreamDaemon world load | $(speedup "$(field windows 11)" "$(field windows 12)") | $(speedup "$(field linux 11)" "$(field linux 12)") |
 
 Automatically measured on this release's GitHub Actions runners; your gains depend on your computer and codebase.
 
@@ -47,7 +47,7 @@ Automatically measured on this release's GitHub Actions runners; your gains depe
 
 1. Close BYOND.
 2. Download \`dmfast-install.exe\` below.
-3. Run it on your BYOND \`bin\` folder (or drag \`dm.exe\` onto it). Add \`--runtime\` to also speed up DreamDaemon.
+3. Run it on your BYOND \`bin\` folder (or drag \`dm.exe\` onto it). It speeds up the compiler and DreamDaemon; add \`--no-runtime\` to leave DreamDaemon stock.
 
 On Linux: \`sh dmfast-install.exe ~/byond/bin\`
 

@@ -31,13 +31,13 @@ The path is your BYOND `bin` folder (or `dm.exe`) - dragging the exe onto the in
 
 Run it with no arguments for help, and re-run after BYOND updates.
 
-Add `--runtime` to also speed up DreamDaemon:
+This speeds up DreamDaemon too. To leave DreamDaemon stock and only speed up the compiler, add `--no-runtime`:
 
 ```
-dmfast-install.exe --runtime "C:\Program Files (x86)\BYOND\bin"
+dmfast-install.exe --no-runtime "C:\Program Files (x86)\BYOND\bin"
 ```
 
-Installing again without `--runtime` puts back the stock DreamDaemon.
+Installing again without `--no-runtime` patches DreamDaemon again.
 
 ## Uninstall
 

@@ -28,7 +28,7 @@ const VERSION: &str = concat!(
 struct Opts {
     target: Option<PathBuf>,
     uninstall: bool,
-    /// Also patch DreamDaemon.
+    /// Also patch DreamDaemon (the default; `--no-runtime` turns it off).
     runtime: bool,
     /// Windows: this is the relaunched admin copy.
     #[cfg(windows)]
@@ -44,17 +44,17 @@ const HELP: &str = concat!(
 dmfast-install [options] <BYOND bin folder or dm.exe>
   options:
      --uninstall        remove dmfast (restores the original programs)
-     --runtime          also speed up DreamDaemon
+     --no-runtime       leave DreamDaemon stock (only speed up the compiler)
      --version          show version and licenses
      -h, --help         view this help
 
   examples:
      dmfast-install "C:\Program Files (x86)\BYOND\bin"
-     dmfast-install --runtime "C:\Program Files (x86)\BYOND\bin"
+     dmfast-install --no-runtime "C:\Program Files (x86)\BYOND\bin"
      dmfast-install --uninstall "C:\Program Files (x86)\BYOND\bin"
 
 Close BYOND first. You can also drag dm.exe or the bin folder onto dmfast-install.exe.
-Re-run the install after a BYOND update. Installing without --runtime puts back stock DreamDaemon."#
+Re-run the install after a BYOND update. Installing with --no-runtime puts back stock DreamDaemon."#
 );
 #[cfg(not(windows))]
 const HELP: &str = concat!(
@@ -65,17 +65,17 @@ const HELP: &str = concat!(
 dmfast-install [options] <BYOND bin folder or DreamMaker>
   options:
      --uninstall        remove dmfast (restores the original programs)
-     --runtime          also speed up DreamDaemon (world startup)
+     --no-runtime       leave DreamDaemon stock (only speed up the compiler)
      --version          show version and licenses
      -h, --help         view this help
 
   examples:
      dmfast-install ~/byond/bin
-     sudo dmfast-install --runtime /usr/local/byond/bin
+     sudo dmfast-install /usr/local/byond/bin
      dmfast-install --uninstall ~/byond/bin
 
-DreamMaker (and with --runtime DreamDaemon) becomes a small script that preloads dmfast. Re-run the
-install after a BYOND update. Installing without --runtime puts back stock DreamDaemon."#
+DreamMaker and DreamDaemon become small scripts that preload dmfast. Re-run the install after a
+BYOND update. Installing with --no-runtime puts back stock DreamDaemon."#
 );
 
 /// None: show help.
@@ -83,13 +83,15 @@ fn parse_args() -> Option<Opts> {
     let mut o = Opts {
         target: None,
         uninstall: false,
-        runtime: false,
+        runtime: true,
         #[cfg(windows)]
         elevated: false,
     };
     for a in std::env::args().skip(1) {
         match a.as_str() {
             "--uninstall" => o.uninstall = true,
+            "--no-runtime" => o.runtime = false,
+            // Needed before DreamDaemon was on by default; still accepted so existing scripts keep working.
             "--runtime" => o.runtime = true,
             #[cfg(windows)]
             "--elevated" => o.elevated = true,
