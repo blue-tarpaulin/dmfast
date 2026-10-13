@@ -203,9 +203,10 @@ if [ -n "${h_fast:-}" ]; then
 fi
 
 # world_out <bin dir> <dmb> <file>: runs the world until $w_secs seconds after it prints its first line (or
-# 60 s without one) and writes what it printed after BYOND's banner, without dmfast's lines. Clock times,
-# durations, dates and addresses become #, since they differ between any two runs; other numbers are kept.
-# Returns 0 if the world was still running at the end, 1 if it had exited.
+# 60 s without one) and writes what it printed after BYOND's banner, without dmfast's lines. The BYOND
+# folder (stock and dmfast copies live in different ones; e.g. a missing library's error names it), clock
+# times, durations, dates and addresses become #, since they differ between any two runs; other numbers are
+# kept. Returns 0 if the world was still running at the end, 1 if it had exited.
 world_out() {
   local out="$work/world-raw.txt" pid alive=1 deadline end=""
   : >"$out"
@@ -233,8 +234,14 @@ world_out() {
   if [ "$os" = windows ]; then taskkill //F //T //PID "$(cat "/proc/$pid/winpid")" >/dev/null 2>&1 || true
   else kill "$pid" 2>/dev/null || true; fi
   wait "$pid" 2>/dev/null || true
+  local native; native=$(native "$1")
+  # The folder as the shell, Windows and Windows-with-slashes spell it; via the environment, since awk -v
+  # would read the backslashes as escapes.
   tr -d '\r' <"$out" | sed -n '/Welcome BYOND/,$p' | tail -n +2 | { grep -v '^dmfast' || true; } \
-    | { grep '[^[:space:]]' || true; } | sed -E \
+    | { grep '[^[:space:]]' || true; } \
+    | P1="$1" P2="$native" P3="${native//\\//}" awk '{ for (k = 1; k <= 3; k++) { p = ENVIRON["P" k]
+        while (p != "" && (i = index($0, p)) > 0) $0 = substr($0, 1, i - 1) "#byond" substr($0, i + length(p)) } } 1' \
+    | sed -E \
       -e 's/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} .*/#date/' \
       -e 's/[0-9]+(\.[0-9]+){3}(:[0-9]+)?/#addr/g' \
       -e 's/[0-9]{1,2}:[0-9]{2}:[0-9]{2}/#time/g' \

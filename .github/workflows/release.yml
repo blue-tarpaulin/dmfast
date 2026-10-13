@@ -126,6 +126,28 @@ jobs:
           git -C tgstation fetch -q --depth 1 https://github.com/tgstation/tgstation.git "$TG_COMMIT"
           git -C tgstation checkout -q FETCH_HEAD
           rm -rf tgstation/.git
+      # tgstation's own Windows rust_g.dll is in the repository; on Linux its CI downloads the release's
+      # librust_g.so, so do the same (cached: it is ~100 MB). Without it the world fails every rust_g call.
+      - name: rust_g version
+        id: rustg
+        if: runner.os == 'Linux'
+        run: echo "version=$(sed -n 's/^export RUST_G_VERSION=//p' tgstation/dependencies.sh)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        id: rustg-cache
+        if: runner.os == 'Linux'
+        with:
+          path: rust_g
+          key: rust_g-${{ steps.rustg.outputs.version }}
+      - name: Fetch rust_g
+        if: runner.os == 'Linux'
+        run: |
+          if [ "${{ steps.rustg-cache.outputs.cache-hit }}" != true ]; then
+            mkdir -p rust_g
+            curl -sSfL --retry 4 -o rust_g/librust_g.so \
+              "https://github.com/tgstation/rust-g/releases/download/${{ steps.rustg.outputs.version }}/librust_g.so"
+          fi
+          cp rust_g/librust_g.so tgstation/librust_g.so
+          ldd tgstation/librust_g.so | grep 'not found' && exit 1 || true
       - name: Test
         shell: bash
         # Each BYOND program has its own time limit in compat.sh (a stock build that hangs is skipped as
@@ -138,6 +160,9 @@ jobs:
             exit 0
           fi
           exit "$rc"
+      - name: Keep rust_g out of the tgstation cache
+        if: always() && runner.os == 'Linux'
+        run: rm -f tgstation/librust_g.so
       - uses: actions/upload-artifact@v7
         if: always()
         with:
