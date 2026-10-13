@@ -1,0 +1,73 @@
+name: Bug report
+description: Something breaks or behaves differently with dmfast installed.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the problem goes away with stock BYOND first: run `dmfast-install --uninstall` on your BYOND `bin` folder, try again, then reinstall.
+  - type: input
+    id: dmfast
+    attributes:
+      label: dmfast version
+      description: Shown when you run the installer, e.g. `DMFAST 5.0.0`.
+    validations:
+      required: true
+  - type: input
+    id: byond
+    attributes:
+      label: BYOND version
+      description: e.g. `516.1688`. DreamMaker prints it on its first line.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: program
+    attributes:
+      label: Program
+      options:
+        - Compiler (dm.exe / DreamMaker)
+        - DreamDaemon (installed with --runtime)
+        - Installer
+    validations:
+      required: true
+  - type: input
+    id: codebase
+    attributes:
+      label: Codebase
+      description: Which game, with a link and commit if it's public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead (crash, error, different .dmb, different game behaviour, ...).
+    validations:
+      required: true
+  - type: textarea
+    id: stats
+    attributes:
+      label: Output with DMFAST_STATS=1
+      description: |
+        Run the program again with `DMFAST_STATS=1` set (`set DMFAST_STATS=1` on Windows, `export DMFAST_STATS=1` on Linux) and paste the lines that start with `dmfast:`, plus any error.
+      render: text
+  - type: textarea
+    id: disable
+    attributes:
+      label: Turning patches off
+      description: |
+        If you can, find which patch causes it: set `DMFAST_DISABLE` to keys from [PATCHES.md](https://github.com/blue-tarpaulin/dmfast/blob/main/PATCHES.md) (comma-separated) until it stops happening, and say which key(s) did it.
+  - type: checkboxes
+    id: stock
+    attributes:
+      label: Checks
+      options:
+        - label: It doesn't happen with stock BYOND (dmfast uninstalled).
+          required: true

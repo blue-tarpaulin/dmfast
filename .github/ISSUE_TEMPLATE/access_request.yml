@@ -1,0 +1,37 @@
+name: Access request
+description: Ask for access to the private patches repository, to build dmfast or work on it.
+title: "Access request: "
+labels: [access]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The patch sources live in a private repository. We give access to community members we trust; see [CONTRIBUTING.md](https://github.com/blue-tarpaulin/dmfast/blob/main/CONTRIBUTING.md).
+  - type: input
+    id: github
+    attributes:
+      label: GitHub username
+      description: The account to give access to.
+    validations:
+      required: true
+  - type: input
+    id: community
+    attributes:
+      label: Where we may know you from
+      description: Codebases you work on, servers you run, or your BYOND/Discord name.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What you want to do
+      description: e.g. build it yourself, fix a bug, add or port a patch, support a BYOND build.
+    validations:
+      required: true
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Terms
+      options:
+        - label: I won't share the patch sources or other proprietary code outside this project.
+          required: true
