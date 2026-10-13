@@ -27,10 +27,6 @@ fn main() {
         return;
     }
     println!("cargo:rerun-if-changed={}", root.join("vendor").join("mimalloc-x86").display());
-    // The WebView2Loader.dll stand-in that loads dmfast into DreamSeeker.
-    let proxy = build_x86(&root, &target_dir, triple, "dmfast-seekerproxy", "WebView2Loader.dll");
-    println!("cargo:rustc-env=SEEKERPROXY_LIB={}", proxy.display());
-    println!("cargo:rerun-if-changed={}", root.join("seekerproxy").display());
 
     let mut res = winresource::WindowsResource::new();
     res.set("ProductName", "dmfast")

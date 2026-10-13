@@ -37,8 +37,6 @@ Add `--runtime` to also speed up DreamDaemon (while it's in beta):
 dmfast-install.exe --runtime "C:\Program Files (x86)\BYOND\bin"
 ```
 
-DreamSeeker support is in development and not installed yet.
-
 Installing again without `--runtime` puts back the stock DreamDaemon.
 
 ## Uninstall

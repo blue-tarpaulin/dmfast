@@ -4,11 +4,8 @@
 //! (`dreamdaemon.exe`, `dd.exe`). Each patched program's original is kept as `<name>_orig.exe`;
 //! byondcore.dll and every other program stay stock.
 //!
-//! DreamSeeker is not rewritten: it refuses to run properly when an unknown DLL from `bin\` is loaded. The
-//! planned route replaces `bin\WebView2Loader.dll` (which DreamSeeker's byondwin.dll imports first; BYOND 515
-//! has none) with a proxy ([`PROXY`]) that forwards to the stock loader and loads dmfast.dll, both kept in
-//! `<byond>\dmfast\` outside `bin\`. It is still in development and off ([`SEEKER_ENABLED`]): every
-//! install removes a proxy an earlier build put there.
+//! DreamSeeker is not supported. Install and uninstall put back what earlier builds did to it: a patched
+//! dreamseeker.exe, and 4.7.0's `bin\WebView2Loader.dll` proxy (stock loader kept in `<byond>\dmfast\`).
 
 mod elevate;
 mod pe;
@@ -25,25 +22,18 @@ const DMFAST_DLL: &[u8] = include_bytes!(env!("DMFAST_LIB"));
 const SUPPORT: [(&str, &[u8]); 1] = [("mimalloc.dll", include_bytes!("../../../vendor/mimalloc-x86/mimalloc.dll"))];
 /// Files earlier builds installed next to dmfast.dll that are no longer used; install and uninstall remove them.
 const OBSOLETE: [&str; 1] = ["mimalloc-redirect32.dll"];
-/// Stand-in for WebView2Loader.dll that loads dmfast into DreamSeeker (marked by the [`PROXY_MARKER`] export).
-const PROXY: &[u8] = include_bytes!(env!("SEEKERPROXY_LIB"));
+/// Marks 4.7.0's WebView2Loader.dll proxy (an export of that name).
 const PROXY_MARKER: &[u8] = b"dmfast_seekerproxy";
 const LOADER: &str = "WebView2Loader.dll";
-/// Sibling of `bin\` holding what DreamSeeker's proxy loads: the stock loader, dmfast.dll and its support DLLs.
+/// Sibling of `bin\` where 4.7.0 kept the stock loader, dmfast.dll and its support DLLs for the proxy.
 const SIDE_DIR: &str = "dmfast";
-const SEEKER: &str = "dreamseeker.exe";
 const DLL: &str = "dmfast.dll";
 const COMPILER: &str = "dm.exe";
 /// Patched with `--runtime`. Missing ones are skipped (not every BYOND build ships all of them).
-///
-/// DreamSeeker is not in this list: any rewrite of its import table, or any unknown DLL in `bin\`, trips
-/// its loaded-module scan and it crashes later in `DMString::operator=`. See [`install_seeker`].
 const RUNTIME: [&str; 2] = ["dreamdaemon.exe", "dd.exe"];
 /// Programs an earlier build may have patched that are no longer installed into; install and uninstall
 /// put them back to stock if they find them patched (DreamSeeker's import rewrite crashed it).
-const RETIRED: [&str; 1] = [SEEKER];
-/// DreamSeeker support through the WebView2Loader.dll proxy: in development, not installed yet.
-const SEEKER_ENABLED: bool = false;
+const RETIRED: [&str; 1] = ["dreamseeker.exe"];
 
 fn backup_of(dir: &Path, exe: &str) -> PathBuf {
     dir.join(format!("{}_orig.exe", exe.trim_end_matches(".exe")))
@@ -69,8 +59,8 @@ fn targets(dir: &Path, runtime: bool) -> Vec<&'static str> {
     std::iter::once(COMPILER).chain(rt).collect()
 }
 
-/// `<byond>\dmfast\`, where the proxy looks for what it loads. None if `dir` itself is named `dmfast`:
-/// the side folder would be `bin\` itself, so DreamSeeker is left alone (and nothing is removed from it).
+/// `<byond>\dmfast\`, where 4.7.0's proxy looked for what it loads. None if `dir` itself is named `dmfast`
+/// (then nothing is removed from it).
 fn side_dir(dir: &Path) -> Option<PathBuf> {
     let dir = fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     if dir.file_name().is_some_and(|n| n.eq_ignore_ascii_case(SIDE_DIR)) {
@@ -79,43 +69,13 @@ fn side_dir(dir: &Path) -> Option<PathBuf> {
     Some(dir.parent()?.join(SIDE_DIR))
 }
 
-fn is_proxy(p: &Path) -> Result<bool, Failure> {
-    Ok(p.is_file() && pe::exports(&read(p)?, PROXY_MARKER))
-}
-
-/// Load dmfast into DreamSeeker: stock loader, dmfast.dll and its support DLLs go to `<byond>\dmfast\`, the proxy
-/// takes the loader's place in `bin\`. Returns false (nothing done) if this BYOND has no DreamSeeker.
-fn install_seeker(dir: &Path) -> Result<bool, Failure> {
-    let loader = dir.join(LOADER);
-    if !dir.join(SEEKER).is_file() || !loader.is_file() {
-        return Ok(false);
-    }
-    let Some(side) = side_dir(dir) else { return Ok(false) };
-    ensure_not_in_use(&loader)?;
-    let stock = side.join(LOADER);
-    let proxied = is_proxy(&loader)?;
-    if proxied && !stock.is_file() {
-        return Err(format!("{} is missing; reinstall BYOND to restore {LOADER}", stock.display()).into());
-    }
-    fs::create_dir_all(&side).map_err(|e| io_err("cannot create", &side, e))?;
-    write(&side.join(DLL), DMFAST_DLL)?;
-    for (name, data) in SUPPORT {
-        write(&side.join(name), data)?;
-    }
-    if !proxied {
-        // Whatever is in bin\ is BYOND's own (possibly newer than an older copy kept here).
-        rename_retry(&loader, &stock).map_err(|e| io_err("cannot move", &loader, e))?;
-    }
-    write(&loader, PROXY)?;
-    Ok(true)
-}
-
-/// Put the stock loader back and remove `<byond>\dmfast\`. Returns whether the proxy was installed.
-fn uninstall_seeker(dir: &Path) -> Result<bool, Failure> {
+/// Remove 4.7.0's DreamSeeker proxy: put the stock loader back and remove `<byond>\dmfast\`. Returns whether
+/// the proxy was there.
+fn remove_seeker_proxy(dir: &Path) -> Result<bool, Failure> {
     let loader = dir.join(LOADER);
     let Some(side) = side_dir(dir) else { return Ok(false) };
     let stock = side.join(LOADER);
-    let proxied = is_proxy(&loader)?;
+    let proxied = loader.is_file() && pe::exports(&read(&loader)?, PROXY_MARKER);
     if proxied {
         ensure_not_in_use(&loader)?;
         if !stock.is_file() {
@@ -129,7 +89,7 @@ fn uninstall_seeker(dir: &Path) -> Result<bool, Failure> {
             fs::remove_file(&p).map_err(|e| io_err("cannot remove", &p, e))?;
         }
     }
-    // Only if empty: it is ours, but never delete what someone else put there.
+    // Only if empty: it was ours, but never delete what someone else put there.
     let _ = fs::remove_dir(&side);
     Ok(proxied)
 }
@@ -210,12 +170,10 @@ pub fn install(dir: &Path, runtime: bool) -> Result<String, Failure> {
             fs::remove_file(&p).map_err(|e| io_err("cannot remove", &p, e))?;
         }
     }
-    let mut programs = names.join(", ");
-    if runtime && SEEKER_ENABLED && install_seeker(dir)? {
-        programs += ", dreamseeker.exe (via WebView2Loader.dll)";
-    } else if uninstall_seeker(dir)? {
+    if remove_seeker_proxy(dir)? {
         unpatched.push("dreamseeker.exe (WebView2Loader.dll)");
     }
+    let programs = names.join(", ");
     let mut msg = format!("installed {ours} in {} (was {before}) for {programs}", dir.display());
     if !unpatched.is_empty() {
         msg += &format!("; restored stock {}", unpatched.join(", "));
@@ -239,7 +197,7 @@ pub fn uninstall(dir: &Path) -> Result<String, Failure> {
             restored.push(name);
         }
     }
-    if uninstall_seeker(dir)? {
+    if remove_seeker_proxy(dir)? {
         restored.push(LOADER);
     }
     if restored.is_empty() {
