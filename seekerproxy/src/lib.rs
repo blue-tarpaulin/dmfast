@@ -169,10 +169,14 @@ extern "system" fn dll_main(module: HMODULE, reason: u32, _: *mut c_void) -> i32
     }
 
     if host_is_dreamseeker(host) {
-        dir.len = base;
-        dir.push(b"dmfast.dll");
-        // SAFETY: `dir` is NUL-terminated. Its imports (mimalloc) resolve from the same folder.
-        unsafe { LoadLibraryExW(dir.ptr(), null_mut(), LOAD_WITH_ALTERED_SEARCH_PATH) };
+        // dmfast_early.dll first, as in the patched programs: it must run before mimalloc (dmfast.dll's
+        // import, resolved from the same folder) starts.
+        for name in [&b"dmfast_early.dll"[..], b"dmfast.dll"] {
+            dir.len = base;
+            dir.push(name);
+            // SAFETY: `dir` is NUL-terminated.
+            unsafe { LoadLibraryExW(dir.ptr(), null_mut(), LOAD_WITH_ALTERED_SEARCH_PATH) };
+        }
     }
     TRUE
 }
