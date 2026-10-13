@@ -63,7 +63,7 @@ body:
     attributes:
       label: Turning patches off
       description: |
-        If you can, find which patch causes it: set `DMFAST_DISABLE` to keys from [PATCHES.md](https://github.com/blue-tarpaulin/dmfast/blob/main/PATCHES.md) (comma-separated) until it stops happening, and say which key(s) did it.
+        If you can, find which patch causes it: set `DMFAST_DISABLE` to keys from [PATCHES.md](https://github.com/blue-tarpaulin/dmfast/blob/main/PATCHES.md) (comma-separated) until it stops happening, and say which key(s) did it. If you turned on bug fixes with `DMFAST_FIXES` ([BUGFIXES.md](https://github.com/blue-tarpaulin/dmfast/blob/main/BUGFIXES.md)), say which, and whether it still happens without them.
   - type: checkboxes
     id: stock
     attributes:

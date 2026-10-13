@@ -8,12 +8,14 @@
 #   - in verify mode (DMFAST_VERIFY=1) no patch disagrees with the original code;
 #   - the project's world prints the same thing for 10 seconds after it loads (the part that two stock runs
 #     agree on) and is still running if stock is.
+# All of that runs with dmfast's opt-in bug fixes off. Then each fix's test (tools/fixtest.sh) runs.
 # Also times the compile and how long DreamDaemon takes to load the project's world (until the world
 # prints its first line), stock vs dmfast.
 # Prints which patch groups installed or disabled themselves. Appends a Markdown row to
 # $GITHUB_STEP_SUMMARY when set and writes it to compat-<os>-<version>.md. Exits non-zero on any
 # difference.
 set -euo pipefail
+unset DMFAST_FIXES
 
 version=$1; installer=$(realpath "$2"); project=$(realpath "$3")
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -32,7 +34,7 @@ if ! curl -sSfL --connect-timeout 15 --retry 4 --retry-delay 5 --retry-all-error
   # Client-only BYOND updates ship no Linux build.
   if [ "$os" = linux ] && [ "$(curl -s -o /dev/null -w '%{http_code}' "$url")" = 404 ]; then
     echo "== $version $os: skipped (no Linux build)"
-    row="| $version | - | $os | no Linux build | | | | | | | | | |"
+    row="| $version | - | $os | no Linux build | | | | | | | | | | |"
     echo "$row" > "compat-$os-$version.md"
     [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
     exit 0
@@ -59,7 +61,7 @@ run() {
 # build as broken and pass, since there is nothing to compare dmfast against.
 broken() {
   echo "::warning::$version $os: stock BYOND build looks broken ($1); skipping"
-  row="| $version | ${real:-?} | $os | broken build: $1 | | | | | | | | | |"
+  row="| $version | ${real:-?} | $os | broken build: $1 | | | | | | | | | | |"
   echo "$row" > "compat-$os-$version.md"
   [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
   exit 0
@@ -282,6 +284,11 @@ if [ -n "${l_stock:-}" ]; then
     w_out="same ($n lines)"
   fi
 fi
+# Opt-in bug fixes: each one's test world, stock vs dmfast with the fix on (see tools/fixtest.sh).
+frc=0; bash "$root/tools/fixtest.sh" -s "$work/stock" "$work/fast/bin" >"$work/fixes.txt" 2>&1 || frc=$?
+cat "$work/fixes.txt"
+fixes=$(grep -E '^fixes: ' "$work/fixes.txt" | tail -1 | cut -c8- || true)
+[ "$frc" = 0 ] || { echo "::error::$version $os: a bug fix's test failed"; fixes="FAIL: ${fixes:-no result}"; fail=1; }
 disabled=$(printf '%s\n%s\n' "$compiler" "$runtime" | grep ' disabled: ' | sed 's/^dmfast: //; s/ disabled:.*//' | paste -sd, - || true)
 mask() { printf '%s\n' "$1" | grep -oE 'patched=0x[0-9a-f]+' | tail -1 | cut -d= -f2; }
 real=$(run "$work/stock" "$dm" 2>&1 | grep -oE '[0-9]{3}\.[0-9]{4}' | head -1 || true)
@@ -290,11 +297,11 @@ result=$([ $fail = 0 ] && echo pass || echo FAIL)
 echo "== $version ($real) $os: $result"
 echo "compile $(basename "$project"): stock $t_stock, dmfast $t_fast, .dmb ${h_stock:-n/a} / ${h_fast:-n/a}"
 echo "world load: stock ${l_stock:-n/a}, dmfast ${l_fast:-n/a}; output for 10 s after loading: $w_out"
-echo "verify mode: $verify"
+echo "verify mode: $verify; bug fixes: ${fixes:-none}"
 echo "compiler groups: $(mask "$compiler"); runtime groups: $(mask "$runtime"); disabled: ${disabled:-none}"
 printf '%s\n' "$compiler" "$runtime"
 
-row="| $version | ${real:-?} | $os | $result | $t_stock | $t_fast | $(mask "$compiler") | $(mask "$runtime") | ${disabled:-none} | ${l_stock:-n/a} | ${l_fast:-n/a} | $verify | $w_out |"
+row="| $version | ${real:-?} | $os | $result | $t_stock | $t_fast | $(mask "$compiler") | $(mask "$runtime") | ${disabled:-none} | ${l_stock:-n/a} | ${l_fast:-n/a} | $verify | $w_out | ${fixes:-none} |"
 echo "$row" > "compat-$os-$version.md"
 [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
 exit $fail
