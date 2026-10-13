@@ -20,7 +20,7 @@ missing.
 | ftell cache | `ftell` | both | <1% | ftell without a seek syscall in the .dmb writer |
 | File cache | `fscache` | Windows | ~2% | Caches file existence, attribute and listing lookups |
 | Name filter | `filter` | both | ~2% | Skips scopes that can't contain the name |
-| mimalloc | - | both | ~2% | Faster memory allocator |
+| mimalloc | `mimalloc` | both | ~2% | mimalloc, with blocks from 4 KB (Linux: 4–256 KB) on the system heap |
 | Slot hints | `slots` | both | ~2% | Hinted free-slot search in other id tables |
 | Parent cache | `parent` | both | ~1% | Caches each node's parent lookup |
 | Pair-list intern | `pairs` | both | ~1% | Hash index for pair-list interning |
@@ -42,7 +42,7 @@ missing.
 
 | Patch | Key | Platforms | Saves | What it does |
 |---|---|---|---|---|
-| mimalloc | - | both | ~29% | Faster memory allocator |
+| mimalloc | `mimalloc` | both | ~29% | mimalloc, with blocks from 4 KB (Linux: 4–256 KB) on the system heap |
 | .dmb reader | `dmbread` | both | ~17%, ~40% (Linux) | Whole-value .dmb reads from the file buffer; id arrays in one read; ftell without a syscall |
 | Resource-ID index | `resids` | both | ~14% | Hash index for resource ID find-or-add |
 | Sorted map insert | `sortmap` | both | ~6% | Fast appends; grows sorted maps geometrically |

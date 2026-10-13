@@ -1,7 +1,8 @@
-//! Windows: give BYOND programs one extra import, `dmfast.dll`, which patches byondcore.dll in memory
-//! (and pulls in mimalloc). dm.exe is always patched; with `--runtime` also DreamDaemon (`dreamdaemon.exe`,
-//! `dd.exe`). Each patched program's original is kept as `<name>_orig.exe`; byondcore.dll and every
-//! other program stay stock.
+//! Windows: give BYOND programs an extra import, `dmfast.dll`, which patches byondcore.dll in memory and
+//! pulls in `mimalloc.dll`, dmfast's allocator (mimalloc for small blocks, the process heap for large
+//! ones; source in `vendor/mimalloc-x86`). dm.exe is always patched; with `--runtime` also DreamDaemon
+//! (`dreamdaemon.exe`, `dd.exe`). Each patched program's original is kept as `<name>_orig.exe`;
+//! byondcore.dll and every other program stay stock.
 //!
 //! DreamSeeker is not rewritten: it refuses to run properly when an unknown DLL from `bin\` is loaded. The
 //! planned route replaces `bin\WebView2Loader.dll` (which DreamSeeker's byondwin.dll imports first; BYOND 515
@@ -20,15 +21,15 @@ pub use elevate::{pause_if_own_console, relaunch_elevated};
 use crate::files::{Failure, io_err, read, rename_retry, write};
 
 const DMFAST_DLL: &[u8] = include_bytes!(env!("DMFAST_LIB"));
-const MIMALLOC: [(&str, &[u8]); 2] = [
-    ("mimalloc.dll", include_bytes!("../../../vendor/mimalloc-x86/mimalloc.dll")),
-    ("mimalloc-redirect32.dll", include_bytes!("../../../vendor/mimalloc-x86/mimalloc-redirect32.dll")),
-];
+/// What dmfast.dll needs next to it: the allocator.
+const SUPPORT: [(&str, &[u8]); 1] = [("mimalloc.dll", include_bytes!("../../../vendor/mimalloc-x86/mimalloc.dll"))];
+/// Files earlier builds installed next to dmfast.dll that are no longer used; install and uninstall remove them.
+const OBSOLETE: [&str; 1] = ["mimalloc-redirect32.dll"];
 /// Stand-in for WebView2Loader.dll that loads dmfast into DreamSeeker (marked by the [`PROXY_MARKER`] export).
 const PROXY: &[u8] = include_bytes!(env!("SEEKERPROXY_LIB"));
 const PROXY_MARKER: &[u8] = b"dmfast_seekerproxy";
 const LOADER: &str = "WebView2Loader.dll";
-/// Sibling of `bin\` holding what DreamSeeker's proxy loads: the stock loader, dmfast.dll and mimalloc.
+/// Sibling of `bin\` holding what DreamSeeker's proxy loads: the stock loader, dmfast.dll and its support DLLs.
 const SIDE_DIR: &str = "dmfast";
 const SEEKER: &str = "dreamseeker.exe";
 const DLL: &str = "dmfast.dll";
@@ -82,7 +83,7 @@ fn is_proxy(p: &Path) -> Result<bool, Failure> {
     Ok(p.is_file() && pe::exports(&read(p)?, PROXY_MARKER))
 }
 
-/// Load dmfast into DreamSeeker: stock loader, dmfast.dll and mimalloc go to `<byond>\dmfast\`, the proxy
+/// Load dmfast into DreamSeeker: stock loader, dmfast.dll and its support DLLs go to `<byond>\dmfast\`, the proxy
 /// takes the loader's place in `bin\`. Returns false (nothing done) if this BYOND has no DreamSeeker.
 fn install_seeker(dir: &Path) -> Result<bool, Failure> {
     let loader = dir.join(LOADER);
@@ -98,7 +99,7 @@ fn install_seeker(dir: &Path) -> Result<bool, Failure> {
     }
     fs::create_dir_all(&side).map_err(|e| io_err("cannot create", &side, e))?;
     write(&side.join(DLL), DMFAST_DLL)?;
-    for (name, data) in MIMALLOC {
+    for (name, data) in SUPPORT {
         write(&side.join(name), data)?;
     }
     if !proxied {
@@ -122,7 +123,7 @@ fn uninstall_seeker(dir: &Path) -> Result<bool, Failure> {
         }
         rename_retry(&stock, &loader).map_err(|e| io_err("cannot restore", &loader, e))?;
     }
-    for name in [DLL, LOADER].into_iter().chain(MIMALLOC.map(|(n, _)| n)) {
+    for name in [DLL, LOADER].into_iter().chain(SUPPORT.map(|(n, _)| n)).chain(OBSOLETE) {
         let p = side.join(name);
         if p.is_file() {
             fs::remove_file(&p).map_err(|e| io_err("cannot remove", &p, e))?;
@@ -200,8 +201,14 @@ pub fn install(dir: &Path, runtime: bool) -> Result<String, Failure> {
         }
     }
     write(&dll, DMFAST_DLL)?;
-    for (name, data) in MIMALLOC {
+    for (name, data) in SUPPORT {
         write(&dir.join(name), data)?;
+    }
+    for name in OBSOLETE {
+        let p = dir.join(name);
+        if p.is_file() {
+            fs::remove_file(&p).map_err(|e| io_err("cannot remove", &p, e))?;
+        }
     }
     let mut programs = names.join(", ");
     if runtime && SEEKER_ENABLED && install_seeker(dir)? {
@@ -238,7 +245,7 @@ pub fn uninstall(dir: &Path) -> Result<String, Failure> {
     if restored.is_empty() {
         return Ok(format!("dmfast is not installed in {}", dir.display()));
     }
-    for p in [dll].into_iter().chain(MIMALLOC.map(|(name, _)| dir.join(name))) {
+    for p in [dll].into_iter().chain(SUPPORT.map(|(name, _)| dir.join(name))).chain(OBSOLETE.map(|name| dir.join(name))) {
         if p.is_file() {
             fs::remove_file(&p).map_err(|e| io_err("cannot remove", &p, e))?;
         }
