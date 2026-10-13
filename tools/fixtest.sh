@@ -16,9 +16,9 @@
 # <dmfast bin dir> has dmfast installed with --runtime. The stock programs are taken from <stock bin dir>,
 # or else the stock binaries the installer kept in <dmfast bin dir> (dm_orig.exe, DreamMaker_orig, ...).
 # With no keys, every test in tests/fixes runs. A fix that didn't install in this BYOND build (its code
-# didn't match) is reported as n/a, not as a failure; so is stock already giving the expected output
-# (BYOND fixed the bug itself), with a warning. Ends with a line "fixes: <summary>"; exits non-zero if any
-# test failed.
+# didn't match) is reported as n/a, not as a failure; so is a build whose worlds print nothing at all, and
+# stock already giving the expected output (BYOND fixed the bug itself), with a warning. Ends with a line
+# "fixes: <summary>"; exits non-zero if any test failed.
 set -euo pipefail
 
 stock=""
@@ -48,15 +48,16 @@ out() {
   local env=(DMFAST_STATS=1 DMFAST_FIXES="$fixes")
   [ "$os" = linux ] && env+=(LD_LIBRARY_PATH="$bin")
   rm -rf "$t"; mkdir -p "$t"; cp "$tests/$key".* "$t/"; rm -f "$t/$key.expected"
+  for f in "$tests/$key"-*; do if [ -e "$f" ]; then cp -r "$f" "$t/"; fi; done
   (cd "$t" && env "${env[@]}" timeout 120 "$bin/$prog_dm" "$key.dme") >"$work/dm.txt" 2>&1 || true
   {
-    tr -d '\r' <"$work/dm.txt" | { grep -E '(error|warning):' || true; } | sed 's/^/dm: /'
+    tr -d '\r' <"$work/dm.txt" | { grep -v '^dmfast' || true; } | { grep -E '(error|warning):' || true; } | sed 's/^/dm: /'
     if [ -f "$t/$key.dmb" ]; then
       # -ip 127.0.0.1: loopback only, so Windows doesn't ask for a firewall rule for every fresh copy.
       (cd "$t" && env "${env[@]}" timeout 60 "$bin/$prog_dd" "$key.dmb" -trusted -invisible -logself -ip 127.0.0.1) \
         >"$work/dd.txt" 2>&1 || rc=$?
       { tr -d '\r' <"$t/$key.log" 2>/dev/null || true; } | sed -n '/Welcome BYOND/,$p' | tail -n +2 \
-        | { grep -vE '^(dmfast|Webclient users can visit|http://www\.byond\.com/play/|Or this code can be embedded:|<iframe src="http://www\.byond\.com/play/)|^((Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} [ 0-9]{2} [0-9:]{8} [0-9]{4})?[[:space:]]*$' || true; }
+        | { grep -vE '^(dmfast|Webclient users can visit|http://www\.byond\.com/play/|Or this code can be embedded:|<iframe src="http://www\.byond\.com/play/|The BYOND hub reports that port [0-9]+ is not reachable)|^((Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} [ 0-9]{2} [0-9:]{8} [0-9]{4})?[[:space:]]*$' || true; }
       case $rc in 0) ;; 124) echo "dd: timed out" ;; *) echo "dd: exit $rc" ;; esac
     else
       echo "dm: no .dmb"
@@ -66,6 +67,12 @@ out() {
   { cat "$work/dm.txt" "$work/dd.txt" "$t/$key.log" 2>/dev/null || true; } | tr -d '\r' | { grep -E '^dmfast: ' || true; } >"$file.dmfast"
   rm -f "$work/dd.txt"
 }
+
+# Some builds (around 516.1660-1665) print nothing from any world. Find out with a world that only logs a
+# line: on such a build, a test whose fixed run printed nothing at all has nothing to compare.
+mkdir -p "$work/probe"; printf '/world/New()\n\tworld.log << "probe"\n\tshutdown()\n' >"$work/probe/probe.dme"
+real_tests=$tests; tests="$work/probe"; out "$stock" "$sdm" "$sdd" "" probe "$work/probe.txt"; tests=$real_tests
+silent=$([ -s "$work/probe.txt" ] && echo 0 || echo 1)
 
 pass=0; failed=0; na=0; result=()
 for key in "${keys[@]}"; do
@@ -92,6 +99,10 @@ for key in "${keys[@]}"; do
   fi
   tr -d '\r' <"$tests/$key.expected" >"$work/expected.txt"
   bad=0
+  if [ "$silent" = 1 ] && [ ! -s "$work/fixed.txt" ]; then
+    echo "fix $key: n/a (worlds print nothing on this BYOND build)"
+    na=$((na + 1)); result+=("$key n/a"); continue
+  fi
   for run in fixed all; do
     if ! cmp -s "$work/expected.txt" "$work/$run.txt"; then
       echo "::error::fix $key: wrong output with DMFAST_FIXES=$([ $run = fixed ] && echo "$key" || echo all) (< expected, > got):"
