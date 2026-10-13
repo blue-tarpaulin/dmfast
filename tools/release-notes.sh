@@ -30,7 +30,7 @@ speedup() { awk -v a="$1" -v b="$2" 'BEGIN{ if (a + 0 > 0 && b + 0 > 0) printf "
 build=$(field linux 3); [ -n "$build" ] && [ "$build" != "-" ] || build=$(field windows 3)
 
 echo "Robusts BYOND's compiler."
-[ -z "$changes" ] || printf '\n%s\n' "$changes"
+[ -z "$changes" ] || printf '\n### %s Changes\n\n%s\n' "$version" "$changes"
 
 cat <<EOF
 
