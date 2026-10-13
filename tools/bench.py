@@ -5,8 +5,9 @@ usage: py tools/bench.py --dme X:\\repos\\project\\project.dme --a <bin dir> --b
 
 Runs a warm-up build, then N interleaved pairs (alternating which side goes first) so slow periods on the
 machine hit both sides equally. Per run: wall time, user/kernel CPU time and CPU cycles of the dm.exe
-process (QueryProcessCycleTime, the least noisy). Reports per-side medians and the mean paired difference
-(B - A) with a 95% confidence interval; a difference whose interval excludes 0 is real at that level.
+process (QueryProcessCycleTime, the least noisy), and its peak working set and peak private memory (MiB).
+Reports per-side medians and the mean paired difference (B - A) with a 95% confidence interval; a
+difference whose interval excludes 0 is real at that level.
 Every run must exit 0, and every .dmb must match the first run's.
 
 --clean-rsc deletes the project's .rsc files before each build (measures .rsc rebuilds) and restores
@@ -28,6 +29,14 @@ from ctypes import wintypes
 
 k32 = ctypes.WinDLL('kernel32', use_last_error=True)
 HIGH_PRIORITY_CLASS = 0x80
+
+
+class MemCounters(ctypes.Structure):
+    _fields_ = [('cb', wintypes.DWORD), ('PageFaultCount', wintypes.DWORD)] + [(n, ctypes.c_size_t) for n in (
+        'PeakWorkingSetSize', 'WorkingSetSize', 'QuotaPeakPagedPoolUsage', 'QuotaPagedPoolUsage',
+        'QuotaPeakNonPagedPoolUsage', 'QuotaNonPagedPoolUsage', 'PagefileUsage', 'PeakPagefileUsage')]
+
+
 # Two-sided 95% t quantiles by degrees of freedom.
 T95 = {1: 12.71, 2: 4.30, 3: 3.18, 4: 2.78, 5: 2.57, 6: 2.45, 7: 2.36, 8: 2.31, 9: 2.26, 10: 2.23, 11: 2.20,
        12: 2.18, 13: 2.16, 14: 2.14, 15: 2.13, 19: 2.09, 24: 2.06, 29: 2.05}
@@ -58,9 +67,12 @@ def run(bin_dir, dme, env):
     k32.GetProcessTimes(h, ctypes.byref(c), ctypes.byref(e), ctypes.byref(kt), ctypes.byref(ut))
     cycles = ctypes.c_uint64()
     k32.QueryProcessCycleTime(h, ctypes.byref(cycles))
+    mem = MemCounters(cb=ctypes.sizeof(MemCounters))
+    k32.K32GetProcessMemoryInfo(h, ctypes.byref(mem), mem.cb)
     if p.returncode != 0:
         sys.exit(f'{bin_dir}: dm.exe exited {p.returncode}')
-    return dict(wall=wall, user=ft(ut), kernel=ft(kt), gcycles=cycles.value / 1e9)
+    return dict(wall=wall, user=ft(ut), kernel=ft(kt), gcycles=cycles.value / 1e9,
+                peak_ws=mem.PeakWorkingSetSize / 2 ** 20, peak_priv=mem.PeakPagefileUsage / 2 ** 20)
 
 
 def main():
@@ -113,7 +125,7 @@ def main():
     print(f'\n{"metric":<9}{"A min":>9}{"B min":>9}{"B-A min":>9}{"A med":>9}{"B med":>9}{"B-A mean":>10}'
           f'{"95% CI":>22}{"trim20":>9}{"B-A %":>8}')
     out = {}
-    for m in ('wall', 'user', 'kernel', 'gcycles'):
+    for m in ('wall', 'user', 'kernel', 'gcycles', 'peak_ws', 'peak_priv'):
         va, vb = [r[m] for r in res['A']], [r[m] for r in res['B']]
         d = [y - x for x, y in zip(va, vb)]
         mean = statistics.fmean(d)

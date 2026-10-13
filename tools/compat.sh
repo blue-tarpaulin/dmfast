@@ -5,7 +5,9 @@
 # and checks it against an untouched copy of the same build:
 #   - compiling <project.dme> and tests/rtsmoke.dme gives byte-identical .dmb files;
 #   - DreamDaemon running tests/rtsmoke.dmb logs the same result line;
-#   - in verify mode (DMFAST_VERIFY=1) no patch disagrees with the original code.
+#   - in verify mode (DMFAST_VERIFY=1) no patch disagrees with the original code;
+#   - the project's world prints the same thing for 10 seconds after it loads (the part that two stock runs
+#     agree on) and is still running if stock is.
 # Also times the compile and how long DreamDaemon takes to load the project's world (until the world
 # prints its first line), stock vs dmfast.
 # Prints which patch groups installed or disabled themselves. Appends a Markdown row to
@@ -30,7 +32,7 @@ if ! curl -sSfL --connect-timeout 15 --retry 4 --retry-delay 5 --retry-all-error
   # Client-only BYOND updates ship no Linux build.
   if [ "$os" = linux ] && [ "$(curl -s -o /dev/null -w '%{http_code}' "$url")" = 404 ]; then
     echo "== $version $os: skipped (no Linux build)"
-    row="| $version | - | $os | no Linux build | | | | | | | | |"
+    row="| $version | - | $os | no Linux build | | | | | | | | | |"
     echo "$row" > "compat-$os-$version.md"
     [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
     exit 0
@@ -57,7 +59,7 @@ run() {
 # build as broken and pass, since there is nothing to compare dmfast against.
 broken() {
   echo "::warning::$version $os: stock BYOND build looks broken ($1); skipping"
-  row="| $version | ${real:-?} | $os | broken build: $1 | | | | | | | | |"
+  row="| $version | ${real:-?} | $os | broken build: $1 | | | | | | | | | |"
   echo "$row" > "compat-$os-$version.md"
   [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
   exit 0
@@ -199,6 +201,80 @@ if [ -n "${h_fast:-}" ]; then
     echo "stock DreamDaemon $version printed nothing from $(basename "$project")'s world in 60 s; not timing world load"
   fi
 fi
+
+# world_out <bin dir> <dmb> <file>: runs the world until $w_secs seconds after it prints its first line (or
+# 60 s without one) and writes what it printed after BYOND's banner, without dmfast's lines. Clock times,
+# durations, dates and addresses become #, since they differ between any two runs; other numbers are kept.
+# Returns 0 if the world was still running at the end, 1 if it had exited.
+world_out() {
+  local out="$work/world-raw.txt" pid alive=1 deadline end=""
+  : >"$out"
+  if [ "$os" = linux ]; then
+    (cd "$(dirname "$2")" && exec env LD_LIBRARY_PATH="$1" "$1/$dd" "$(basename "$2")" -trusted -invisible -ip 127.0.0.1) >"$out" 2>&1 &
+  else
+    (cd "$(dirname "$2")" && exec "$1/$dd" "$(basename "$2")" -trusted -invisible -ip 127.0.0.1) >"$out" 2>&1 &
+  fi
+  pid=$!
+  deadline=$(( $(date +%s) + 60 ))
+  while :; do
+    kill -0 "$pid" 2>/dev/null || break
+    if [ -z "$end" ]; then
+      if sed -n '/Welcome BYOND/,$p' "$out" | tail -n +2 | grep -v '^dmfast' | grep -q '[^[:space:]]'; then
+        end=$(( $(date +%s) + w_secs ))
+      elif [ "$(date +%s)" -ge "$deadline" ]; then
+        break
+      fi
+    elif [ "$(date +%s)" -ge "$end" ]; then
+      break
+    fi
+    sleep 0.1
+  done
+  kill -0 "$pid" 2>/dev/null || alive=0
+  if [ "$os" = windows ]; then taskkill //F //T //PID "$(cat "/proc/$pid/winpid")" >/dev/null 2>&1 || true
+  else kill "$pid" 2>/dev/null || true; fi
+  wait "$pid" 2>/dev/null || true
+  tr -d '\r' <"$out" | sed -n '/Welcome BYOND/,$p' | tail -n +2 | { grep -v '^dmfast' || true; } \
+    | { grep '[^[:space:]]' || true; } | sed -E \
+      -e 's/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} .*/#date/' \
+      -e 's/[0-9]+(\.[0-9]+){3}(:[0-9]+)?/#addr/g' \
+      -e 's/[0-9]{1,2}:[0-9]{2}:[0-9]{2}/#time/g' \
+      -e 's/[0-9]+(\.[0-9]+)? ?(ms|ds|s|secs?|seconds?|mins?|minutes?)\b/#\2/g' >"$3"
+  [ "$alive" = 1 ]
+}
+# same_lines <a> <b>: how many lines the two files have in common from the start.
+same_lines() {
+  [ -s "$1" ] && [ -s "$2" ] || { echo 0; return; }
+  awk 'NR == FNR { a[FNR] = $0; n = FNR; next }
+       FNR > n || a[FNR] != $0 { print FNR - 1; d = 1; exit }
+       END { if (!d) print (FNR < n ? FNR : n) }' "$1" "$2"
+}
+
+# Runtime behaviour: the project's world prints the same thing with dmfast as with stock for the first
+# $w_secs seconds after it loads. A world isn't fully deterministic (tg places ruins at random), so two stock
+# runs first find how many lines always come out the same; dmfast must print those lines, and still be
+# running if stock was.
+w_out="n/a"
+if [ -n "${l_stock:-}" ]; then
+  w_secs=10
+  sa=0; world_out "$work/stock" "${project%.dme}.dmb" "$work/w-stock1.txt" || sa=1
+  world_out "$work/stock" "${project%.dme}.dmb" "$work/w-stock2.txt" || sa=1
+  fa=0; world_out "$work/fast/bin" "${project%.dme}.dmb" "$work/w-fast.txt" || fa=1
+  n=$(same_lines "$work/w-stock1.txt" "$work/w-stock2.txt")
+  m=$(same_lines "$work/w-stock1.txt" "$work/w-fast.txt")
+  if [ "$n" = 0 ]; then
+    w_out="n/a (stock not repeatable)"
+  elif [ "$m" -lt "$n" ]; then
+    echo "::error::$version $os: $(basename "$project")'s world prints differently with dmfast (line $((m + 1)) of the $n that stock always prints):"
+    diff <(head -n "$n" "$work/w-stock1.txt") <(head -n "$n" "$work/w-fast.txt") | head -20 || true
+    w_out="FAIL at line $((m + 1))"; fail=1
+  elif [ "$sa" = 0 ] && [ "$fa" = 1 ]; then
+    echo "::error::$version $os: $(basename "$project")'s world exited within ${w_secs} s of loading with dmfast, not with stock"
+    tail -20 "$work/w-fast.txt"
+    w_out="FAIL (exited)"; fail=1
+  else
+    w_out="same ($n lines)"
+  fi
+fi
 disabled=$(printf '%s\n%s\n' "$compiler" "$runtime" | grep ' disabled: ' | sed 's/^dmfast: //; s/ disabled:.*//' | paste -sd, - || true)
 mask() { printf '%s\n' "$1" | grep -oE 'patched=0x[0-9a-f]+' | tail -1 | cut -d= -f2; }
 real=$(run "$work/stock" "$dm" 2>&1 | grep -oE '[0-9]{3}\.[0-9]{4}' | head -1 || true)
@@ -206,12 +282,12 @@ result=$([ $fail = 0 ] && echo pass || echo FAIL)
 
 echo "== $version ($real) $os: $result"
 echo "compile $(basename "$project"): stock $t_stock, dmfast $t_fast, .dmb ${h_stock:-n/a} / ${h_fast:-n/a}"
-echo "world load: stock ${l_stock:-n/a}, dmfast ${l_fast:-n/a}"
+echo "world load: stock ${l_stock:-n/a}, dmfast ${l_fast:-n/a}; output for 10 s after loading: $w_out"
 echo "verify mode: $verify"
 echo "compiler groups: $(mask "$compiler"); runtime groups: $(mask "$runtime"); disabled: ${disabled:-none}"
 printf '%s\n' "$compiler" "$runtime"
 
-row="| $version | ${real:-?} | $os | $result | $t_stock | $t_fast | $(mask "$compiler") | $(mask "$runtime") | ${disabled:-none} | ${l_stock:-n/a} | ${l_fast:-n/a} | $verify |"
+row="| $version | ${real:-?} | $os | $result | $t_stock | $t_fast | $(mask "$compiler") | $(mask "$runtime") | ${disabled:-none} | ${l_stock:-n/a} | ${l_fast:-n/a} | $verify | $w_out |"
 echo "$row" > "compat-$os-$version.md"
 [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
 exit $fail

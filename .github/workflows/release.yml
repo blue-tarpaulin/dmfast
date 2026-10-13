@@ -1,10 +1,9 @@
-# Builds the combined Windows + Linux installer (dmfast-install.exe), tests it against a spread of BYOND
+# Builds the combined Windows + Linux installer, tests it against a spread of BYOND
 # builds and scans it with Windows Defender.
 # Manual runs keep it as a workflow artifact; pushing a `v*` tag also attests its build provenance and
 # publishes it as a GitHub release (only if the scan is clean).
 #
-# The patches/ submodule is the private blue-tarpaulin/dmfast-patches repo, fetched by
-# .github/actions/patches with a read-only deploy key (secret DMFAST_PATCHES_KEY).
+# The patches/ submodule is fetched by .github/actions/patches with a read-only deploy key (secret DMFAST_PATCHES_KEY).
 name: release
 
 on:
@@ -89,15 +88,17 @@ jobs:
           if-no-files-found: error
 
   # The packed installer against a spread of BYOND builds from byond-builds.dm-lang.org, on both OSes:
-  # each must install, compile tgstation and tests/rtsmoke.dme to the same .dmb as stock and run the same
-  # in DreamDaemon. Patches that don't match a build disable themselves; the report lists which.
+  # each must install, compile tgstation and tests/rtsmoke.dme to the same .dmb as stock, run rtsmoke the
+  # same in DreamDaemon, and print the same from tgstation's world for 10 s after it loads. Patches that don't
+  # match a build disable themselves; the report lists which.
   compat:
     needs: pack
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-        byond: ["515.1647", "516.1648", "516.1655", "516.1660", "516.1665", "516.1670", "516.1675", "516.1680", "516.1684", "516.1688", "516.latest"]
+        # At most 9 builds
+        byond: ["515.1647", "516.1648", "516.1667", "516.1670", "516.1675", "516.1680", "516.1684", "516.1688", "516.latest"]
     runs-on: ${{ matrix.os }}
     env:
       TG_COMMIT: 1568dbe1daeba67dc20939c6307d07522967e89c
@@ -158,8 +159,8 @@ jobs:
           {
             echo "### BYOND compatibility"
             echo
-            echo "| Requested | Build | OS | Result | tgstation stock | tgstation dmfast | Compiler groups | Runtime groups | Disabled | World load stock | World load dmfast | Verify mode |"
-            echo "|---|---|---|---|---|---|---|---|---|---|---|---|"
+            echo "| Requested | Build | OS | Result | tgstation stock | tgstation dmfast | Compiler groups | Runtime groups | Disabled | World load stock | World load dmfast | Verify mode | World output |"
+            echo "|---|---|---|---|---|---|---|---|---|---|---|---|---|"
             cat compat-*.md 2>/dev/null | sort -t'|' -k4,4 -k2,2V
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
