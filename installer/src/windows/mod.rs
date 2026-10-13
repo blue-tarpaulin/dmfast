@@ -152,7 +152,7 @@ fn patch(dir: &Path, name: &str, installed: &Option<String>) -> Result<String, F
         write(&backup, &exe_data)?;
         (exe_data, before.to_string())
     };
-    write(&exe, &pe::add_import_first(&stock, DLL, "dmfast_mimalloc_version")?)?;
+    write(&exe, &pe::add_imports_first(&stock, &[(DLL, "dmfast_mimalloc_version")])?)?;
     Ok(before)
 }
 

@@ -61,10 +61,10 @@ fn align(x: u32, a: u32) -> u32 {
     x.div_ceil(a) * a
 }
 
-/// Copy of `exe` whose import table starts with `dll!func`, so the loader loads `dll` (and its own
-/// imports, e.g. mimalloc) before the exe's other imports. The original descriptors are kept as-is; the
-/// new table lives in an appended section.
-pub fn add_import_first(exe: &[u8], dll: &str, func: &str) -> Result<Vec<u8>> {
+/// Copy of `exe` whose import table starts with `dll!func` for each of `first`, in order, so the loader
+/// loads and initialises those DLLs (and their own imports) before the exe's other imports. The original
+/// descriptors are kept as-is; the new table lives in an appended section.
+pub fn add_imports_first(exe: &[u8], first: &[(&str, &str)]) -> Result<Vec<u8>> {
     let mut d = exe.to_vec();
     let fh = u32_at(&d, 0x3C) as usize + 4;
     let nsec = u16_at(&d, fh + 2) as usize;
@@ -97,9 +97,9 @@ pub fn add_import_first(exe: &[u8], dll: &str, func: &str) -> Result<Vec<u8>> {
         .collect();
 
     let va = align(u32_at(&d, last + 12) + u32_at(&d, last + 8), sa);
-    let n = old.len() + 2; // ours + old + terminator
+    let n = first.len() + old.len() + 1; // ours + old + terminator
     let mut blob = vec![0u8; 20 * n];
-    let mut put = |data: &[u8], alignment: usize| {
+    let put = |blob: &mut Vec<u8>, data: &[u8], alignment: usize| {
         while !blob.len().is_multiple_of(alignment) {
             blob.push(0);
         }
@@ -107,16 +107,18 @@ pub fn add_import_first(exe: &[u8], dll: &str, func: &str) -> Result<Vec<u8>> {
         blob.extend_from_slice(data);
         rva
     };
-    let name = put(&[dll.as_bytes(), b"\0"].concat(), 2);
-    let hint_name = put(&[&[0u8, 0][..], func.as_bytes(), b"\0"].concat(), 2);
-    let thunks = [hint_name.to_le_bytes(), [0; 4]].concat();
-    let ilt = put(&thunks, 4);
-    let iat = put(&thunks, 4);
-    for (i, v) in [ilt, 0, 0, name, iat].into_iter().enumerate() {
-        put32(&mut blob, 4 * i, v);
+    for (k, (dll, func)) in first.iter().enumerate() {
+        let name = put(&mut blob, &[dll.as_bytes(), b"\0"].concat(), 2);
+        let hint_name = put(&mut blob, &[&[0u8, 0][..], func.as_bytes(), b"\0"].concat(), 2);
+        let thunks = [hint_name.to_le_bytes(), [0; 4]].concat();
+        let ilt = put(&mut blob, &thunks, 4);
+        let iat = put(&mut blob, &thunks, 4);
+        for (i, v) in [ilt, 0, 0, name, iat].into_iter().enumerate() {
+            put32(&mut blob, 20 * k + 4 * i, v);
+        }
     }
     for (i, desc) in old.iter().enumerate() {
-        blob[20 * (i + 1)..20 * (i + 2)].copy_from_slice(*desc);
+        blob[20 * (first.len() + i)..20 * (first.len() + i + 1)].copy_from_slice(*desc);
     }
 
     let raw_ptr = align(d.len() as u32, fa);
@@ -136,8 +138,10 @@ pub fn add_import_first(exe: &[u8], dll: &str, func: &str) -> Result<Vec<u8>> {
     d.extend(&blob);
     d.resize((raw_ptr + raw_size) as usize, 0);
 
-    if !imports(&d, dll)? {
-        return Err("internal: import table rewrite failed".into());
+    for (dll, _) in first {
+        if !imports(&d, dll)? {
+            return Err("internal: import table rewrite failed".into());
+        }
     }
     Ok(d)
 }
