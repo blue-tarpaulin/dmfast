@@ -5,7 +5,7 @@ members = ["patches", "installer", "packer"]
 default-members = ["installer"]
 
 [workspace.package]
-version = "4.9.0"
+version = "5.0.0"
 
 [profile.release]
 panic = "abort"
