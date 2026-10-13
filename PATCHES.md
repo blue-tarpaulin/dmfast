@@ -4,6 +4,8 @@ Each patch can be turned off for one run with `DMFAST_DISABLE=<key>` (comma-sepa
 
 Each patch finds the code it changes by signature and turns itself off if anything doesn't match.
 
+These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are opt-in and listed separately in [BUGFIXES.md](BUGFIXES.md).
+
 **Saves** is roughly how much tg gets faster, and how its peak memory changes. Patches overlap & numbers vary by codebase, so treat them as rough.
 
 ## Compiler (`dm.exe` / `DreamMaker`)

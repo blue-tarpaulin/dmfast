@@ -184,8 +184,8 @@ jobs:
           {
             echo "### BYOND compatibility"
             echo
-            echo "| Requested | Build | OS | Result | tgstation stock | tgstation dmfast | Compiler groups | Runtime groups | Disabled | World load stock | World load dmfast | Verify mode | World output |"
-            echo "|---|---|---|---|---|---|---|---|---|---|---|---|---|"
+            echo "| Requested | Build | OS | Result | tgstation stock | tgstation dmfast | Compiler groups | Runtime groups | Disabled | World load stock | World load dmfast | Verify mode | World output | Bug fixes |"
+            echo "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
             cat compat-*.md 2>/dev/null | sort -t'|' -k4,4 -k2,2V
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
