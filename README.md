@@ -9,7 +9,7 @@ Robusts BYOND's compiler.
 
 How much faster depends on the computer and codebase, but expect significant gains.
 
-Byond 515 and 516 are supported. Patches that don't work will just disable themselves.
+Supports BYOND 515 and 516. Patches that don't work will just disable themselves.
 
 ## Install
 
@@ -58,6 +58,8 @@ set DMFAST_STATS=1
 dm.exe yourgame.dme
 ```
 
+To turn patches off, set `DMFAST_DISABLE` to their keys from [PATCHES.md](PATCHES.md), comma-separated.
+
 ## Build
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -68,9 +70,11 @@ dmfast is licensed under the BSD 3-Clause License, © 2026 Greytide Worldwide; s
 
 It bundles [mimalloc](https://github.com/microsoft/mimalloc) (MIT, Microsoft Corporation & Daan Leijen - [vendor/mimalloc-x86/LICENSE.txt](vendor/mimalloc-x86/LICENSE.txt)).
 
+dmfast patches your own installed copy of BYOND in memory while it runs. 
+The installer only makes the BYOND programs load dmfast and keeps their originals, so uninstalling restores stock BYOND. Output is identical to the stock versions.
+
 This repository contains no BYOND code or binaries. 
 
-dmfast changes your own installed copy of BYOND in memory while it runs. 
-The installer only makes the BYOND programs load dmfast and keeps their originals, so uninstalling restores stock BYOND.
-
 dmfast is not affiliated with or endorsed by BYOND in any way.
+
+We offer no guarantees or warranty, but every release is checked against stock BYOND on the supported builds for identical `.dmb` output. If something breaks, uninstall and [open an issue](https://github.com/blue-tarpaulin/dmfast/issues).

@@ -2,7 +2,9 @@
 
 ## Build
 
-The patches live in a private submodule (`patches`); building needs access to it. To ask for access, [open an issue](https://github.com/blue-tarpaulin/dmfast/issues). With access:
+The patches live in a private submodule (`patches`); building needs access to it. 
+
+To ask for access, [open an access request](https://github.com/blue-tarpaulin/dmfast/issues/new?template=access_request.yml). We'll give access to community members we trust.
 
 ```
 git clone --recurse-submodules https://github.com/blue-tarpaulin/dmfast.git
@@ -36,4 +38,4 @@ Output: `dist/dmfast-install.exe` - works on both operating systems.
 
 ## Release
 
-Push a `v*` tag (e.g. `v4.4.0`).
+Rename `## Unreleased` in [CHANGELOG.md](CHANGELOG.md) to the version (e.g. `## 4.4.0`), commit, then push a `v*` tag (e.g. `v4.4.0`). The release notes include that section.
