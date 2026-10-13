@@ -30,7 +30,7 @@ fn main() {
 
     let mut res = winresource::WindowsResource::new();
     res.set("ProductName", "dmfast")
-        .set("FileDescription", "Robusts BYOND's compiler.")
+        .set("FileDescription", "Robusts BYOND's toolchain.")
         .set("CompanyName", "Greytide Worldwide")
         .set("LegalCopyright", "dmfast contributors; bundles mimalloc (MIT, Microsoft Corporation)")
         .set("OriginalFilename", "dmfast-install.exe")

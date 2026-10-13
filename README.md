@@ -1,6 +1,6 @@
 <img alt="dmfast" src="docs/banner.png" height="150">
 
-Robusts BYOND's compiler.
+Robusts BYOND's toolchain.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/speedup-5fff1e26-dark.svg">
@@ -29,9 +29,9 @@ sh dmfast-install.exe ~/byond/bin
 
 The path is your BYOND `bin` folder (or `dm.exe`) - dragging the exe onto the installer works too.
 
-Run it with no arguments for help. Re-run after BYOND updates.
+Run it with no arguments for help, and re-run after BYOND updates.
 
-Add `--runtime` to also speed up DreamDaemon (while it's in beta):
+Add `--runtime` to also speed up DreamDaemon:
 
 ```
 dmfast-install.exe --runtime "C:\Program Files (x86)\BYOND\bin"
