@@ -8,7 +8,7 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 
 **Saves** is roughly how much tg gets faster, and how its peak memory changes. Patches overlap & numbers vary by codebase, so treat them as rough.
 
-## Compiler (`dm.exe` / `DreamMaker`)
+## Compiler
 
 | Patch | Key | OS | Saves | What it does |
 |---|---|---|---|---|
