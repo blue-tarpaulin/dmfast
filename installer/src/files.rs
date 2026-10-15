@@ -10,6 +10,14 @@ pub enum Failure {
     Other(String),
 }
 
+impl Failure {
+    pub fn message(&self) -> &str {
+        match self {
+            Failure::Denied(m) | Failure::Other(m) => m,
+        }
+    }
+}
+
 impl From<String> for Failure {
     fn from(s: String) -> Self {
         Failure::Other(s)

@@ -49,46 +49,94 @@ fn is_wrapper(data: &[u8]) -> bool {
     data.starts_with(WRAPPER_TAG.as_bytes())
 }
 
+/// For the guided install: whether dmfast is installed in `dir`, and whether DreamDaemon is wrapped.
+pub fn state(dir: &Path) -> (bool, bool) {
+    (dir.join(LIB).is_file(), RUNTIME.iter().any(|exe| backup_of(dir, exe).is_file()))
+}
+
+/// The usual BYOND folders (BYOND's Linux zip has no installer to record where it went).
+pub fn byond_dirs() -> Vec<PathBuf> {
+    let home = std::env::var_os("HOME").map(|h| PathBuf::from(h).join("byond"));
+    home.into_iter().chain([PathBuf::from("/usr/local/byond")]).filter(|d| bin_dir(d).is_ok()).collect()
+}
+
+/// Whether `dir` holds the compiler: the program, or only its `_orig` backup when the wrapper was deleted.
+fn has_compiler(dir: &Path) -> bool {
+    dir.join(COMPILER).is_file() || backup_of(dir, COMPILER).is_file()
+}
+
 pub fn bin_dir(target: &Path) -> Result<PathBuf, Failure> {
-    let dir = if target.is_file() { target.parent().unwrap_or(Path::new(".")).to_path_buf() } else { target.to_path_buf() };
-    if !dir.join(COMPILER).is_file() || !dir.join("libbyond.so").is_file() {
+    let mut dir = if target.is_file() { target.parent().unwrap_or(Path::new(".")).to_path_buf() } else { target.to_path_buf() };
+    // The BYOND folder itself (the one holding `bin`) works too.
+    if !has_compiler(&dir) && has_compiler(&dir.join("bin")) {
+        dir = dir.join("bin");
+    }
+    if !has_compiler(&dir) || !dir.join("libbyond.so").is_file() {
         return Err(format!("no {COMPILER} and libbyond.so in {}", dir.display()).into());
     }
     fs::canonicalize(&dir).map_err(|e| io_err("cannot resolve", &dir, e))
 }
 
-/// Wrap one program, keeping the stock binary as its `_orig` backup. Returns what was there before.
-fn wrap(dir: &Path, name: &str, ours: &str, installed: &Option<String>) -> Result<String, Failure> {
+/// What a program is before installing: stock (its bytes become the backup), or already ours with a
+/// readable backup (also when the wrapper itself was deleted).
+enum Before {
+    Stock(Vec<u8>),
+    Wrapped,
+}
+
+/// Reads everything [`wrap`] needs, so a program that can't be read stops the install before anything changes.
+fn check(dir: &Path, name: &str) -> Result<Before, Failure> {
     let exe = dir.join(name);
     let backup = backup_of(dir, name);
-    let exe_data = read(&exe)?;
-    let before = if is_wrapper(&exe_data) {
-        if !backup.is_file() {
-            return Err(format!("{name} is the dmfast wrapper but {name}_orig is missing; reinstall BYOND").into());
+    if exe.is_file() {
+        let data = read(&exe)?;
+        if !is_wrapper(&data) {
+            return Ok(Before::Stock(data));
         }
-        installed.clone().unwrap_or_else(|| "dmfast (unknown version)".into())
-    } else {
+    }
+    if !backup.is_file() {
+        return Err(format!("{name} is the dmfast wrapper but {name}_orig is missing; reinstall BYOND").into());
+    }
+    fs::File::open(&backup).map_err(|e| io_err("cannot read", &backup, e))?;
+    Ok(Before::Wrapped)
+}
+
+/// Wrap one program, keeping the stock binary as its `_orig` backup. Returns what was there before.
+fn wrap(dir: &Path, name: &str, state: Before, ours: &str, installed: &Option<String>) -> Result<String, Failure> {
+    let before = match state {
+        Before::Wrapped => installed.clone().unwrap_or_else(|| "dmfast (unknown version)".into()),
         // Stock (fresh install, or BYOND updated over us): it becomes the backup.
-        let before = if backup.is_file() { "stock (BYOND was updated)" } else { "stock" };
-        write_executable(&backup, &exe_data)?;
-        before.to_string()
+        Before::Stock(data) => {
+            let before = if backup_of(dir, name).is_file() { "stock (BYOND was updated)" } else { "stock" };
+            write_executable(&backup_of(dir, name), &data)?;
+            before.to_string()
+        }
     };
-    write_executable(&exe, wrapper(ours, name).as_bytes())?;
+    write_executable(&dir.join(name), wrapper(ours, name).as_bytes())?;
     Ok(before)
 }
 
-/// Put the stock binary back if `name` is wrapped. Returns whether it was.
-fn unwrap(dir: &Path, name: &str) -> Result<bool, Failure> {
+enum Unwrapped {
+    /// The stock program is back.
+    Restored,
+    /// Not ours: left alone.
+    NotWrapped,
+    /// Our wrapper, but the backup to restore is gone.
+    NoBackup,
+}
+
+/// Put the stock binary back if `name` is wrapped (or only its backup is left).
+fn unwrap(dir: &Path, name: &str) -> Result<Unwrapped, Failure> {
     let exe = dir.join(name);
     let backup = backup_of(dir, name);
-    if !exe.is_file() || !is_wrapper(&read(&exe)?) {
-        return Ok(false);
+    if exe.is_file() && !is_wrapper(&read(&exe)?) {
+        return Ok(Unwrapped::NotWrapped);
     }
     if !backup.is_file() {
-        return Err(format!("{name}_orig is missing; reinstall BYOND to restore {name}").into());
+        return Ok(if exe.is_file() { Unwrapped::NoBackup } else { Unwrapped::NotWrapped });
     }
     rename_retry(&backup, &exe).map_err(|e| io_err("cannot restore", &exe, e))?;
-    Ok(true)
+    Ok(Unwrapped::Restored)
 }
 
 pub fn install(dir: &Path, runtime: bool) -> Result<String, Failure> {
@@ -101,10 +149,12 @@ pub fn install(dir: &Path, runtime: bool) -> Result<String, Failure> {
     let lib = dir.join(LIB);
     let ours = canary(DMFAST_SO).ok_or("internal: embedded libdmfast.so has no canary")?;
     let installed = installed_canary(&lib)?;
+    let states = names.iter().map(|n| check(dir, n)).collect::<Result<Vec<_>, _>>()?;
+    // The library first: a wrapper must never point at a library that isn't there.
     write(&lib, DMFAST_SO)?;
     let mut before = String::new();
-    for name in &names {
-        let b = wrap(dir, name, &ours, &installed)?;
+    for (name, state) in names.iter().zip(states) {
+        let b = wrap(dir, name, state, &ours, &installed)?;
         if *name == COMPILER {
             before = b;
         }
@@ -112,8 +162,12 @@ pub fn install(dir: &Path, runtime: bool) -> Result<String, Failure> {
     // With --no-runtime, a previous runtime install is undone.
     let mut unwrapped = Vec::new();
     for name in RUNTIME.into_iter().filter(|n| !names.contains(n)) {
-        if unwrap(dir, name)? {
-            unwrapped.push(name);
+        match unwrap(dir, name)? {
+            Unwrapped::Restored => unwrapped.push(name),
+            Unwrapped::NotWrapped => {}
+            Unwrapped::NoBackup => {
+                return Err(format!("{name} is the dmfast wrapper but {name}_orig is missing; reinstall BYOND").into());
+            }
         }
     }
     let mut msg = format!("installed {ours} in {} (was {before}) for {}", dir.display(), names.join(", "));
@@ -123,20 +177,36 @@ pub fn install(dir: &Path, runtime: bool) -> Result<String, Failure> {
     Ok(msg)
 }
 
-pub fn uninstall(dir: &Path) -> Result<String, Failure> {
+/// None if dmfast isn't installed in `dir` (nothing of ours was found).
+pub fn uninstall(dir: &Path) -> Result<Option<String>, Failure> {
     let lib = dir.join(LIB);
-    let ver = installed_canary(&lib)?;
-    let mut restored = Vec::new();
+    // Only for the message: an unreadable library must not block removing it.
+    let ver = installed_canary(&lib).ok().flatten();
+    let (mut restored, mut lost) = (Vec::new(), Vec::new());
     for name in std::iter::once(COMPILER).chain(RUNTIME) {
-        if unwrap(dir, name)? {
-            restored.push(name);
+        match unwrap(dir, name)? {
+            Unwrapped::Restored => restored.push(name),
+            Unwrapped::NotWrapped => {}
+            Unwrapped::NoBackup => {
+                // The wrapper only runs the missing backup: remove it so uninstall can finish.
+                let exe = dir.join(name);
+                fs::remove_file(&exe).map_err(|e| io_err("cannot remove", &exe, e))?;
+                lost.push(name);
+            }
         }
     }
-    if restored.is_empty() {
-        return Ok(format!("dmfast is not installed in {}", dir.display()));
+    if restored.is_empty() && lost.is_empty() && !lib.is_file() {
+        return Ok(None);
     }
     if lib.is_file() {
         fs::remove_file(&lib).map_err(|e| io_err("cannot remove", &lib, e))?;
     }
-    Ok(format!("removed {} from {} (restored {})", ver.unwrap_or_else(|| "dmfast".into()), dir.display(), restored.join(", ")))
+    let mut msg = format!("removed {} from {}", ver.unwrap_or_else(|| "dmfast".into()), dir.display());
+    if !restored.is_empty() {
+        msg += &format!(" (restored {})", restored.join(", "));
+    }
+    for name in lost {
+        msg += &format!("\nwarning: {name}_orig was missing, so {name} is gone; reinstall BYOND to get it back");
+    }
+    Ok(Some(msg))
 }
