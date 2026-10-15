@@ -15,39 +15,32 @@ Supports BYOND 515 and 516. Patches that don't work will just disable themselves
 
 Download `dmfast-install.exe` from [Releases](https://github.com/blue-tarpaulin/dmfast/releases).
 
-Close BYOND, then:
+Close BYOND, then double-click `dmfast-install.exe`.
 
-```
-dmfast-install.exe "C:\Program Files (x86)\BYOND\bin"
-```
+It'll find BYOND and walk you through the setup, or you can drag BYOND on top of it. 
 
-The same file installs on Linux:
-
-```
-sh dmfast-install.exe ~/byond/bin
+From a terminal (the same file works on Linux):
+```shell
+dmfast-install.exe "C:\Program Files (x86)\BYOND"
+sh dmfast-install.exe ~/byond
 ```
 
-The path is your BYOND `bin` folder (or `dm.exe`) - dragging the exe onto the installer works too.
+To turn on the opt-in [bug fixes](BUGFIXES.md), pass `--fixes safe` or `--fixes extended`.
 
-Run it with no arguments for help, and re-run after BYOND updates.
+Run it bare via terminal for more commands and help.
 
-This speeds up DreamDaemon too. To leave DreamDaemon stock and only speed up the compiler, add `--no-runtime`:
-
-```
-dmfast-install.exe --no-runtime "C:\Program Files (x86)\BYOND\bin"
-```
-
-Installing again without `--no-runtime` patches DreamDaemon again.
+Re-run it after BYOND updates.
 
 ## Uninstall
 
-You can delete each modified program and rename the `_orig` copy back, or for a full uninstall:
+Double-click the installer again and choose remove, or:
 
-```
-dmfast-install.exe --uninstall "C:\Program Files (x86)\BYOND\bin"
+```shell
+dmfast-install.exe --uninstall "C:\Program Files (x86)\BYOND"
+sh dmfast-install.exe --uninstall ~/byond
 ```
 
-On Linux: `sh dmfast-install.exe --uninstall ~/byond/bin`.
+You can also delete each modified program and rename its `_orig` copy back.
 
 ## Check it's working
 
