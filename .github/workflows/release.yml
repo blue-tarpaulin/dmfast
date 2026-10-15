@@ -88,7 +88,7 @@ jobs:
           if-no-files-found: error
 
   # The packed installer against a spread of BYOND builds from byond-builds.dm-lang.org, on both OSes:
-  # each must install, compile tgstation and tests/rtsmoke.dme to the same .dmb as stock, run rtsmoke the
+  # each must install, compile tgstation and tests/testworld.dme to the same .dmb as stock, run testworld the
   # same in DreamDaemon, and print the same from tgstation's world for 10 s after it loads. Patches that don't
   # match a build disable themselves; the report lists which.
   compat:
