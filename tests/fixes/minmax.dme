@@ -1,0 +1,37 @@
+// max()/min() with null (forum report 2816779): null counts as 0 against numbers, so the result is the number 0 whichever
+// side it is on (stock returns null when null beats a negative number); against text, the text wins in
+// either order (stock picks the first argument).
+/proc/nul()
+	return null
+
+/proc/num(n)
+	return n
+
+/proc/word()
+	return "a"
+
+/proc/show(label, value)
+	world.log << "[label]: [isnull(value) ? "null" : value] ([isnull(value) ? "null" : istext(value) ? "text" : "num"])"
+
+/world/New()
+	for(var/n in list(-2, -1, 0, 1, 2))
+		show("max([n],null)", max(num(n), nul()))
+		show("max(null,[n])", max(nul(), num(n)))
+		show("min([n],null)", min(num(n), nul()))
+		show("min(null,[n])", min(nul(), num(n)))
+	show("max(text,null)", max(word(), nul()))
+	show("max(null,text)", max(nul(), word()))
+	show("min(text,null)", min(word(), nul()))
+	show("min(null,text)", min(nul(), word()))
+	show("max(null,null)", max(nul(), nul()))
+	show("min(null,null)", min(nul(), nul()))
+	show("max(-1,null,1)", max(num(-1), nul(), num(1)))
+	show("max(-1,null,-2)", max(num(-1), nul(), num(-2)))
+	show("min(1,null,-1)", min(num(1), nul(), num(-1)))
+	show("min(1,null,2)", min(num(1), nul(), num(2)))
+	show("max(3,4)", max(num(3), num(4)))
+	show("min(3,4)", min(num(3), num(4)))
+	show("max(texts)", max(word(), "b"))
+	show("max(list)", max(list(num(-1), nul())))
+	show("min(list)", min(list(num(1), nul())))
+	shutdown()

@@ -1,0 +1,9 @@
+// Forum report 2990024: operator characters are not valid type-path elements (`!`; `~` and `?` too).
+/obj/!
+	proc/foo()
+		return 7
+/obj/ok
+
+world/New()
+	world.log << "[ispath(/obj/ok)]"
+	shutdown()

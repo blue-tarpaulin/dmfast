@@ -1,0 +1,4 @@
+refcount before: 1
+caught: bad proc
+refcount after: 1
+refcount after the object form: 1

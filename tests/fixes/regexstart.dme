@@ -1,0 +1,13 @@
+// Forum report 2885674: regex.Find(text, start) on a global regex must restart at start; Find(text) still continues.
+/world/New()
+	..()
+	var/t = "xaxaxa"
+	var/regex/r = regex("a", "g")
+	world.log << "continue: [r.Find(t)] [r.Find(t)] [r.Find(t)] [r.Find(t)]"
+	world.log << "explicit 1: [r.Find(t, 1)] [r.Find(t, 1)] [r.Find(t, 1)]"
+	world.log << "explicit 3: [r.Find(t, 3)] [r.Find(t, 3)]"
+	r.Find(t)
+	world.log << "mixed: [r.Find(t)] [r.Find(t, 1)] [r.Find(t)]"
+	var/regex/s = regex("a")
+	world.log << "plain: [s.Find(t)] [s.Find(t)] [s.Find(t, 3)]"
+	shutdown()

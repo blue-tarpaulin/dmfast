@@ -1,0 +1,18 @@
+// Forum report 2991514: call("missing proc")(x) runtimes but leaks a reference to every argument.
+/world/New()
+	..()
+	var/datum/x = new
+	world.log << "refcount before: [refcount(x)]"
+	for(var/i = 1 to 5)
+		try
+			call("no_such_proc")(x)
+		catch(var/exception/e)
+			if(i == 1)
+				world.log << "caught: [e.name]"
+	world.log << "refcount after: [refcount(x)]"
+	for(var/i = 1 to 5)
+		try
+			call(null, "no_such_proc")(x)
+		catch
+	world.log << "refcount after the object form: [refcount(x)]"
+	shutdown()

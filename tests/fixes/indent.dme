@@ -1,0 +1,19 @@
+// Forum report 2970135: a code line indented with a tab, a space and a tab counts as three levels, one deeper than its
+// neighbours, and silently becomes a stray statement. It must be an error. A block that uses the same mixed
+// prefix (two spaces and a tab) on every line is consistent and must compile (the first type below).
+/datum/ok
+  	var/g = 1
+  	proc/foo()
+  	  	world.log << "a"
+  	  	world.log << "b"
+
+/mob/test
+	var/g = 1
+	proc/foo()
+		world.log << "a"
+	 	world.log << "b"
+		world.log << "c"
+
+/world/New()
+	new /mob/test().foo()
+	shutdown()

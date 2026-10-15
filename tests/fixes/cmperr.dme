@@ -1,0 +1,42 @@
+// A comparison with a list or datum on the right-hand side returns the left operand instead of a runtime
+// error (forum reports 2989336, 2983414). The same comparison with the instance on the left already errors.
+/proc/show(label, value)
+	world.log << "[label]: [value]"
+
+/proc/value(v)
+	return v
+
+/proc/lt(label, a, b)
+	try
+		show("[label] <", a < b)
+	catch(var/exception/e1)
+		show("[label] <", "error: [e1]")
+	try
+		show("[label] >", a > b)
+	catch(var/exception/e2)
+		show("[label] >", "error: [e2]")
+	try
+		show("[label] <=", a <= b)
+	catch(var/exception/e3)
+		show("[label] <=", "error: [e3]")
+	try
+		show("[label] >=", a >= b)
+	catch(var/exception/e4)
+		show("[label] >=", "error: [e4]")
+
+/world/New()
+	var/list/l = list()
+	var/datum/d = new
+	lt("3,list", value(3), l)
+	lt("-3,list", value(-3), l)
+	lt("text,list", value("a"), l)
+	lt("3,datum", value(3), d)
+	lt("text,datum", value("a"), d)
+	lt("list,3", l, value(3))
+	lt("datum,3", d, value(3))
+	lt("3,4", value(3), value(4))
+	lt("text,text", value("a"), value("b"))
+	lt("3,null", value(3), value(null))
+	lt("null,3", value(null), value(3))
+	lt("text,null", value("a"), value(null))
+	shutdown()

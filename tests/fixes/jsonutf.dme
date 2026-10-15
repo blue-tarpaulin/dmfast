@@ -1,0 +1,17 @@
+// json_encode() escapes non-ASCII characters as \uXXXX (forum report 2905231); with the fix UTF-8 passes through.
+/proc/show(label, value)
+	world.log << "[label]: [value]"
+
+/world/New()
+	show("cyrillic", json_encode(list("string" = "Привет, Мир!")))
+	show("latin", json_encode("café"))
+	show("emoji", json_encode("a😀b"))
+	show("cjk", json_encode(list("日本語", "ключ" = "значение")))
+	show("ascii", json_encode("plain \"quoted\" back\\slash\ttab\nnl"))
+	show("quote+emoji", json_encode("say \"😀 é\" \\ 𝄞"))
+	show("slash", json_encode("a/b'c"))
+	show("mixed", json_encode(list("é" = list("ü", 1, null), "n" = 2)))
+	var/list/back = json_decode(json_encode(list("k" = "Привет 😀 é")))
+	show("roundtrip", back["k"] == "Привет 😀 é")
+	show("decode escaped", json_decode("\"\\u041f\\u0440\"") == "Пр")
+	shutdown()

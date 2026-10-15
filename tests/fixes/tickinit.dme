@@ -1,0 +1,47 @@
+// Forum reports 2968161, 2968160, 2968159: world.tick_usage before the first tick, world.cpu carried across a reboot, and
+// world.cpu not seeing the start-up phase until the second tick. The first boot burns CPU in New() and on each
+// tick, then reboots; the second boot logs what it sees. Only comparisons are logged, so the output is stable.
+
+/world
+	loop_checks = 0
+
+/proc/burn(ds)
+	var/end = world.timeofday + ds
+	var/n = 0
+	while(world.timeofday < end)
+		n++
+
+/proc/sane()
+	return world.tick_usage >= 0 && world.tick_usage < 1000000
+
+/proc/log_state(tag)
+	world.log << "[tag] t=[world.time] usage sane=[sane()] cpu>0=[world.cpu > 0] cpu<5=[world.cpu < 5]"
+
+/proc/log_usage(tag)
+	world.log << "[tag] t=[world.time] usage sane=[sane()]"
+
+/world/New()
+	..()
+	if(!fexists("tickinit.flag"))
+		text2file("1", "tickinit.flag")
+		burn(3)
+		log_state("boot1 New")
+		spawn(0)
+			log_state("boot1 spawn0")
+		spawn(1)
+			log_state("boot1 tick1")
+			burn(3)
+		spawn(2)
+			log_state("boot1 tick2")
+			burn(3)
+		spawn(3)
+			log_state("boot1 tick3")
+			world.Reboot()
+	else
+		fdel("tickinit.flag")
+		log_state("boot2 New")
+		spawn(1)
+			log_usage("boot2 tick1")
+		spawn(2)
+			log_usage("boot2 tick2")
+			shutdown()

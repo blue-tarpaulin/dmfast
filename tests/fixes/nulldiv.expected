@@ -1,0 +1,18 @@
+null/0: error: Division by zero
+null/null: error: Division by zero
+null/1: 0
+null/text: 0
+0/0: error: Division by zero
+1/0: error: Division by zero
+0/1: 0
+1/null: error: Undefined operation: 1 / null
+1/1: 1
+uninitialised var: error: Division by zero
+list elements: error: Division by zero
+x /= 0: error: Division by zero
+null&null: 0
+null&0: 0
+null*0: 0
+null<<null: 0
+null>>0: 0
+null-null: 0

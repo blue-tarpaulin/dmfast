@@ -1,0 +1,9 @@
+lf: a%0ab
+crlf: a%0d%0ab
+cr: a%0db
+lflf: a%0a%0ab
+edge: %0ax%0a
+space: a+b%0ac+d
+list2params: k=a%0ab&j=x%0d%0ay
+roundtrip: 1
+lf only: 1

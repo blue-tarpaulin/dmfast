@@ -1,0 +1,36 @@
+// num2text(N, Digits) drops trailing zeros (forum report 2960272); with the fix the digits are significant figures.
+// num2text(N) and "[N]" are unchanged.
+/proc/show(label, value)
+	world.log << "[label]: [value]"
+
+/proc/zero()
+	return 0
+
+/world/New()
+	show("10,4", num2text(10, 4))
+	show("1.5,4", num2text(1.5, 4))
+	show("100,3", num2text(100, 3))
+	show("100,2", num2text(100, 2))
+	show("0.1,4", num2text(0.1, 4))
+	show("0,3", num2text(zero(), 3))
+	show("-10,4", num2text(-10, 4))
+	show("-2.5,3", num2text(-2.5, 3))
+	show("123456,3", num2text(123456, 3))
+	show("1e10,4", num2text(1e10, 4))
+	show("12,1", num2text(12, 1))
+	show("3.14159,3", num2text(3.14159, 3))
+	show("3.14159,10", num2text(3.14159, 10))
+	show("1/3,6", num2text(1/3, 6))
+	show("2,6", num2text(2, 6))
+	show("one arg 10", num2text(10))
+	show("one arg 1.5", num2text(1.5))
+	show("one arg 1e10", num2text(1e10))
+	show("interp", "[10] [1.5] [0.1]")
+	show("1,100", num2text(1, 100))
+	show("1e30,100", num2text(1e30, 100))
+	show("-1e-30,100", num2text(-1e-30, 100))
+	show("12345.678,100", num2text(12345.678, 100))
+	show("3.4e38,101", num2text(3.4e38, 101))
+	show("1,0", num2text(1, 0))
+	show("hex", num2text(255, 8, 16))
+	shutdown()

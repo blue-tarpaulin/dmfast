@@ -1,0 +1,9 @@
+// Forum report 2990026: a backslash at the end of a line continues onto the next line only, not across blank lines.
+/obj/foo \
+
+
+	var/val = 5
+
+/world/New()
+	world.log << "[new /obj/foo().val]"
+	shutdown()

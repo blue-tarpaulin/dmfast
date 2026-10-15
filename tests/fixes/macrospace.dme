@@ -1,0 +1,17 @@
+// Forum reports 2988673, 2976632: a macro expansion must not be followed by a space that breaks ::, ?. and .
+/datum/color
+	var/blue = 1
+#define COLOR /datum/color
+#define SELF(x) x
+// Forum report 2988673's case used astype(), which 515 lacks; a proc call in the macro body hits the same bug.
+#define astest(D) same(D)
+/proc/same(x)
+	return x
+
+/world/New()
+	var/datum/color/c = new
+	world.log << "[COLOR::blue]"
+	world.log << SELF(c).blue
+	world.log << SELF(c)?.blue
+	world.log << astest(c)?.blue
+	shutdown()

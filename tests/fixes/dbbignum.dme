@@ -1,0 +1,19 @@
+// Forum report 2988144: numbers from 8.32e9 up to 2^33 (and negatives) became NULL in a database query.
+/world/New()
+	..()
+	var/database/db = new("dbbignum.db")
+	var/database/query/q = new("CREATE TABLE t (k INTEGER, v)")
+	q.Execute(db)
+	var/k = 0
+	for(var/n in list(5, 2147483647, 4294967296, 8300000000, 8330000000, 8400000000, 8452010000, -8452010000, 8589934592, 9000000000))
+		k++
+		var/database/query/i = new("INSERT INTO t VALUES (?, ?)", k, n)
+		i.Execute(db)
+	var/database/query/s = new("SELECT k, typeof(v) FROM t ORDER BY k")
+	s.Execute(db)
+	var/out = ""
+	while(s.NextRow())
+		var/list/r = s.GetRowData()
+		out += "[r["typeof(v)"]] "
+	world.log << out
+	shutdown()

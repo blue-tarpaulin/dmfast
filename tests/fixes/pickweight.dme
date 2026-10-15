@@ -1,0 +1,49 @@
+// A weighted pick() whose last weight is a constant 0 crashes the world (forum report 2991804). Zero-weight entries must
+// never be picked, wherever they are; other weights keep their stock behaviour. Constant weights are the
+// encoding that failed, so every case uses literal weights.
+/proc/show(label, value)
+	world.log << "[label]: [value]"
+
+/world/New()
+	rand_seed(1234)
+	var/r
+	show("start", "ok")
+	r = pick(1;"a", 0;"b")
+	show("1;0", r)
+	r = pick(1;"a", 1;"b", 0;"c")
+	show("1;1;0 sample ok", r != "c")
+	r = pick(5;"a", 0;"b", 0;"c")
+	show("5;0;0", r)
+	r = pick(0;"a", 1;"b")
+	show("0;1", r)
+	var/list/seen = list()
+	for(var/i in 1 to 400)
+		seen[pick(1;"a", 1;"b", 0;"c")] = 1
+	show("1;1;0 over 400", json_encode(sortList(seen)))
+	seen = list()
+	for(var/i in 1 to 400)
+		seen[pick(0;"a", 1;"b", 1;"c", 0;"d")] = 1
+	show("0;1;1;0 over 400", json_encode(sortList(seen)))
+	seen = list()
+	for(var/i in 1 to 400)
+		seen[pick(1;"a", 1;"b", 1;"c", 0;"d")] = 1
+	show("1;1;1;0 over 400", json_encode(sortList(seen)))
+	var/a = 0
+	var/b = 0
+	for(var/i in 1 to 3000)
+		if(pick(3;"a", 1;"b") == "a")
+			a++
+		else
+			b++
+	show("3;1 a is about 3x b", a > 2 * b && a < 4 * b)
+	shutdown()
+
+/proc/sortList(list/l)
+	var/list/keys = list()
+	for(var/k in l)
+		keys += k
+	for(var/i in 1 to keys.len)
+		for(var/j in i + 1 to keys.len)
+			if(keys[j] < keys[i])
+				keys.Swap(i, j)
+	return keys

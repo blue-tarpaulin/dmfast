@@ -1,0 +1,5 @@
+continue: 2 4 6 0
+explicit 1: 2 2 2
+explicit 3: 4 4
+mixed: 0 2 4
+plain: 2 2 4

@@ -1,0 +1,20 @@
+// Forum report 2960599: a type named world below another type loses its var overrides (here plane).
+// The real world (below the root) must keep working: name and status are set on it.
+plane_master
+	parent_type = /obj
+	plane = -10001
+
+plane_master
+	world
+		plane = 4999
+		density = 1
+
+world
+	name = "objworld test"
+	status = "ok"
+
+world/New()
+	var/obj/o = new/plane_master/world()
+	var/obj/p = new/plane_master()
+	world.log << "[o.type] [o.plane] [o.density] [p.plane] [p.density] [world.name] [world.status]"
+	shutdown()
