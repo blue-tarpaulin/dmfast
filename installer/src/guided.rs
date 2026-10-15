@@ -50,7 +50,7 @@ fn folder(prompt: &str) -> Option<PathBuf> {
 /// The arguments the answers stand for, or None if the user cancelled.
 pub fn run() -> Option<Vec<String>> {
     println!("{}\n", crate::help::BANNER);
-    println!("Guided install; for scripts and every option, run it with --help.\n");
+    println!("Guided install - for a manual install run it with --help.\n");
     let found = platform::byond_dirs();
     let mut target = None;
     for d in &found {
@@ -82,7 +82,7 @@ pub fn run() -> Option<Vec<String>> {
     }
     let now = fixes::current(&bin).ok().flatten();
     let keep = now.as_deref().unwrap_or("none");
-    println!("Bug fixes ('--help bugfixes' lists them; 'breaking' is only for --fixes):");
+    println!("Bug fixes ('--help bugfixes' lists them):");
     loop {
         let a = ask(&format!("  (n)one, (s)afe or (e)xtended? [{keep}]"))?.to_ascii_lowercase();
         let pick = match a.as_str() {
