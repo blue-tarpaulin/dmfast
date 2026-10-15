@@ -7,9 +7,9 @@ Robusts BYOND's toolchain.
   <img alt="dmfast speedups on SS13 codebases: compile 7.0x faster on Windows and 9.9x on Linux; DreamDaemon world load 8.4x and 4.2x faster" src="docs/speedup-5fff1e26-light.svg">
 </picture>
 
-How much faster depends on the computer and codebase, but expect significant gains.
+How much faster depends on your computer and codebase, but expect significant gains.
 
-Supports BYOND 515 and 516. Patches that don't work will just disable themselves.
+Supports BYOND 515 and 516. Patches that don't work will disable themselves automatically.
 
 ## Install
 
@@ -17,7 +17,7 @@ Download `dmfast-install.exe` from [Releases](https://github.com/blue-tarpaulin/
 
 Close BYOND, then double-click `dmfast-install.exe`.
 
-It'll find BYOND and walk you through the setup, or you can drag BYOND on top of it. 
+It'll find BYOND and walk you through the setup, or you can drag your BYOND install on top of it. 
 
 From a terminal (the same file works on Linux):
 ```shell
@@ -27,9 +27,7 @@ sh dmfast-install.exe ~/byond
 
 To turn on the opt-in [bug fixes](BUGFIXES.md), pass `--fixes safe` or `--fixes extended`.
 
-Run it bare via terminal for more commands and help.
-
-Re-run it after BYOND updates.
+Run it bare via terminal for more commands and help. Re-run it after BYOND updates.
 
 ## Uninstall
 
@@ -44,7 +42,7 @@ You can also delete each modified program and rename its `_orig` copy back.
 
 ## Check it's working
 
-You can just run the compiler as normal, or:
+You can just run the compiler as normal (there's a banner message), or:
 
 ```
 set DMFAST_STATS=1
@@ -64,10 +62,10 @@ dmfast is licensed under the BSD 3-Clause License, © 2026 Greytide Worldwide; s
 It bundles [mimalloc](https://github.com/microsoft/mimalloc) (MIT, Microsoft Corporation & Daan Leijen - [vendor/mimalloc-x86/LICENSE.txt](vendor/mimalloc-x86/LICENSE.txt)).
 
 dmfast patches your own installed copy of BYOND in memory while it runs. 
-The installer only makes the BYOND programs load dmfast and keeps their originals, so uninstalling restores stock BYOND. Output is identical to the stock versions.
+The installer only makes the BYOND programs load dmfast and keeps their originals, so uninstalling restores stock BYOND. Output is identical to the stock versions (unless opted in to bugfixes).
 
-This repository contains no BYOND code or binaries. 
+This repository contains no BYOND code or binaries. dmfast is not affiliated with or endorsed by BYOND in any way.
 
-dmfast is not affiliated with or endorsed by BYOND in any way.
+We offer no guarantees or warranty, but every release is checked against stock BYOND for identical output.
 
-We offer no guarantees or warranty, but every release is checked against stock BYOND on the supported builds for identical `.dmb` output. If something breaks, uninstall and [open an issue](https://github.com/blue-tarpaulin/dmfast/issues).
+If something breaks, please [open an issue](https://github.com/blue-tarpaulin/dmfast/issues).
