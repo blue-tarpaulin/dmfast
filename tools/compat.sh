@@ -3,8 +3,8 @@
 #
 # Installs dmfast (compiler and DreamDaemon) into a fresh copy of that BYOND build from byond-builds.dm-lang.org
 # and checks it against an untouched copy of the same build:
-#   - compiling <project.dme> and tests/rtsmoke.dme gives byte-identical .dmb files;
-#   - DreamDaemon running tests/rtsmoke.dmb logs the same result line;
+#   - compiling <project.dme> and tests/testworld.dme gives byte-identical .dmb files;
+#   - DreamDaemon running testworld logs the same result line;
 #   - in verify mode (DMFAST_VERIFY=1) no patch disagrees with the original code;
 #   - the project's world prints the same thing for 10 seconds after it loads (the part that two stock runs
 #     agree on) and is still running if stock is.
@@ -81,7 +81,7 @@ compile() {
   hash=$(sha256sum "${2%.dme}.dmb" | cut -c1-16)
 }
 
-# A project may refuse some BYOND builds itself (minimum/maximum version checks): then only rtsmoke runs.
+# A project may refuse some BYOND builds itself (minimum/maximum version checks): then only testworld runs.
 rc=0; compile "$work/stock" "$project" || rc=$?
 [ "$rc" != 124 ] || broken "$(basename "$project") compile timed out"
 if [ "$rc" = 0 ]; then
@@ -95,32 +95,35 @@ if [ "$rc" = 0 ]; then
   fi
   compiler=$(grep -E '^dmfast: ' "$work/out.txt" || true)
 else
-  echo "stock BYOND $version does not compile $(basename "$project"); testing rtsmoke only:"
+  echo "stock BYOND $version does not compile $(basename "$project"); testing testworld only:"
   grep -iE 'error' "$work/out.txt" | head -3 || true
   t_stock="n/a"; t_fast="n/a"
 fi
 
-rc=0; compile "$work/stock" "$root/tests/rtsmoke.dme" || rc=$?
-[ "$rc" != 124 ] || broken "rtsmoke compile timed out"
-[ "$rc" = 0 ] || broken "rtsmoke compile failed (exit $rc)"
+# testworld: ordinary DM work (datums, lists, math, text, json, regex, matrices, savefile) that logs one result
+# line; the same .dmb and line are expected from stock and dmfast. Copied so its outputs stay out of the repo.
+tw="$work/testworld"; mkdir -p "$tw"; cp "$root/tests/testworld.dme" "$tw/"
+rc=0; compile "$work/stock" "$tw/testworld.dme" || rc=$?
+[ "$rc" != 124 ] || broken "testworld compile timed out"
+[ "$rc" = 0 ] || broken "testworld compile failed (exit $rc)"
 s_stock=$hash
-compile "$work/fast/bin" "$root/tests/rtsmoke.dme" || { echo "::error::$version $os: dmfast rtsmoke compile failed"; cat "$work/out.txt"; exit 1; }
+compile "$work/fast/bin" "$tw/testworld.dme" || { echo "::error::$version $os: dmfast testworld compile failed"; cat "$work/out.txt"; exit 1; }
 s_fast=$hash
 [ -n "${compiler:-}" ] || compiler=$(grep -E '^dmfast: ' "$work/out.txt" || true)
-[ "$s_stock" = "$s_fast" ] || { echo "::error::$version $os: rtsmoke .dmb differs"; fail=1; }
+[ "$s_stock" = "$s_fast" ] || { echo "::error::$version $os: testworld .dmb differs"; fail=1; }
 
 # daemon <bin dir>: sets $dd_rc (DreamDaemon's exit code) and $dd_line (the world's result line, if any).
 daemon() {
-  local log="$root/tests/rtsmoke.log" env=(DMFAST_STATS=1)
+  local log="$tw/testworld.log" env=(DMFAST_STATS=1)
   [ "$os" = linux ] && env+=(LD_LIBRARY_PATH="$1")
   rm -f "$log"
   dd_rc=0
   # -ip 127.0.0.1: listen on loopback only, so Windows doesn't ask for a firewall rule for every fresh copy.
-  (cd "$root/tests" && env "${env[@]}" timeout 120 "$1/$dd" rtsmoke.dmb -trusted -invisible -logself -ip 127.0.0.1 >"$work/dd.txt" 2>&1) || dd_rc=$?
-  dd_line=$({ grep -h 'len=' "$log" 2>/dev/null || true; } | sed 's/^\[[^]]*\] *//' | tail -1)
+  (cd "$tw" && env "${env[@]}" timeout 120 "$1/$dd" testworld.dmb -trusted -invisible -logself -ip 127.0.0.1 >"$work/dd.txt" 2>&1) || dd_rc=$?
+  dd_line=$({ grep -h 'testworld ' "$log" 2>/dev/null || true; } | sed 's/^\[[^]]*\] *//' | tail -1)
 }
 daemon "$work/stock"; d_stock=$dd_line
-[ "$dd_rc" != 124 ] || broken "DreamDaemon timed out on rtsmoke"
+[ "$dd_rc" != 124 ] || broken "DreamDaemon timed out on testworld"
 daemon "$work/fast/bin"; d_fast=$dd_line; fast_rc=$dd_rc
 runtime=$(grep -E '^dmfast: ' "$work/dd.txt" || true)
 if [ -n "$d_stock" ]; then
@@ -133,8 +136,8 @@ else
 fi
 
 # Verify mode: every patch that has one also works out each answer the original way and counts
-# disagreements (DMFAST_STATS lines end in mismatches=N). Run on the project's compile, rtsmoke's compile
-# and rtsmoke in DreamDaemon; the .dmb files must still match stock.
+# disagreements (DMFAST_STATS lines end in mismatches=N). Run on the project's compile, testworld's compile
+# and testworld in DreamDaemon; the .dmb files must still match stock.
 vlog="$work/verify.txt"; : >"$vlog"
 export DMFAST_VERIFY=1
 limit=300 # verify mode works most answers out twice
@@ -146,11 +149,11 @@ if [ -n "${h_fast:-}" ]; then
     echo "::error::$version $os: $(basename "$project") verify-mode compile failed"; cat "$work/out.txt"; fail=1
   fi
 fi
-if compile "$work/fast/bin" "$root/tests/rtsmoke.dme"; then
+if compile "$work/fast/bin" "$tw/testworld.dme"; then
   cat "$work/out.txt" >>"$vlog"
-  [ "$hash" = "$s_stock" ] || { echo "::error::$version $os: rtsmoke .dmb differs in verify mode"; fail=1; }
+  [ "$hash" = "$s_stock" ] || { echo "::error::$version $os: testworld .dmb differs in verify mode"; fail=1; }
 else
-  echo "::error::$version $os: rtsmoke verify-mode compile failed"; cat "$work/out.txt"; fail=1
+  echo "::error::$version $os: testworld verify-mode compile failed"; cat "$work/out.txt"; fail=1
 fi
 daemon "$work/fast/bin"; cat "$work/dd.txt" >>"$vlog"
 unset DMFAST_VERIFY limit
@@ -190,7 +193,7 @@ load_secs() {
 median() { printf '%s\n' "$@" | { grep . || true; } | sort -g | awk '{v[NR]=$1} END{if (NR) printf "%ss", v[int((NR+1)/2)]}'; }
 l_stock=""; l_fast=""
 if [ -n "${h_fast:-}" ]; then
-  # Some builds' worlds never print anything (as with rtsmoke above): then there is nothing to time.
+  # Some builds' worlds never print anything (as with testworld above): then there is nothing to time.
   first=$(load_secs "$work/stock" "${project%.dme}.dmb")
   if [ -n "$first" ]; then
     ls=("$first"); lf=()
@@ -212,6 +215,9 @@ fi
 world_out() {
   local out="$work/world-raw.txt" pid alive=1 deadline end=""
   : >"$out"
+  # Every run is killed, which can cut a write to the world's .dyn.rsc short; the next run would then load
+  # that broken file and print BYOND's corruption errors. Each run starts without one.
+  rm -f "${2%.dmb}.dyn.rsc"
   if [ "$os" = linux ]; then
     (cd "$(dirname "$2")" && exec env LD_LIBRARY_PATH="$1" "$1/$dd" "$(basename "$2")" -trusted -invisible -ip 127.0.0.1) >"$out" 2>&1 &
   else
@@ -289,7 +295,7 @@ frc=0; bash "$root/tools/fixtest.sh" -s "$work/stock" "$work/fast/bin" >"$work/f
 cat "$work/fixes.txt"
 fixes=$(grep -E '^fixes: ' "$work/fixes.txt" | tail -1 | cut -c8- || true)
 [ "$frc" = 0 ] || { echo "::error::$version $os: a bug fix's test failed"; fixes="FAIL: ${fixes:-no result}"; fail=1; }
-disabled=$(printf '%s\n%s\n' "$compiler" "$runtime" | grep ' disabled: ' | sed 's/^dmfast: //; s/ disabled:.*//' | paste -sd, - || true)
+disabled=$(printf '%s\n%s\n' "$compiler" "$runtime" | grep '^dmfast: disabled ' | sed 's/^dmfast: disabled //; s/ - .*//' | paste -sd, - || true)
 mask() { printf '%s\n' "$1" | grep -oE 'patched=0x[0-9a-f]+' | tail -1 | cut -d= -f2; }
 real=$(run "$work/stock" "$dm" 2>&1 | grep -oE '[0-9]{3}\.[0-9]{4}' | head -1 || true)
 result=$([ $fail = 0 ] && echo pass || echo FAIL)

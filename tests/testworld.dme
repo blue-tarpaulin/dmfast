@@ -1,0 +1,146 @@
+// Compatibility test world (tools/compat.sh): ordinary DM work, deterministic, compiles on 515 and 516.
+// Logs one line, "testworld <md5> <counters>", then shuts down. Stock BYOND and dmfast must compile it to the
+// same .dmb and log the same line.
+
+/datum/shape
+	var/name = "shape"
+	var/sides = 0
+	var/list/tags
+
+/datum/shape/New(n)
+	..()
+	if(n)
+		name = n
+	tags = list()
+
+/datum/shape/proc/area(s)
+	return 0
+
+/datum/shape/proc/describe()
+	return "[name]:[sides]:[area(3)]"
+
+/datum/shape/square
+	sides = 4
+
+/datum/shape/square/area(s)
+	return s * s
+
+/datum/shape/triangle
+	sides = 3
+
+/datum/shape/triangle/area(s)
+	return round(sqrt(3) / 4 * s * s, 0.001)
+
+/datum/shape/triangle/describe()
+	return "tri([..()])"
+
+/proc/fib(n)
+	return n < 2 ? n : fib(n - 1) + fib(n - 2)
+
+/proc/insertion_sort(list/L)
+	for(var/i in 2 to length(L))
+		var/v = L[i]
+		var/j = i - 1
+		while(j >= 1 && L[j] > v)
+			L[j + 1] = L[j]
+			j--
+		L[j + 1] = v
+	return L
+
+/world/New()
+	var/list/out = list()
+	var/list/counts = list()
+
+	// datums, inheritance, overrides, vars
+	var/list/shapes = list()
+	for(var/i in 1 to 2000)
+		var/datum/shape/S = (i % 2) ? new /datum/shape/square("sq[i]") : new /datum/shape/triangle("tr[i]")
+		S.tags += "t[i % 7]"
+		shapes += S
+	var/sq = 0
+	for(var/datum/shape/S in shapes)
+		if(istype(S, /datum/shape/square))
+			sq++
+		if(S.sides == 3 && length(out) < 5)
+			out += S.describe()
+	out += "[shapes[1].vars["name"]]/[sq]/[length(shapes)]"
+	for(var/i in 1 to length(shapes) step 2)
+		qdel_shape(shapes[i])
+	shapes.RemoveAll(null)
+	counts["shapes"] = length(shapes)
+
+	// lists: add, find, cut, copy, insert, swap, sort
+	var/list/L = list()
+	for(var/i in 1 to 5000)
+		L += (i * 7919) % 10007
+	var/list/C = L.Copy(100, 300)
+	C.Insert(1, -1, -2)
+	C.Swap(1, 3)
+	insertion_sort(C)
+	out += "[L.Find(4321)]/[C[1]]/[C[length(C)]]/[length(C)]"
+	L.Cut(1, 2501)
+	counts["list"] = length(L)
+
+	// associative lists
+	var/list/A = list()
+	for(var/i in 1 to 3000)
+		A["k[i % 997]"] += i
+	var/sum = 0
+	for(var/k in A)
+		sum += A[k]
+	A -= "k5"
+	out += "[length(A)]/[sum]/[A["k42"]]/[("k5" in A)]"
+	counts["assoc"] = length(A)
+
+	// math
+	var/acc = 0
+	for(var/i in 1 to 1000)
+		acc += (i ** 2) % 97 + (i & 255) + (i | 3) - (i >> 2) + round(sin(i) * 1000) + max(i, 500) - min(i, 500)
+	out += "[acc]/[fib(18)]/[round(1e6 / 7, 0.01)]/[num2text(123456789, 12)]/[clamp(150, 0, 100)]"
+
+	// text basics
+	var/t = "The quick brown fox jumps over the lazy dog"
+	var/list/words = splittext(t, " ")
+	out += "[length(words)]/[uppertext(words[2])]/[findtext(t, "fox")]/[copytext(t, 5, 10)]/[replacetext(t, "o", "0")]"
+	out += jointext(words, "-")
+
+	// json round trip
+	var/list/J = list("a" = 1, "b" = list(1, 2, 3), "c" = "str", "d" = list("x" = 0.5))
+	var/list/J2 = json_decode(json_encode(J))
+	out += "[json_encode(J2)]/[J2["b"][3]]"
+
+	// regex
+	var/regex/R = new("(\\w+)@(\\w+)\\.com", "g")
+	var/mail = "a@b.com, cat@dog.com, x@y.org, me@you.com"
+	var/found = 0
+	while(R.Find(mail))
+		found++
+		out += "[R.group[1]]+[R.group[2]]"
+	counts["regex"] = found
+
+	// matrices
+	var/matrix/M = matrix()
+	M.Scale(2, 3)
+	M.Turn(90)
+	M.Translate(5, -5)
+	out += "[round(M.a, 0.001)] [round(M.b, 0.001)] [round(M.c, 0.001)] [round(M.d, 0.001)] [round(M.e, 0.001)] [round(M.f, 0.001)]"
+
+	// savefile in memory
+	var/savefile/F = new
+	F["list"] << list(1, "two", 3)
+	F["num"] << 42
+	var/list/back
+	var/n
+	F["list"] >> back
+	F["num"] >> n
+	out += "[n]/[length(back)]/[back[2]]"
+
+	var/list/kv = list()
+	for(var/k in counts)
+		kv += "[k]=[counts[k]]"
+	world.log << "testworld [md5(jointext(out, "\n"))] [jointext(kv, " ")]"
+	shutdown()
+
+/proc/qdel_shape(datum/shape/S)
+	S.tags.Cut()
+	del S
