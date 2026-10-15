@@ -1,0 +1,9 @@
+start: ok
+1;0: a
+1;1;0 sample ok: 1
+5;0;0: a
+0;1: b
+1;1;0 over 400: ["a","b"]
+0;1;1;0 over 400: ["b","c"]
+1;1;1;0 over 400: ["a","b","c"]
+3;1 a is about 3x b: 1

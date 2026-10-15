@@ -1,0 +1,67 @@
+// null / 0 is 0 instead of a runtime error (forum report 2947411); with the fix it is "Division by zero" like 0 / 0.
+/proc/show(label, value)
+	world.log << "[label]: [value]"
+
+/proc/nul()
+	return null
+
+/proc/zero()
+	return 0
+
+/proc/one()
+	return 1
+
+/proc/word()
+	return "a"
+
+/proc/divide(label, a, b)
+	try
+		show(label, a / b)
+	catch(var/exception/e)
+		show(label, "error: [e]")
+
+/world/New()
+	divide("null/0", nul(), zero())
+	divide("null/null", nul(), nul())
+	divide("null/1", nul(), one())
+	divide("null/text", nul(), word())
+	divide("0/0", zero(), zero())
+	divide("1/0", one(), zero())
+	divide("0/1", zero(), one())
+	divide("1/null", one(), nul())
+	divide("1/1", one(), one())
+	var/x
+	var/y = 0
+	try
+		show("uninitialised var", x / y)
+	catch(var/exception/e2)
+		show("uninitialised var", "error: [e2]")
+	var/list/l = list(null, 0)
+	try
+		show("list elements", l[1] / l[2])
+	catch(var/exception/e3)
+		show("list elements", "error: [e3]")
+	try
+		x /= y
+		show("x /= 0", x)
+	catch(var/exception/e4)
+		show("x /= 0", "error: [e4]")
+	// Other operators with null on the left share BYOND's "result is 0" code with `/`; they must not change.
+	other("null&null", nul(), nul(), "&")
+	other("null&0", nul(), zero(), "&")
+	other("null*0", nul(), zero(), "*")
+	other("null<<null", nul(), nul(), "<<")
+	other("null>>0", nul(), zero(), ">>")
+	other("null-null", nul(), nul(), "-")
+	shutdown()
+
+/proc/other(label, a, b, op)
+	try
+		switch(op)
+			if("&") show(label, a & b)
+			if("*") show(label, a * b)
+			if("<<") show(label, a << b)
+			if(">>") show(label, a >> b)
+			if("-") show(label, a - b)
+	catch(var/exception/e)
+		show(label, "error: [e]")

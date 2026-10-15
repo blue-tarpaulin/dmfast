@@ -1,0 +1,17 @@
+// url_encode() and list2params() encode "\n" as %0d%0a (forum report 2989601); with the fix it is %0a.
+/proc/show(label, value)
+	world.log << "[label]: [value]"
+
+/world/New()
+	var/cr = ascii2text(13)
+	var/lf = ascii2text(10)
+	show("lf", url_encode("a\nb"))
+	show("crlf", url_encode("a[cr][lf]b"))
+	show("cr", url_encode("a[cr]b"))
+	show("lflf", url_encode("a\n\nb"))
+	show("edge", url_encode("\nx\n"))
+	show("space", url_encode("a b\nc d"))
+	show("list2params", list2params(list("k" = "a\nb", "j" = "x[cr][lf]y")))
+	show("roundtrip", url_decode(url_encode("a\nb")) == "a\nb")
+	show("lf only", url_decode(url_encode("a[lf]b")) == "a[lf]b")
+	shutdown()

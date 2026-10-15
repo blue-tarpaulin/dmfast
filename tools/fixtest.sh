@@ -6,14 +6,14 @@
 # is compiled and run (DreamDaemon) with:
 #   - stock BYOND: must NOT give the expected output (the test reproduces the bug);
 #   - dmfast with DMFAST_FIXES=<key>: must give it;
-#   - dmfast with DMFAST_FIXES=all: must give it too (no fix breaks another).
+#   - dmfast with DMFAST_FIXES=breaking (every fix): must give it too (no fix breaks another).
 # A world's output is: the compiler's error and warning lines (prefixed "dm: "), "dm: no .dmb" if it
 # didn't compile, then everything the world logged after BYOND's banner (world.log, runtime errors)
 # except blank lines, dmfast's lines and what BYOND prints once a world is up (its web client address and
 # the date), then "dd: exit N" or "dd: timed out" unless DreamDaemon exited cleanly within 60 s. The
 # world should log its results and call shutdown().
 #
-# <dmfast bin dir> has dmfast installed with --runtime. The stock programs are taken from <stock bin dir>,
+# <dmfast bin dir> has dmfast installed (with DreamDaemon, the default). The stock programs are taken from <stock bin dir>,
 # or else the stock binaries the installer kept in <dmfast bin dir> (dm_orig.exe, DreamMaker_orig, ...).
 # With no keys, every test in tests/fixes runs. A fix that didn't install in this BYOND build (its code
 # didn't match) is reported as n/a, not as a failure; so is a build whose worlds print nothing at all, and
@@ -49,6 +49,7 @@ out() {
   [ "$os" = linux ] && env+=(LD_LIBRARY_PATH="$bin")
   rm -rf "$t"; mkdir -p "$t"; cp "$tests/$key".* "$t/"; rm -f "$t/$key.expected"
   for f in "$tests/$key"-*; do if [ -e "$f" ]; then cp -r "$f" "$t/"; fi; done
+  if [ -f "$t/$key-gen.sh" ]; then (cd "$t" && bash "./$key-gen.sh"); fi
   (cd "$t" && env "${env[@]}" timeout 120 "$bin/$prog_dm" "$key.dme") >"$work/dm.txt" 2>&1 || true
   {
     tr -d '\r' <"$work/dm.txt" | { grep -v '^dmfast' || true; } | { grep -E '(error|warning):' || true; } | sed 's/^/dm: /'
@@ -86,12 +87,12 @@ for key in "${keys[@]}"; do
       echo "::error::fix $key: the test didn't compile with DMFAST_FIXES=$key:"; cat "$work/fixed.txt"
       failed=$((failed + 1)); result+=("$key FAIL"); continue
     fi
-    why=$(grep -E "^dmfast: fix $key .*disabled: " "$work/fixed.txt.dmfast" | head -1 | sed 's/.*disabled: //' || true)
+    why=$(grep -E "^dmfast: disabled fix $key - " "$work/fixed.txt.dmfast" | head -1 | sed "s/^dmfast: disabled fix $key - //" || true)
     echo "fix $key: n/a (didn't install${why:+: $why})"
     na=$((na + 1)); result+=("$key n/a"); continue
   fi
   out "$stock" "$sdm" "$sdd" "" "$key" "$work/stock.txt"
-  out "$fast" "$dm" "$dd" all "$key" "$work/all.txt"
+  out "$fast" "$dm" "$dd" breaking "$key" "$work/all.txt"
   if [ ! -f "$tests/$key.expected" ]; then
     echo "::error::fix $key: no tests/fixes/$key.expected. Stock gave:"; cat "$work/stock.txt"
     echo "With the fix:"; cat "$work/fixed.txt"
@@ -105,7 +106,7 @@ for key in "${keys[@]}"; do
   fi
   for run in fixed all; do
     if ! cmp -s "$work/expected.txt" "$work/$run.txt"; then
-      echo "::error::fix $key: wrong output with DMFAST_FIXES=$([ $run = fixed ] && echo "$key" || echo all) (< expected, > got):"
+      echo "::error::fix $key: wrong output with DMFAST_FIXES=$([ $run = fixed ] && echo "$key" || echo breaking) (< expected, > got):"
       diff "$work/expected.txt" "$work/$run.txt" | head -20 || true
       bad=1
     fi

@@ -1,0 +1,17 @@
+// Forum report 2924945: initial() on a value that has no vars (text, number) must raise a runtime error like a plain read.
+/world/New()
+	..()
+	var/obj/o = new
+	var/obj/a = "Test String"
+	var/n = 5
+	world.log << "datum: [initial(o.name)] [isnull(initial(o.loc))] [initial(o.density)]"
+	try
+		world.log << "text: [isnull(initial(a.loc))]"
+	catch(var/e1)
+		world.log << "text: error"
+	try
+		world.log << "num: [isnull(initial(n:loc))]"
+	catch(var/e2)
+		world.log << "num: error"
+	world.log << "done"
+	shutdown()

@@ -1,0 +1,14 @@
+// Forum report 2964093: icon.MapColors with 16 arguments (no r0,g0,b0,a0 offset row) must work like with 20.
+/world/New()
+	..()
+	var/icon/a = icon('mapcolors.png')
+	var/icon/b = icon('mapcolors.png')
+	// red -> blue by swapping rows: rr,rg,rb,ra, gr,gg,gb,ga, br,bg,bb,ba, ar,ag,ab,aa
+	try
+		a.MapColors(0,0,1,0, 0,1,0,0, 1,0,0,0, 0,0,0,1)
+		world.log << "16 args: [a.GetPixel(1,1)]"
+	catch(var/e)
+		world.log << "16 args: error"
+	b.MapColors(0,0,1,0, 0,1,0,0, 1,0,0,0, 0,0,0,1, 0,0,0,0)
+	world.log << "20 args: [b.GetPixel(1,1)]"
+	shutdown()

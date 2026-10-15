@@ -1,0 +1,14 @@
+// Forum report 2968158: /world/Tick is not called until the second game tick (world.time 1).
+/world/Tick()
+	world.log << "Tick [world.time]"
+
+/world/New()
+	world.log << "New [world.time]"
+	..()
+	spawn(0)
+		world.log << "spawn0 [world.time]"
+	spawn(1)
+		world.log << "spawn1 [world.time]"
+	spawn(3)
+		world.log << "shutdown [world.time]"
+		shutdown()

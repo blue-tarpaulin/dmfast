@@ -1,0 +1,10 @@
+cyrillic: {"string":"Привет, Мир!"}
+latin: "café"
+emoji: "a😀b"
+cjk: {"日本語":null,"ключ":"значение"}
+ascii: "plain \"quoted\" back\\slash\ttab\nnl"
+quote+emoji: "say \"😀 é\" \\ 𝄞"
+slash: "a/b'c"
+mixed: {"é":["ü",1,null],"n":2}
+roundtrip: 1
+decode escaped: 1
