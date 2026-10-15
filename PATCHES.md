@@ -51,4 +51,4 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 | Icon state name compare | `dmicmp` | Windows | ~2% | Table-based .dmi icon state name compare |
 | CRC-32 | `crc` | both | <1% | Checksums eight bytes per step |
 
-How BYOND itself could fix each of these: [FIXES.md](FIXES.md).
+How BYOND itself could fix each of these: [PATCH-FIXES.md](PATCH-FIXES.md).
