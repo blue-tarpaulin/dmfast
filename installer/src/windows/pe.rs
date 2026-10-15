@@ -41,13 +41,6 @@ pub fn canary(data: &[u8]) -> Option<String> {
     Some(String::from_utf8_lossy(&bytes[..end]).into_owned())
 }
 
-/// Whether the image exports `name`.
-pub fn exports(data: &[u8], name: &[u8]) -> bool {
-    let Ok(pe) = parse(data) else { return false };
-    let Ok(Some(table)) = pe.export_table() else { return false };
-    table.exports().is_ok_and(|all| all.into_iter().any(|e| e.name == Some(name)))
-}
-
 fn u16_at(d: &[u8], o: usize) -> u16 {
     u16::from_le_bytes(d[o..o + 2].try_into().unwrap())
 }
