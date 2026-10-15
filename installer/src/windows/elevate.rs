@@ -10,14 +10,14 @@ use windows_sys::Win32::System::Threading::{INFINITE, WaitForSingleObject};
 use windows_sys::Win32::UI::Shell::{SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW};
 use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
-fn wide(s: &OsStr) -> Vec<u16> {
+pub fn wide(s: &OsStr) -> Vec<u16> {
     s.encode_wide().chain([0]).collect()
 }
 
-/// Re-run this exe as admin with the same arguments (+ `--elevated`) and wait for it.
-pub fn relaunch_elevated() -> bool {
+/// Re-run this exe as admin with `args` (+ `--elevated`) and wait for it.
+pub fn relaunch_elevated(args: &[String]) -> bool {
     let exe = std::env::current_exe().unwrap();
-    let mut params: Vec<String> = std::env::args().skip(1).map(|a| format!("\"{a}\"")).collect();
+    let mut params: Vec<String> = args.iter().map(|a| format!("\"{a}\"")).collect();
     params.push("--elevated".into());
     let (exe_w, params_w, verb) = (wide(exe.as_os_str()), wide(OsStr::new(&params.join(" "))), wide(OsStr::new("runas")));
     unsafe {
@@ -39,7 +39,7 @@ pub fn relaunch_elevated() -> bool {
 
 /// True when this process has a console window to itself (double-click, drag-drop, elevated relaunch),
 /// which would close before the output can be read. Not when run from a terminal.
-fn own_console() -> bool {
+pub fn own_console() -> bool {
     let mut pids = [0u32; 2];
     unsafe { GetConsoleProcessList(pids.as_mut_ptr(), pids.len() as u32) == 1 }
 }

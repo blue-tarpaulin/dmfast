@@ -1,106 +1,28 @@
 //! dmfast-install: installs dmfast into a BYOND `bin` folder.
 //!
-//! Windows: drag `dm.exe` (or the bin folder) onto this exe; see `windows`. Linux: run it on the bin
-//! folder that holds `DreamMaker`; see `linux`. Running it again updates dmfast; after a BYOND update it
-//! picks up the new compiler. `--uninstall` puts the original back.
+//! Windows: double-click for a guided install, or drag `dm.exe` (or the bin folder) onto this exe; see
+//! `windows`. Linux: run it on the BYOND or bin folder, or with no arguments in a terminal for a guided
+//! install; see `linux`. Running it again updates dmfast; after a BYOND update it picks up the new
+//! compiler. `--uninstall` puts the original back.
 
+mod args;
 mod files;
+mod fixes;
+mod guided;
+mod help;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(windows)]
 mod windows;
 
-use std::path::PathBuf;
-
+use args::{Action, Opts};
 use files::Failure;
 #[cfg(target_os = "linux")]
 use linux as platform;
 #[cfg(windows)]
 use windows as platform;
 
-const VERSION: &str = concat!(
-    "dmfast ",
-    env!("CARGO_PKG_VERSION"),
-    " - Greytide Worldwide 2026\n\nBundles mimalloc (https://github.com/microsoft/mimalloc),\n\
-     MIT License, Copyright (c) 2018-2026 Microsoft Corporation, Daan Leijen."
-);
-
-struct Opts {
-    target: Option<PathBuf>,
-    uninstall: bool,
-    /// Also patch DreamDaemon (the default; `--no-runtime` turns it off).
-    runtime: bool,
-    /// Windows: this is the relaunched admin copy.
-    #[cfg(windows)]
-    elevated: bool,
-}
-
-#[cfg(windows)]
-const HELP: &str = concat!(
-    "dmfast ",
-    env!("CARGO_PKG_VERSION"),
-    r#": Robusts BYOND's toolchain - Greytide Worldwide 2026
-
-dmfast-install [options] <BYOND bin folder or dm.exe>
-  options:
-     --uninstall        remove dmfast (restores the original programs)
-     --no-runtime       leave DreamDaemon stock (only speed up the compiler)
-     --version          show version and licenses
-     -h, --help         view this help
-
-  examples:
-     dmfast-install "C:\Program Files (x86)\BYOND\bin"
-     dmfast-install --no-runtime "C:\Program Files (x86)\BYOND\bin"
-     dmfast-install --uninstall "C:\Program Files (x86)\BYOND\bin"
-
-Close BYOND first. You can also drag dm.exe or the bin folder onto dmfast-install.exe.
-Re-run the install after a BYOND update. Installing with --no-runtime puts back stock DreamDaemon."#
-);
-#[cfg(not(windows))]
-const HELP: &str = concat!(
-    "dmfast ",
-    env!("CARGO_PKG_VERSION"),
-    r#": Robusts BYOND's toolchain - Greytide Worldwide 2026
-
-dmfast-install [options] <BYOND bin folder or DreamMaker>
-  options:
-     --uninstall        remove dmfast (restores the original programs)
-     --no-runtime       leave DreamDaemon stock (only speed up the compiler)
-     --version          show version and licenses
-     -h, --help         view this help
-
-  examples:
-     dmfast-install ~/byond/bin
-     sudo dmfast-install /usr/local/byond/bin
-     dmfast-install --uninstall ~/byond/bin
-
-DreamMaker and DreamDaemon become small scripts that preload dmfast. Re-run the install after a
-BYOND update. Installing with --no-runtime puts back stock DreamDaemon."#
-);
-
-/// None: show help.
-fn parse_args() -> Option<Opts> {
-    let mut o = Opts {
-        target: None,
-        uninstall: false,
-        runtime: true,
-        #[cfg(windows)]
-        elevated: false,
-    };
-    for a in std::env::args().skip(1) {
-        match a.as_str() {
-            "--uninstall" => o.uninstall = true,
-            "--no-runtime" => o.runtime = false,
-            // Needed before DreamDaemon was on by default; still accepted so existing scripts keep working.
-            "--runtime" => o.runtime = true,
-            #[cfg(windows)]
-            "--elevated" => o.elevated = true,
-            "-h" | "--help" | "/?" => return None,
-            _ => o.target = Some(PathBuf::from(a)),
-        }
-    }
-    o.target.is_some().then_some(o)
-}
+use std::ffi::OsString;
 
 /// Keep a double-clicked / drag-dropped console window open until the result is read.
 fn pause() {
@@ -108,20 +30,81 @@ fn pause() {
     platform::pause_if_own_console();
 }
 
-fn main() {
-    if std::env::args().skip(1).any(|a| a == "--version" || a == "-V") {
-        println!("{VERSION}");
-        return;
+/// No arguments and someone at the keyboard: a double-clicked console on Windows, a terminal on Linux.
+fn interactive() -> bool {
+    use std::io::IsTerminal;
+    #[cfg(windows)]
+    let launched_alone = platform::own_console();
+    #[cfg(not(windows))]
+    let launched_alone = true;
+    launched_alone && std::io::stdin().is_terminal()
+}
+
+/// Installs or uninstalls as `o` says; the message to print.
+fn run(o: &Opts) -> Result<String, Failure> {
+    if let Some(spec) = &o.fixes {
+        fixes::check(spec)?;
     }
-    let Some(o) = parse_args() else {
-        println!("{HELP}");
-        pause();
-        return;
+    let d = platform::bin_dir(&o.target)?;
+    if o.uninstall {
+        // Only remove the settings file when dmfast was actually there: it may be the user's own.
+        return Ok(match platform::uninstall(&d)? {
+            Some(msg) => {
+                fixes::remove(&d)?;
+                msg
+            }
+            None => format!("dmfast is not installed in {}", d.display()),
+        });
+    }
+    // Settings first: on its own the file changes nothing, and a failure here leaves BYOND untouched.
+    let fixes = match &o.fixes {
+        Some(spec) => fixes::set(&d, spec)?,
+        None => fixes::describe(&d)?,
     };
-    let target = o.target.as_deref().unwrap();
-    let result = platform::bin_dir(target)
-        .and_then(|d| if o.uninstall { platform::uninstall(&d) } else { platform::install(&d, o.runtime) });
-    let code = match result {
+    let msg = platform::install(&d, o.runtime)?;
+    Ok(format!("{msg}\n{fixes}"))
+}
+
+fn main() {
+    let mut argv: Vec<OsString> = std::env::args_os().skip(1).collect();
+    if argv.is_empty() {
+        if !interactive() {
+            println!("{}", help::HELP);
+            pause();
+            return;
+        }
+        match guided::run() {
+            Some(a) => argv = a.into_iter().map(OsString::from).collect(),
+            None => {
+                println!("cancelled");
+                pause();
+                return;
+            }
+        }
+    }
+    let o = match args::parse(&argv) {
+        Action::Run(o) => o,
+        Action::Version => {
+            println!("{}", help::VERSION);
+            return;
+        }
+        Action::Help => {
+            println!("{}", help::HELP);
+            pause();
+            return;
+        }
+        Action::BugFixes => {
+            print!("{}", help::BUGFIXES);
+            pause();
+            return;
+        }
+        Action::Error(msg) => {
+            eprintln!("error: {msg}");
+            pause();
+            std::process::exit(1);
+        }
+    };
+    let code = match run(&o) {
         Ok(msg) => {
             println!("{msg}");
             0
@@ -129,7 +112,9 @@ fn main() {
         #[cfg(windows)]
         Err(Failure::Denied(msg)) if !o.elevated => {
             println!("{msg}\nasking for admin rights...");
-            if platform::relaunch_elevated() {
+            // The guided answers are in `argv`, so the admin copy doesn't ask again.
+            let argv: Vec<String> = argv.iter().map(|a| a.to_string_lossy().into_owned()).collect();
+            if platform::relaunch_elevated(&argv) {
                 return; // the elevated copy reports (and pauses) itself
             }
             println!("could not get admin rights");

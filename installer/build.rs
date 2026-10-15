@@ -22,6 +22,7 @@ fn main() {
     let lib = build_x86(&root, &target_dir, triple, "dmfast", file);
     println!("cargo:rustc-env=DMFAST_LIB={}", lib.display());
     println!("cargo:rerun-if-changed={}", root.join("patches").display());
+    write_bugfix_list(&root);
     if !windows {
         check_glibc(&lib);
         return;
@@ -52,6 +53,42 @@ fn build_x86(root: &std::path::Path, target_dir: &std::path::Path, triple: &str,
         .unwrap_or_else(|e| panic!("failed to run cargo for {package}: {e}"));
     assert!(status.success(), "building {file} failed");
     target_dir.join(triple).join("release").join(file)
+}
+
+/// `--help bugfixes`: the fix tables of BUGFIXES.md (name, key, tier, OS), written to
+/// `$OUT_DIR/bugfixes.txt` so the list can't drift from the document.
+fn write_bugfix_list(root: &std::path::Path) {
+    let doc = root.join("BUGFIXES.md");
+    println!("cargo:rerun-if-changed={}", doc.display());
+    let text = std::fs::read_to_string(&doc).expect("reading BUGFIXES.md");
+    let mut out = String::new();
+    let mut section = None;
+    let mut tier_now = String::new();
+    for line in text.lines() {
+        if let Some(h) = line.strip_prefix("## ") {
+            section = Some(h.split(" (").next().unwrap_or(h).to_string());
+            tier_now.clear();
+            continue;
+        }
+        let Some(name) = &section else { continue };
+        let cells: Vec<String> = line.split('|').map(|c| c.trim().replace('`', "")).collect();
+        // "| Fix | Key | Tier | OS | ..." rows; skip the header and the |---| separator.
+        if cells.len() < 6 || cells[1] == "Fix" || cells[1].starts_with('-') {
+            continue;
+        }
+        let (fix, key, tier, os) = (&cells[1], &cells[2], &cells[3], &cells[4]);
+        if tier_now.is_empty() {
+            out.push_str(&format!("\n{name}\n"));
+        }
+        if *tier != tier_now {
+            out.push_str(&format!("  -------- {tier} --------\n"));
+            tier_now = tier.clone();
+        }
+        let os = if os == "Both" { String::new() } else { format!(" ({os} only)") };
+        out.push_str(&format!("  {key:<12}{fix}{os}\n"));
+    }
+    assert!(out.contains("contline"), "no fix rows found in BUGFIXES.md");
+    std::fs::write(PathBuf::from(env::var("OUT_DIR").unwrap()).join("bugfixes.txt"), out).unwrap();
 }
 
 /// Runs as the invoking user (it relaunches itself elevated only when the target needs it). `{version}`
