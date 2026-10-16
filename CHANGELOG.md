@@ -1,6 +1,10 @@
 # Changelog
 
-Write changes under `## Unreleased`. Before tagging a release, rename that heading to the version; the release notes include that section's text as is.
+Write changes under `## 6.0.1`. Before tagging a release, rename that heading to the version; the release notes include that section's text as is.
+
+## 6.0.1
+
+- `num2sig` moves from the `safe` tier to `breaking`: with `num2text(N, 100)`, which codebases use to print ids exactly, it produces 100-digit strings.
 
 ## 6.0.0
 
