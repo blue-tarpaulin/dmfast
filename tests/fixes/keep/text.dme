@@ -1,0 +1,25 @@
+// Text/number formatting SS13 codebases rely on must match stock under the safe and extended tiers:
+// num2text ids (timer ids use num2text(id, 100), stickybans num2text(num, 14)), json_encode of ASCII
+// payloads and its round trip, list2params/params2list round trips, url_encode.
+/proc/show(label, value)
+	world.log << "[label]: [value]"
+
+/world/New()
+	..()
+	show("num2text(id,100)", num2text(123456, 100))
+	show("num2text(x,10)", num2text(3.25, 10))
+	show("num2text(n,3,10)", num2text(7, 3, 10))
+	show("num2text(n,14)", num2text(1234567890, 14))
+	show("num2text(n)", num2text(1.5))
+	show("interp", "[10] [1.5] [8321499137] [2**33]")
+	var/list/payload = list("name" = "Space Station 13", "n" = 1.5, "nested" = list("ok" = TRUE, "null" = null), "esc" = "quote\" back\\ nl\n tab\t")
+	show("json ascii", json_encode(payload))
+	show("json roundtrip", json_encode(json_decode(json_encode(payload))) == json_encode(payload))
+	var/u = "caf\u00e9 \u2603"
+	show("json utf8 roundtrip", json_decode(json_encode(u)) == u)
+	var/list/p = list("src" = "\ref[src]", "msg" = "line1\nline2", "k" = "a b&c=d")
+	var/list/back = params2list(list2params(p))
+	show("params roundtrip", "[back["msg"] == p["msg"]] [back["k"] == p["k"]] [back["src"] == p["src"]]")
+	show("url_encode", url_encode("a b&c=d/e?f"))
+	show("url_decode", url_decode("a+b%26c%3dd"))
+	shutdown()

@@ -1,0 +1,23 @@
+// pick() forms common in SS13 codebases must keep their stock behaviour under the safe and extended tiers
+// (pickweight changes only a trailing constant 0 *weight*; "weight;value" with a 0 value is unrelated).
+/proc/show(label, value)
+	world.log << "[label]: [value]"
+
+/world/New()
+	..()
+	var/list/seen = list()
+	for(var/i in 1 to 3000)
+		seen["[pick(1;15, 2;14, 3;11, 6;2, 6;1, 6;0)]"] = 1   // last entry is weight 6, value 0
+	show("value 0 picked", seen["0"] ? "yes" : "no")
+	show("distinct", seen.len)
+	seen = list()
+	for(var/i in 1 to 3000)
+		seen["[pick(3;0, 2;1, 1;2)]"] = 1   // value 0 with the largest weight
+	show("3;0 2;1 1;2", "[seen["0"]][seen["1"]][seen["2"]]")
+	seen = list()
+	for(var/i in 1 to 3000)
+		seen["[pick(10;"a", 0;"b", 5;"c")]"] = 1   // middle zero weight: never picked on stock either
+	show("middle 0 weight", "a=[seen["a"]] b=[seen["b"]] c=[seen["c"]]")
+	show("plain", pick("x"))
+	show("list", pick(list("y")))
+	shutdown()

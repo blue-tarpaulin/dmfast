@@ -19,6 +19,11 @@
 # didn't match) is reported as n/a, not as a failure; so is a build whose worlds print nothing at all, and
 # stock already giving the expected output (BYOND fixed the bug itself), with a warning. Ends with a line
 # "fixes: <summary>"; exits non-zero if any test failed.
+#
+# tests/fixes/keep/<name>.dme are regression worlds: code that must behave as on stock BYOND with a fix tier
+# on (patterns real codebases use that a fix could reach). Each runs on stock and with DMFAST_FIXES=safe and
+# =extended; the three outputs must be identical (stock is the oracle, there is no .expected). They run with
+# no keys or with the key "keep", after the fix tests, and count as one result each in the summary.
 set -euo pipefail
 
 stock=""
@@ -37,9 +42,15 @@ esac
 if [ -n "$stock" ]; then stock=$(cd "$stock" && pwd); sdm=$dm; sdd=$dd; else stock=$fast; fi
 native() { if [ "$os" = windows ]; then cygpath -w "$1"; else printf '%s\n' "$1"; fi; }
 
-if [ $# -gt 0 ]; then keys=("$@")
-else keys=(); for f in "$tests"/*.dme; do [ -e "$f" ] && keys+=("$(basename "$f" .dme)"); done; fi
-if [ ${#keys[@]} = 0 ]; then echo "fixes: none"; exit 0; fi
+keep=0
+if [ $# -gt 0 ]; then
+  keys=()
+  for k in "$@"; do if [ "$k" = keep ]; then keep=1; else keys+=("$k"); fi; done
+else
+  keep=1
+  keys=(); for f in "$tests"/*.dme; do [ -e "$f" ] && keys+=("$(basename "$f" .dme)"); done
+fi
+if [ ${#keys[@]} = 0 ] && [ $keep = 0 ]; then echo "fixes: none"; exit 0; fi
 
 # out <bin dir> <dm> <dd> <fixes> <key> <file>: compiles and runs tests/fixes/<key>.dme in $work/t with
 # DMFAST_FIXES=<fixes> and writes its output (see above) to <file>, dmfast's own lines to <file>.dmfast.
@@ -119,6 +130,32 @@ for key in "${keys[@]}"; do
   echo "fix $key: pass"
   pass=$((pass + 1)); result+=("$key ok")
 done
+
+# Regression worlds: stock, safe and extended must agree.
+if [ $keep = 1 ] && [ -d "$real_tests/keep" ]; then
+  for f in "$real_tests"/keep/*.dme; do
+    [ -e "$f" ] || continue
+    name=$(basename "$f" .dme); tests="$real_tests/keep"
+    out "$stock" "$sdm" "$sdd" "" "$name" "$work/k-stock.txt"
+    bad=0
+    for tier in safe extended; do
+      out "$fast" "$dm" "$dd" "$tier" "$name" "$work/k-$tier.txt"
+      if ! cmp -s "$work/k-stock.txt" "$work/k-$tier.txt"; then
+        echo "::error::keep $name: output differs from stock with DMFAST_FIXES=$tier (< stock, > $tier):"
+        diff "$work/k-stock.txt" "$work/k-$tier.txt" | head -20 || true
+        bad=1
+      fi
+    done
+    tests=$real_tests
+    if [ $bad = 1 ]; then failed=$((failed + 1)); result+=("keep/$name FAIL"); continue; fi
+    if [ ! -s "$work/k-stock.txt" ]; then
+      if [ "$silent" = 1 ]; then na=$((na + 1)); result+=("keep/$name n/a"); continue; fi
+      echo "::error::keep $name: the world printed nothing"; failed=$((failed + 1)); result+=("keep/$name FAIL"); continue
+    fi
+    echo "keep $name: same as stock"
+    pass=$((pass + 1)); result+=("keep/$name ok")
+  done
+fi
 
 summary="$pass pass"
 [ $failed = 0 ] || summary+=", $failed FAIL"
