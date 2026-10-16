@@ -95,8 +95,8 @@ jobs:
           if-no-files-found: error
 
   # The packed installer against a spread of BYOND builds from byond-builds.dm-lang.org, on both OSes:
-  # each must install, compile tgstation and tests/testworld.dme to the same .dmb as stock, run testworld the
-  # same in DreamDaemon, and print the same from tgstation's world for 10 s after it loads. Patches that don't
+  # each must install, compile tgstation to the same .dmb as stock, pass verify mode, the bug fix tests and
+  # the DM test suite, and print the same from tgstation's world for 10 s after it loads. Patches that don't
   # match a build disable themselves; the report lists which.
   compat:
     needs: pack
@@ -111,6 +111,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       TG_COMMIT: 1568dbe1daeba67dc20939c6307d07522967e89c
+      COMPAT_WORK: ${{ github.workspace }}/compat-work
     steps:
       - uses: actions/checkout@v7
       - name: Fetch the DM test suite
@@ -160,18 +161,45 @@ jobs:
           fi
           cp rust_g/librust_g.so tgstation/librust_g.so
           ldd tgstation/librust_g.so | grep 'not found' && exit 1 || true
-      - name: Test
+      # compat.py runs as one phase per step 
+      # A phase that still hangs is cut at 10 minutes and the build skipped.
+      - name: DM test suite commit
+        id: suite
         shell: bash
-        # Each BYOND program has its own time limit in compat.sh (a stock build that hangs is skipped as
-        # broken). This catches anything else that hangs: past 20 minutes the build is skipped with a warning.
+        run: echo "sha=$(git -C tests/dm-test-suite rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Stock verdicts of the DM test suite (cache)
+        uses: actions/cache@v6
+        with:
+          path: suite-cache
+          key: suite-${{ runner.os }}-${{ matrix.byond }}-${{ steps.suite.outputs.sha }}
+      - name: Install BYOND ${{ matrix.byond }} and dmfast
+        shell: bash
+        run: COMPAT_PHASE=setup python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme
+      - name: Compile tgstation
+        shell: bash
+        run: COMPAT_PHASE=project timeout 10m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout; exit 0; }; exit $rc; }
+      - name: Verify mode
+        shell: bash
+        run: COMPAT_PHASE=verify timeout 10m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout; exit 0; }; exit $rc; }
+      - name: World load time
+        shell: bash
+        run: COMPAT_PHASE=load timeout 10m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout; exit 0; }; exit $rc; }
+      - name: World output
+        shell: bash
+        run: COMPAT_PHASE=world timeout 10m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout; exit 0; }; exit $rc; }
+      - name: Bug fix tests
+        shell: bash
+        run: COMPAT_PHASE=fixes timeout 10m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout; exit 0; }; exit $rc; }
+      - name: DM test suite
+        shell: bash
+        run: COMPAT_PHASE=suite COMPAT_SUITE_CACHE="${{ github.workspace }}/suite-cache" timeout 15m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout; exit 0; }; exit $rc; }
+      - name: Report
+        if: always()
+        shell: bash
+        # A phase cut by its timeout left no result; the build is skipped with a warning, as before.
         run: |
-          rc=0
-          timeout 20m bash tools/compat.sh "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || rc=$?
-          if [ "$rc" = 124 ]; then
-            echo "::warning::BYOND ${{ matrix.byond }} on ${{ runner.os }}: test still running after 20 minutes; skipped"
-            exit 0
-          fi
-          exit "$rc"
+          if [ -f compat-work/timeout ]; then echo "::warning::BYOND ${{ matrix.byond }} on ${{ runner.os }}: a step ran past its time limit; skipped"; exit 0; fi
+          COMPAT_PHASE=report python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme
       - name: Keep rust_g out of the tgstation cache
         if: always() && runner.os == 'Linux'
         run: rm -f tgstation/librust_g.so
