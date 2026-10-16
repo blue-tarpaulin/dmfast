@@ -1,13 +1,15 @@
 # Builds the combined Windows + Linux installer, tests it against a spread of BYOND
 # builds and scans it with Windows Defender.
-# Manual runs keep it as a workflow artifact; pushing a `v*` tag also attests its build provenance and
-# publishes it as a GitHub release (only if the scan is clean).
+# Pushes to main and manual runs keep it as a workflow artifact, so the full compat matrix is green before a
+# tag is cut; pushing a `v*` tag also attests its build provenance and publishes it as a GitHub release (only
+# if the scan is clean).
 #
 # The patches/ submodule is fetched by .github/actions/patches with a read-only deploy key (secret DMFAST_PATCHES_KEY).
 name: release
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
