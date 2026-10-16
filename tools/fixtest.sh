@@ -65,12 +65,14 @@ out() {
   {
     tr -d '\r' <"$work/dm.txt" | { grep -v '^dmfast' || true; } | { grep -E '(error|warning):' || true; } | sed 's/^/dm: /'
     if [ -f "$t/$key.dmb" ]; then
-      # -ip 127.0.0.1: loopback only, so Windows doesn't ask for a firewall rule for every fresh copy.
-      (cd "$t" && env "${env[@]}" timeout 60 "$bin/$prog_dd" "$key.dmb" -trusted -invisible -logself -ip 127.0.0.1) \
+      # -ip 127.0.0.1: loopback only, so Windows doesn't ask for a firewall rule for every fresh copy. Run by a
+      # child bash so that a crash (some tests crash stock BYOND on purpose) doesn't make this shell print
+      # "Segmentation fault" in the middle of the report; the exit code says it below.
+      bash -c 'cd "$1" && shift && exec "$@"' _ "$t" env "${env[@]}" timeout 60 "$bin/$prog_dd" "$key.dmb" -trusted -invisible -logself -ip 127.0.0.1 \
         >"$work/dd.txt" 2>&1 || rc=$?
       { tr -d '\r' <"$t/$key.log" 2>/dev/null || true; } | sed -n '/Welcome BYOND/,$p' | tail -n +2 \
         | { grep -vE '^(dmfast|Webclient users can visit|http://www\.byond\.com/play/|Or this code can be embedded:|<iframe src="http://www\.byond\.com/play/|The BYOND hub reports that port [0-9]+ is not reachable)|^((Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} [ 0-9]{2} [0-9:]{8} [0-9]{4})?[[:space:]]*$' || true; }
-      case $rc in 0) ;; 124) echo "dd: timed out" ;; *) echo "dd: exit $rc" ;; esac
+      case $rc in 0) ;; 124) echo "dd: timed out" ;; 139|3) echo "dd: crashed (exit $rc)" ;; *) echo "dd: exit $rc" ;; esac
     else
       echo "dm: no .dmb"
     fi
@@ -127,7 +129,7 @@ for key in "${keys[@]}"; do
     echo "::warning::fix $key: stock BYOND already gives the expected output (fixed upstream, or the test doesn't reproduce the bug)"
     na=$((na + 1)); result+=("$key not needed"); continue
   fi
-  echo "fix $key: pass"
+  if grep -q '^dd: crashed' "$work/stock.txt"; then echo "fix $key: pass (stock BYOND crashes on this test, as expected)"; else echo "fix $key: pass"; fi
   pass=$((pass + 1)); result+=("$key ok")
 done
 
