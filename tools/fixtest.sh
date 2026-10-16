@@ -72,7 +72,7 @@ out() {
         >"$work/dd.txt" 2>&1 || rc=$?
       { tr -d '\r' <"$t/$key.log" 2>/dev/null || true; } | sed -n '/Welcome BYOND/,$p' | tail -n +2 \
         | { grep -vE '^(dmfast|Webclient users can visit|http://www\.byond\.com/play/|Or this code can be embedded:|<iframe src="http://www\.byond\.com/play/|The BYOND hub reports that port [0-9]+ is not reachable)|^((Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} [ 0-9]{2} [0-9:]{8} [0-9]{4})?[[:space:]]*$' || true; }
-      case $rc in 0) ;; 124) echo "dd: timed out" ;; 139|3) echo "dd: crashed (exit $rc)" ;; *) echo "dd: exit $rc" ;; esac
+      case $rc in 0) ;; 124) echo "dd: timed out" ;; 139|134|3|3221225477|3221226505) echo "dd: crashed (exit $rc)" ;; *) echo "dd: exit $rc" ;; esac
     else
       echo "dm: no .dmb"
     fi
