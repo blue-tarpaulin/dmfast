@@ -217,14 +217,22 @@ def load():
 
 
 def world_output():
-    """dmfast prints the lines two stock runs agree on (10 s after load), and keeps running if stock does."""
+    """dmfast prints the lines two stock runs agree on (10 s after load), and keeps running if stock does.
+    tgstation rolls random station traits that can add a runtime: a mismatch must repeat on 3 dmfast runs."""
     S.setdefault("w_out", "n/a")
     if not S.get("l_stock"):
         return
     dmb, secs = PROJECT.with_suffix(".dmb"), 10
-    (_, a1, t1), (_, a2, t2), (_, af, tf) = (world(b, dmb, settle=secs) for b in (STOCK, STOCK, FAST))
-    s1, s2, f1 = normalise(STOCK, t1), normalise(STOCK, t2), normalise(FAST, tf)
-    n, m = same_prefix(s1, s2), same_prefix(s1, f1)
+    (_, a1, t1), (_, a2, t2) = (world(STOCK, dmb, settle=secs) for _ in range(2))
+    s1, s2 = normalise(STOCK, t1), normalise(STOCK, t2)
+    n = same_prefix(s1, s2)
+    for attempt in range(3):
+        _, af, tf = world(FAST, dmb, settle=secs)
+        f1 = normalise(FAST, tf)
+        m = same_prefix(s1, f1)
+        if m >= n and (af or not (a1 and a2)):
+            break
+        log(f"world output: dmfast run {attempt + 1} differs from stock at line {m + 1}")
     if n == 0:
         S["w_out"] = "n/a (stock not repeatable)"
     elif m < n:
