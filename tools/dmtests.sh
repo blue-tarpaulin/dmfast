@@ -9,7 +9,8 @@
 # crash (DreamDaemon died or hung), or expected-* when a tagged test did not fail as tagged; with the .dmb's
 # hash when it compiled.
 #
-# Reported: tests whose verdict differs between stock and dmfast (a dmfast bug), tests whose .dmb differs with
+# Reported: tests whose verdict differs between stock and dmfast (a dmfast bug; a test where stock BYOND crashes
+# and dmfast doesn't is a notice: dmfast's allocator doesn't trip on BYOND's memory bug), tests whose .dmb differs with
 # the fixes off (compile fixes may change it: pass -f none to check identity; a .dmb that differs between two
 # stock compiles, DEBUG's build stamp, is not compared), and the suite's own result on
 # each side (tests BYOND itself fails are listed, not counted against dmfast). Exits non-zero only on a
@@ -111,9 +112,10 @@ for test in "${tests[@]}"; do
 done
 wait
 
-cat "$work"/r/* | sort >"$work/all.tsv"
+find "$work/r" -type f ! -name '*.detail' -exec cat {} + | sort >"$work/all.tsv"
 total=$(grep -cv $'\tskip' "$work/all.tsv" || true)
-diffs=$(awk -F'\t' '{ split($2, s, " "); split($3, f, " "); if (s[1] != f[1]) print }' "$work/all.tsv")
+diffs=$(awk -F'\t' '{ split($2, s, " "); split($3, f, " "); if (s[1] != f[1] && s[1] != "crash") print }' "$work/all.tsv")
+masked=$(awk -F'\t' '{ split($2, s, " "); split($3, f, " "); if (s[1] == "crash" && f[1] != "crash") print $1 " (dmfast: " f[1] ")" }' "$work/all.tsv")
 dmbdiff=$(awk -F'\t' '{ split($2, s, " "); split($3, f, " "); if (s[2] != "-" && f[2] != "-" && s[2] != f[2]) print $1 }' "$work/all.tsv")
 sfail=$(awk -F'\t' '{ split($2, s, " "); if (s[1] != "pass" && s[1] != "skip") print $1 " (" s[1] ")" }' "$work/all.tsv")
 ffail=$(awk -F'\t' '{ split($3, f, " "); if (f[1] != "pass" && f[1] != "skip") print $1 " (" f[1] ")" }' "$work/all.tsv")
@@ -122,6 +124,10 @@ if [ -n "$diffs" ]; then
   echo "::error::dmtests: verdict differs between stock and dmfast (test, stock, dmfast):"
   printf '%s\n' "$diffs" | sed 's/^/  /'
   for d in "$work"/r/*.detail; do [ -e "$d" ] && { echo "== $(head -1 "${d%.detail}" | cut -f1)"; cat "$d"; }; done
+fi
+if [ -n "$masked" ]; then
+  echo "::notice::dmtests: stock BYOND crashes, dmfast does not (its allocator doesn't trip on BYOND's memory bug):"
+  printf '%s\n' "$masked" | sed 's/^/  /'
 fi
 if [ -n "$dmbdiff" ]; then
   [ "$fixes" = none ] && lvl=error || lvl=notice
