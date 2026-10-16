@@ -1,10 +1,4 @@
-# Lints and builds both platforms once, packs the combined installer, scans it with Windows Defender and
-# tests it against a spread of BYOND builds. Runs on pull requests, pushes to main and by hand; release.yml
-# runs it for a `v*` tag before publishing.
-#
-# Needs the private patches/ submodule (secret DMFAST_PATCHES_KEY, fetched by .github/actions/patches).
-# GitHub does not give secrets to pull requests from forks, so those are skipped; open PRs from a branch of
-# this repo instead.
+# Build, pack, scan and compat-test the installer. Fork PRs are skipped: no DMFAST_PATCHES_KEY secret.
 name: CI
 
 on:
@@ -17,7 +11,7 @@ on:
 permissions:
   contents: read
 
-# A newer push to a branch or PR cancels its previous run; a tag's run (from release.yml) is never cancelled.
+# Tag runs (release.yml) are never cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
@@ -35,7 +29,6 @@ jobs:
       - uses: ./.github/actions/patches
         with:
           key: ${{ secrets.DMFAST_PATCHES_KEY }}
-      # The runner image's preinstalled stable: adding to it skips the channel sync and full toolchain download.
       - name: Add Rust target
         shell: bash
         run: rustup component add clippy && rustup target add i686-pc-windows-msvc
@@ -59,7 +52,7 @@ jobs:
     name: Build (Linux)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    # Debian 12: BYOND 516 needs glibc 2.34; the installer's build script checks libdmfast.so needs no newer symbols.
+    # Debian 12: glibc 2.34, BYOND 516's minimum.
     container: debian:12
     steps:
       - name: Install build tools
@@ -115,9 +108,7 @@ jobs:
           path: dist/dmfast-install.exe
           if-no-files-found: error
 
-  # Windows Defender scan of the packed installer. A detection fails the run, so a flagged installer is never
-  # released; on a tag it also opens an issue (submit the file at https://www.microsoft.com/wdsi/filesubmission;
-  # there is no API for that).
+  # False positives: submit at https://www.microsoft.com/wdsi/filesubmission.
   scan:
     name: Defender scan
     needs: pack
@@ -160,10 +151,6 @@ jobs:
             --title "Windows Defender flagged dmfast-install.exe (${GITHUB_REF_NAME})" \
             --body "$(printf 'Windows Defender flagged the installer built by %s (ref `%s`, sha256 `%s`).\n\nSubmit it as a false positive (software developer) at https://www.microsoft.com/wdsi/filesubmission; it is attached to the run as the `dmfast-install` artifact.\n\n```\n%s\n```\n' "$RUN_URL" "$GITHUB_REF_NAME" "$(sha256sum dmfast-install.exe | cut -d' ' -f1)" "$(cat defender_output.txt)")"
 
-  # The packed installer against a spread of BYOND builds from byond-builds.dm-lang.org, on both OSes:
-  # each must install, compile tgstation to the same .dmb as stock, pass verify mode, the bug fix tests and
-  # the DM test suite, and print the same from tgstation's world for 10 s after it loads. Patches that don't
-  # match a build disable themselves; the report lists which.
   compat:
     name: Compat ${{ matrix.byond }} (${{ matrix.os == 'windows-latest' && 'Windows' || 'Linux' }})
     needs: pack
@@ -171,8 +158,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-        # 516.1670 is left out: its isinf()/isnan() code generation underflows the proc stack (fixed in 1671), so
-        # stock crashes in worlds that dmfast's allocator lets through.
+        # No 516.1670: its isinf()/isnan() bug crashes stock.
         byond: ["515.1647", "516.1648", "516.1667", "516.1675", "516.1680", "516.1684", "516.1688", "516.latest"]
     runs-on: ${{ matrix.os }}
     env:
@@ -205,8 +191,7 @@ jobs:
           git -C tgstation fetch -q --depth 1 https://github.com/tgstation/tgstation.git "$TG_COMMIT"
           git -C tgstation checkout -q FETCH_HEAD
           rm -rf tgstation/.git
-      # tgstation's own Windows rust_g.dll is in the repository; on Linux its CI downloads the release's
-      # librust_g.so, so do the same (cached: it is ~100 MB). Without it the world fails every rust_g call.
+      # tgstation ships rust_g.dll but not librust_g.so.
       - name: rust_g version
         id: rustg
         if: runner.os == 'Linux'
@@ -236,8 +221,7 @@ jobs:
         with:
           path: suite-cache
           key: suite-${{ runner.os }}-${{ matrix.byond }}-${{ steps.suite.outputs.sha }}
-      # compat.py runs one phase per step. A phase that hangs is cut by its time limit and leaves
-      # compat-work/timeout-<phase>: only its own column is lost, the report has the rest.
+      # One compat.py phase per step; a timed-out phase loses only its own column.
       - name: Install BYOND ${{ matrix.byond }} and dmfast
         shell: bash
         run: COMPAT_PHASE=setup python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme

@@ -1,6 +1,4 @@
-# Pushing a `v*` tag runs the whole of CI (ci.yml: build, pack, Defender scan, compat matrix) on it, then
-# attests the installer's build provenance and publishes it as a GitHub release. Nothing is published unless
-# every CI job passed.
+# v* tag: run CI, then attest and publish the installer.
 name: Release
 
 on:
