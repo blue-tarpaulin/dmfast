@@ -106,6 +106,9 @@ jobs:
       TG_COMMIT: 1568dbe1daeba67dc20939c6307d07522967e89c
     steps:
       - uses: actions/checkout@v7
+      - name: Fetch the DM test suite
+        shell: bash
+        run: git submodule update --init --depth 1 tests/dm-test-suite
       - uses: actions/download-artifact@v8
         with:
           name: dmfast-install
@@ -186,8 +189,8 @@ jobs:
           {
             echo "### BYOND compatibility"
             echo
-            echo "| Requested | Build | OS | Result | tgstation stock | tgstation dmfast | Compiler groups | Runtime groups | Disabled | World load stock | World load dmfast | Verify mode | World output | Bug fixes |"
-            echo "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
+            echo "| Requested | Build | OS | Result | tgstation stock | tgstation dmfast | Compiler groups | Runtime groups | Disabled | World load stock | World load dmfast | Verify mode | World output | Bug fixes | DM test suite |"
+            echo "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
             cat compat-*.md 2>/dev/null | sort -t'|' -k4,4 -k2,2V
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
