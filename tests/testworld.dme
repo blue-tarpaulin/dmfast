@@ -1,4 +1,4 @@
-// Compatibility test world (tools/compat.sh): ordinary DM work, deterministic, compiles on 515 and 516.
+// Compatibility test world (tools/compat.py): ordinary DM work, deterministic, compiles on 515 and 516.
 // Logs one line, "testworld <md5> <counters>", then shuts down. Stock BYOND and dmfast must compile it to the
 // same .dmb and log the same line.
 

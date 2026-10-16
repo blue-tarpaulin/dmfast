@@ -22,7 +22,7 @@ if [ -n "$version" ] && [ -z "$changes" ]; then
   echo "::warning::CHANGELOG.md has no '## $version' section; the release notes have no changelog text" >&2
 fi
 
-# field <os> <column>: a column of the 516.latest row for that OS (columns as written by compat.sh).
+# field <os> <column>: a column of the 516.latest row for that OS (columns as written by compat.py).
 field() { awk -F'|' -v os="$1" -v c="$2" '$2 ~ /516\.latest/ && $4 ~ os {gsub(/[ s]/, "", $c); print $c}' "$dir"/compat-*.md | head -1; }
 # speedup <stock secs> <dmfast secs>: "6.5x faster", or "-" if either is missing.
 speedup() { awk -v a="$1" -v b="$2" 'BEGIN{ if (a + 0 > 0 && b + 0 > 0) printf "**%.1fx faster**", a / b; else printf "-" }'; }
