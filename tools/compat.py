@@ -3,53 +3,24 @@
 
 usage: compat.py [--phase PHASE] [--work DIR] [--suite-cache DIR] <BYOND version> <installer> <project.dme>
 
-Installs dmfast into a fresh copy of that BYOND build (byond-builds.dm-lang.org) and checks it against an
-untouched copy of the same build:
-  - compiling <project.dme> gives a byte-identical .dmb;
-  - in verify mode (DMFAST_VERIFY=1) no patch disagrees with the original code (the project's compile, and
-    tests/testworld.dme compiled and run);
-  - the project's world prints the same for 10 s after it loads (the lines two stock runs agree on) and is
-    still running if stock is;
-  - every opt-in bug fix's test passes (tools/fixtest.sh);
-  - every test of the DM test suite gets the same verdict (tools/dmtests.sh).
-Also times the compile and the world load, stock vs dmfast, and reports the patch groups. 
-Appends a Markdown row to $GITHUB_STEP_SUMMARY when set and writes it to compat-<os>-<version>.md.
-Exits non-zero on a difference.
-
-Phases (--phase / COMPAT_PHASE): setup project verify load world fixes suite report.
---work (COMPAT_WORK) carries files and results between them, so CI shows each as a step; 
-a phase records what it finds and report exits non-zero if any saw a difference.
-A build skipped or found broken in one phase makes the later ones no-ops.
---suite-cache (COMPAT_SUITE_CACHE) is dmtests.sh's cache of stock verdicts.
-Without --phase everything runs in a temporary directory.
+Checks: identical .dmb, verify mode, world load and output, bug fixes (fixtest.py), DM test suite
+(dmtests.py). Writes a Markdown row to compat-<os>-<version>.md and $GITHUB_STEP_SUMMARY.
+Phases (setup project verify load world fixes suite report) share state through --work; report fails the run.
 """
-import argparse, hashlib, json, os, platform, re, shutil, statistics, subprocess, sys, tempfile, time, zipfile
+import argparse, json, os, re, shutil, statistics, subprocess, sys, tempfile, time, zipfile
 import urllib.request
 from itertools import takewhile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-WIN = platform.system() == "Windows"
-OS = "windows" if WIN else "linux"
-DM, DD = ("dm.exe", "dd.exe") if WIN else ("DreamMaker", "DreamDaemon")
+import byond, dmtests, fixtest
+from byond import DD, DM, OS, ROOT, WIN, world_lines
+
 DD_ARGS = ["-trusted", "-invisible", "-ip", "127.0.0.1"]
 S = {"fail": 0}  # results, kept in <work>/state.json between phases
 
 
 def log(*a):
     print(*a, flush=True)
-
-
-def posix(p):
-    """X:\\a\\b -> /x/a/b for Git Bash on Windows."""
-    p = str(p)
-    return "/" + p[0].lower() + p[2:].replace("\\", "/") if WIN and p[1:2] == ":" else p
-
-
-def bash():
-    """Git's bash on Windows (System32's is WSL's)."""
-    git = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Git" / "bin" / "bash.exe"
-    return str(git) if WIN and git.exists() else "bash"
 
 
 def fail(msg, extra=""):
@@ -82,19 +53,9 @@ def save():
 # ---- running BYOND --------------------------------------------------------------------------------------------
 
 def run(bin_dir, prog, args, cwd, limit=120, verify=False):
-    """(exit code, 124 on timeout; output) of a BYOND program from that build, dmfast's stats on."""
-    env = {k: v for k, v in os.environ.items() if k != "DMFAST_FIXES"}
-    env["DMFAST_STATS"] = "1"
-    if verify:
-        env["DMFAST_VERIFY"] = "1"
-    if not WIN:
-        env["LD_LIBRARY_PATH"] = str(bin_dir)
-    try:
-        p = subprocess.run([str(bin_dir / prog), *args], cwd=cwd, env=env, timeout=limit,
-                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        return p.returncode, p.stdout.decode("utf-8", "replace").replace("\r", "")
-    except subprocess.TimeoutExpired as e:
-        return 124, (e.stdout or b"").decode("utf-8", "replace")
+    """(exit code, output) of a BYOND program from that build, dmfast's stats on."""
+    env = byond.env(bin_dir, DMFAST_STATS="1", **({"DMFAST_VERIFY": "1"} if verify else {}))
+    return byond.run([bin_dir / prog, *args], cwd, env, limit)
 
 
 def compile(bin_dir, dme, verify=False):
@@ -103,23 +64,15 @@ def compile(bin_dir, dme, verify=False):
     dmb.unlink(missing_ok=True)
     t = time.monotonic()
     rc, out = run(bin_dir, DM, [dme.name], dme.parent, limit=300 if verify else 120, verify=verify)
-    h = hashlib.sha256(dmb.read_bytes()).hexdigest()[:16] if rc == 0 and dmb.exists() else None
+    h = byond.sha16(dmb) if rc == 0 and dmb.exists() else None
     return rc, round(time.monotonic() - t, 1), h, out
 
 
-def world_lines(text):
-    """What a world printed: after BYOND's banner, without dmfast's lines and blank ones."""
-    lines = text.replace("\r", "").splitlines()
-    i = next((n for n, l in enumerate(lines) if "Welcome BYOND" in l), None)
-    return [] if i is None else [l for l in lines[i + 1:] if l.strip() and not l.startswith("dmfast")]
-
-
 def world(bin_dir, dmb, settle=None, limit=60):
-    """Run a world until it prints its first line (up to `limit` s), then `settle` more seconds if given.
-    Returns (seconds to the first line or None, was still running, output)."""
+    """(seconds to first line or None, still running, output); runs `settle` s more after it if given."""
     dmb.with_suffix(".dyn.rsc").unlink(missing_ok=True)  # a killed run can leave it half-written
     out = WORK / "world-raw.txt"
-    env = dict(os.environ, DMFAST_STATS="1", **({} if WIN else {"LD_LIBRARY_PATH": str(bin_dir)}))
+    env = byond.env(bin_dir, DMFAST_STATS="1")
     with open(out, "wb") as f:
         p = subprocess.Popen([str(bin_dir / DD), dmb.name, *DD_ARGS], cwd=dmb.parent, env=env, stdout=f, stderr=subprocess.STDOUT)
         start, first, end = time.monotonic(), None, None
@@ -137,15 +90,14 @@ def world(bin_dir, dmb, settle=None, limit=60):
         if alive:
             if WIN:
                 subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True)
-            else:
-                p.terminate()
-            p.wait(10)
+            else:  # SIGKILL: a world may catch SIGTERM and take its time shutting down (tgstation does)
+                p.kill()
+            p.wait()
     return first, alive, out.read_text("utf-8", "replace")
 
 
 def normalise(bin_dir, text):
-    """A world's lines with what differs between any two runs replaced: the BYOND folder, dates, addresses,
-    clock times, durations."""
+    """World lines with run-specific paths, dates, addresses, times and durations masked."""
     out = []
     for l in world_lines(text):
         for p in {str(bin_dir), str(bin_dir).replace("\\", "/")}:
@@ -162,7 +114,7 @@ def same_prefix(a, b):
 
 
 def dmfast_lines(out):
-    return "\n".join(l for l in out.splitlines() if l.startswith("dmfast: "))
+    return "\n".join(byond.dmfast_lines(out))
 
 
 # ---- phases ---------------------------------------------------------------------------------------------------
@@ -265,9 +217,7 @@ def load():
 
 
 def world_output():
-    """The project's world prints the same as stock for 10 s after it loads. A world isn't deterministic (tg
-    places ruins at random): two stock runs find how many lines always agree; dmfast must print those, and
-    still be running if stock was."""
+    """dmfast prints the lines two stock runs agree on (10 s after load), and keeps running if stock does."""
     S.setdefault("w_out", "n/a")
     if not S.get("l_stock"):
         return
@@ -288,27 +238,20 @@ def world_output():
         S["w_out"] = f"same ({n} lines)"
 
 
-def helper(script, args, key, summary, error):
-    """tools/<script>: its summary line goes in the table; a non-zero exit is a failure."""
-    p = subprocess.run([bash(), posix(ROOT / "tools" / script), *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    out = p.stdout.decode("utf-8", "replace")
-    log(out.rstrip())
-    S[key] = (re.findall(rf"^{summary}: (.*)$", out, re.M) or ["no result"])[-1]
-    if p.returncode != 0:
-        fail(error)
-        S[key] = f"FAIL: {S[key]}"
-
-
 def fixes():
-    helper("fixtest.sh", ["-s", posix(STOCK), posix(FAST)], "fixes", "fixes", "a bug fix's test failed")
+    failed, S["fixes"] = fixtest.check(FAST, STOCK)
+    if failed:
+        fail("a bug fix's test failed")
+        S["fixes"] = f"FAIL: {S['fixes']}"
 
 
 def suite():
     S.setdefault("suite", "n/a")
-    if (ROOT / "tests" / "dm-test-suite" / "Tests" / "Tests").is_dir():
-        cache = ["-c", posix(SUITE_CACHE)] if SUITE_CACHE else []
-        helper("dmtests.sh", ["-s", posix(STOCK), "-j", "4", *cache, posix(FAST)], "suite", "dmtests",
-               "the DM test suite differs between stock and dmfast")
+    if (dmtests.SUITE / "Tests").is_dir():
+        failed, S["suite"] = dmtests.check(FAST, STOCK, jobs=4, cache=SUITE_CACHE)
+        if failed:
+            fail("the DM test suite differs between stock and dmfast")
+            S["suite"] = f"FAIL: {S['suite']}"
 
 
 def report():
