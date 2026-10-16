@@ -1,10 +1,12 @@
 # Changelog
 
-Write changes under `## 6.0.1`. Before tagging a release, rename that heading to the version; the release notes include that section's text as is.
+Write changes under `## Unreleased`. Before tagging a release, rename that heading to the version; the release notes include that section's text as is.
 
 ## 6.0.1
 
-- `num2sig` moves from the `safe` tier to `breaking`: with `num2text(N, 100)`, which codebases use to print ids exactly, it produces 100-digit strings.
+- **Fixed:** on Linux, the `callref` fix broke `call("name")(...)`: every call by name failed with "bad proc".
+- `num2sig` moves to the `breaking` tier: `num2text(N, 100)`, used to print ids exactly, became a 100-digit string.
+- CI runs regression worlds (`tests/fixes/keep`) and the DM test suite (spacestation13/dm-test-suite) against stock BYOND and dmfast.
 
 ## 6.0.0
 
