@@ -1,0 +1,25 @@
+// call() and related paths must match stock under the safe and extended tiers (callref only touches the
+// failed-call path).
+/proc/show(label, value)
+	world.log << "[label]: [value]"
+
+/proc/zero()
+	return 0
+/datum/thing
+	proc/f(a, b)
+		return "[a][b]"
+
+/world/New()
+	..()
+	var/datum/thing/t = new
+	show("call path", call(/proc/zero)())
+	show("call name", call("/proc/zero")())
+	show("call obj", call(t, "f")("x", "y"))
+	show("call obj path", call(t, /datum/thing/proc/f)(1, 2))
+	var/r
+	try
+		r = call("no_such_proc")(t)
+	catch(var/exception/e)
+		show("bad call", e.name)
+	show("after bad call", "[isnull(r)] [refcount(t) >= 1]")
+	shutdown()
