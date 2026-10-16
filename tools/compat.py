@@ -254,7 +254,16 @@ def suite():
             S["suite"] = f"FAIL: {S['suite']}"
 
 
+# The table columns a phase fills, for a phase CI cut at its time limit (compat-work/timeout-<phase>).
+COLUMNS = {"project": ["t_fast"], "verify": ["verify"], "load": ["l_stock", "l_fast"], "world": ["w_out"],
+           "fixes": ["fixes"], "suite": ["suite"]}
+
+
 def report():
+    for phase, keys in COLUMNS.items():
+        if (WORK / f"timeout-{phase}").exists():
+            log(f"::warning::{VERSION} {OS}: the {phase} step ran past its time limit")
+            S.update({k: "timed out" for k in keys})
     mask = lambda t: (re.findall(r"patched=(0x[0-9a-f]+)", t or "") or ["?"])[-1]
     groups = (S.get("compiler") or "") + "\n" + (S.get("runtime") or "")
     disabled = ",".join(re.findall(r"^dmfast: disabled (\S+)", groups, re.M)) or "none"
