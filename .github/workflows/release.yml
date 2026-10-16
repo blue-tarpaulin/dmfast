@@ -100,7 +100,9 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-latest]
         # At most 9 builds
-        byond: ["515.1647", "516.1648", "516.1667", "516.1670", "516.1675", "516.1680", "516.1684", "516.1688", "516.latest"]
+        # 516.1670 is left out: its isinf()/isnan() code generation underflows the proc stack (fixed in 1671), so
+        # stock crashes in worlds that dmfast's allocator lets through.
+        byond: ["515.1647", "516.1648", "516.1667", "516.1675", "516.1680", "516.1684", "516.1688", "516.latest"]
     runs-on: ${{ matrix.os }}
     env:
       TG_COMMIT: 1568dbe1daeba67dc20939c6307d07522967e89c
