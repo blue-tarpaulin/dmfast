@@ -1,6 +1,6 @@
 # Writes varlimit-pad.dm: padding variable declarations (each distinct name takes a compiler id) so that the
 # `tail` procs' local variables, declared after them, are numbered across the compiler's reserved ids at 65484+
-# (whatever this BYOND build's own starting count is). Run by tools/fixtest.sh.
+# (whatever this BYOND build's own starting count is). Run by tools/fixtest.py.
 {
   :
   for ((i = 0; i < 65200; i++)); do ((i % 50 == 0)) && echo "/datum/holder$((i / 50))"; echo "	var/p$i"; done
