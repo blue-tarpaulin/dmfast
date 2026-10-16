@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# usage: dmtests.sh [-s <stock bin dir>] [-f <fixes>] [-j <jobs>] <dmfast bin dir> [filter]
+# usage: dmtests.sh [-s <stock bin dir>] [-f <fixes>] [-j <jobs>] [-c <cache dir>] <dmfast bin dir> [filter]
 #
 # Runs the DM test suite (tests/dm-test-suite, spacestation13/dm-test-suite) with stock BYOND and with dmfast
 # and compares them test by test. Each test is one .dm with /proc/RunTest; its first line may tag it
@@ -14,19 +14,22 @@
 # the fixes off (compile fixes may change it: pass -f none to check identity; a .dmb that differs between two
 # stock compiles, DEBUG's build stamp, is not compared), and the suite's own result on
 # each side (tests BYOND itself fails are listed, not counted against dmfast). Exits non-zero only on a
-# stock/dmfast difference. -f sets DMFAST_FIXES for the dmfast side (default none); -j runs that many tests at
+# stock/dmfast difference. -c keeps stock's verdicts in <cache dir> (one file per test; they depend only on the
+# BYOND build and the suite, so CI caches them per build and only runs the dmfast side again). -f sets
+# DMFAST_FIXES for the dmfast side (default none); -j runs that many tests at
 # once (default 4); [filter] is a substring of the test path.
 #
 # <dmfast bin dir> has dmfast installed. Stock comes from <stock bin dir>, or the _orig binaries the installer
 # kept in <dmfast bin dir>.
 set -euo pipefail
 
-stock=""; fixes=none; jobs=4
+stock=""; fixes=none; jobs=4; cache=""
 while [ $# -gt 0 ]; do
   case $1 in
     -s) stock=$2; shift 2 ;;
     -f) fixes=$2; shift 2 ;;
     -j) jobs=$2; shift 2 ;;
+    -c) cache=$2; mkdir -p "$cache"; cache=$(cd "$cache" && pwd); shift 2 ;;
     *) break ;;
   esac
 done
@@ -83,15 +86,22 @@ verdict_() {
 # .dmb with the build time: when the hashes differ, stock is compiled again and a hash that moved on its own
 # is reported as "~" (not comparable) instead of a difference.
 one() {
-  local n=$1 test=$2 s f
-  verdict "$stock" "$sdm" "$sdd" none "$test" "$work/t/$n/s"
+  local n=$1 test=$2 s f rel cached=""
+  rel=$(realpath --relative-to="$suite" "$test")
+  [ -z "$cache" ] || cached="$cache/${rel//\//_}.verdict"
+  if [ -n "$cached" ] && [ -s "$cached" ]; then
+    mkdir -p "$work/t/$n/s"; cp "$cached" "$work/t/$n/s/verdict"
+  else
+    verdict "$stock" "$sdm" "$sdd" none "$test" "$work/t/$n/s"
+    [ -z "$cached" ] || cp "$work/t/$n/s/verdict" "$cached"
+  fi
   verdict "$fast" "$dm" "$dd" "$fixes" "$test" "$work/t/$n/f"
   s=$(cat "$work/t/$n/s/verdict"); f=$(cat "$work/t/$n/f/verdict")
   if [ "${s#* }" != "${f#* }" ] && [ "${s#* }" != - ] && [ "${f#* }" != - ]; then
     verdict "$stock" "$sdm" "$sdd" none "$test" "$work/t/$n/s2"
     [ "$(cat "$work/t/$n/s2/verdict")" = "$s" ] || { s="${s%% *} ~"; f="${f%% *} ~"; }
   fi
-  printf '%s\t%s\t%s\n' "$(realpath --relative-to="$suite" "$test")" "$s" "$f" >"$work/r/$n"
+  printf '%s\t%s\t%s\n' "$rel" "$s" "$f" >"$work/r/$n"
   if [ "${s%% *}" != "${f%% *}" ]; then   # keep what each side printed, for the report
     for side in s f; do
       { echo "--- $([ $side = s ] && echo stock || echo dmfast) compiler:"; grep -E '(error|warning):' "$work/t/$n/$side/dm.txt" || true
