@@ -16,6 +16,11 @@ on:
 permissions:
   contents: read
 
+# A newer push to main cancels the matrix still running for the previous one; a tag's run is never cancelled.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
 env:
   CARGO_TERM_COLOR: never
 
