@@ -295,6 +295,15 @@ frc=0; bash "$root/tools/fixtest.sh" -s "$work/stock" "$work/fast/bin" >"$work/f
 cat "$work/fixes.txt"
 fixes=$(grep -E '^fixes: ' "$work/fixes.txt" | tail -1 | cut -c8- || true)
 [ "$frc" = 0 ] || { echo "::error::$version $os: a bug fix's test failed"; fixes="FAIL: ${fixes:-no result}"; fail=1; }
+# The DM test suite (tests/dm-test-suite): every test's verdict must be the same with stock and dmfast, and its
+# .dmb the same with the fixes off (see tools/dmtests.sh). Skipped if the submodule isn't checked out.
+suite="n/a"
+if [ -d "$root/tests/dm-test-suite/Tests/Tests" ]; then
+  src=0; bash "$root/tools/dmtests.sh" -s "$work/stock" -j 4 "$work/fast/bin" >"$work/suite.txt" 2>&1 || src=$?
+  cat "$work/suite.txt"
+  suite=$(grep -E '^dmtests: ' "$work/suite.txt" | tail -1 | cut -c10- || true)
+  [ "$src" = 0 ] || { echo "::error::$version $os: the DM test suite differs between stock and dmfast"; suite="FAIL: ${suite:-no result}"; fail=1; }
+fi
 disabled=$(printf '%s\n%s\n' "$compiler" "$runtime" | grep '^dmfast: disabled ' | sed 's/^dmfast: disabled //; s/ - .*//' | paste -sd, - || true)
 mask() { printf '%s\n' "$1" | grep -oE 'patched=0x[0-9a-f]+' | tail -1 | cut -d= -f2; }
 real=$(run "$work/stock" "$dm" 2>&1 | grep -oE '[0-9]{3}\.[0-9]{4}' | head -1 || true)
@@ -303,11 +312,11 @@ result=$([ $fail = 0 ] && echo pass || echo FAIL)
 echo "== $version ($real) $os: $result"
 echo "compile $(basename "$project"): stock $t_stock, dmfast $t_fast, .dmb ${h_stock:-n/a} / ${h_fast:-n/a}"
 echo "world load: stock ${l_stock:-n/a}, dmfast ${l_fast:-n/a}; output for 10 s after loading: $w_out"
-echo "verify mode: $verify; bug fixes: ${fixes:-none}"
+echo "verify mode: $verify; bug fixes: ${fixes:-none}; DM test suite: $suite"
 echo "compiler groups: $(mask "$compiler"); runtime groups: $(mask "$runtime"); disabled: ${disabled:-none}"
 printf '%s\n' "$compiler" "$runtime"
 
-row="| $version | ${real:-?} | $os | $result | $t_stock | $t_fast | $(mask "$compiler") | $(mask "$runtime") | ${disabled:-none} | ${l_stock:-n/a} | ${l_fast:-n/a} | $verify | $w_out | ${fixes:-none} |"
+row="| $version | ${real:-?} | $os | $result | $t_stock | $t_fast | $(mask "$compiler") | $(mask "$runtime") | ${disabled:-none} | ${l_stock:-n/a} | ${l_fast:-n/a} | $verify | $w_out | ${fixes:-none} | $suite |"
 echo "$row" > "compat-$os-$version.md"
 [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$row" >> "$GITHUB_STEP_SUMMARY"
 exit $fail

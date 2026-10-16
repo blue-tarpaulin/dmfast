@@ -2,3 +2,6 @@
 	path = patches
 	url = https://github.com/blue-tarpaulin/dmfast-patches.git
 	branch = main
+[submodule "tests/dm-test-suite"]
+	path = tests/dm-test-suite
+	url = https://github.com/spacestation13/dm-test-suite.git
