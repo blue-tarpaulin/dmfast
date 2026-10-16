@@ -65,11 +65,12 @@ out() {
   {
     tr -d '\r' <"$work/dm.txt" | { grep -v '^dmfast' || true; } | { grep -E '(error|warning):' || true; } | sed 's/^/dm: /'
     if [ -f "$t/$key.dmb" ]; then
-      # -ip 127.0.0.1: loopback only, so Windows doesn't ask for a firewall rule for every fresh copy. Run by a
-      # child bash so that a crash (some tests crash stock BYOND on purpose) doesn't make this shell print
-      # "Segmentation fault" in the middle of the report; the exit code says it below.
-      bash -c 'cd "$1" && shift && exec "$@"' _ "$t" env "${env[@]}" timeout 60 "$bin/$prog_dd" "$key.dmb" -trusted -invisible -logself -ip 127.0.0.1 \
-        >"$work/dd.txt" 2>&1 || rc=$?
+      # -ip 127.0.0.1: loopback only, so Windows doesn't ask for a firewall rule for every fresh copy. Some tests
+      # crash stock BYOND on purpose: a shell whose child dies of a signal prints "Segmentation fault", so dd
+      # runs in a subshell with stderr discarded (the trailing `exit` stops bash from exec'ing dd in place of the
+      # subshell); the exit code says it below.
+      (cd "$t" && env "${env[@]}" timeout 60 "$bin/$prog_dd" "$key.dmb" -trusted -invisible -logself -ip 127.0.0.1 \
+        >"$work/dd.txt" 2>&1; exit $?) 2>/dev/null || rc=$?
       { tr -d '\r' <"$t/$key.log" 2>/dev/null || true; } | sed -n '/Welcome BYOND/,$p' | tail -n +2 \
         | { grep -vE '^(dmfast|Webclient users can visit|http://www\.byond\.com/play/|Or this code can be embedded:|<iframe src="http://www\.byond\.com/play/|The BYOND hub reports that port [0-9]+ is not reachable)|^((Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} [ 0-9]{2} [0-9:]{8} [0-9]{4})?[[:space:]]*$' || true; }
       case $rc in 0) ;; 124) echo "dd: timed out" ;; 139|134|3|3221225477|3221226505) echo "dd: crashed (exit $rc)" ;; *) echo "dd: exit $rc" ;; esac
