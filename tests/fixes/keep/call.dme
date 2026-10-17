@@ -16,6 +16,10 @@
 	show("call name", call("/proc/zero")())
 	show("call obj", call(t, "f")("x", "y"))
 	show("call obj path", call(t, /datum/thing/proc/f)(1, 2))
+	show("call arglist", call(/proc/zero)(arglist(list(1, 2))))
+	show("call name arglist", call("/proc/zero")(arglist(list("a" = 1))))
+	show("call named", call(t, "f")(b = "y", a = "x"))
+	show("call path named", call(/datum/thing/proc/f)(b = 2))
 	var/r
 	try
 		r = call("no_such_proc")(t)

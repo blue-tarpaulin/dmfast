@@ -1,4 +1,25 @@
 refcount before: 1
-caught: bad proc
-refcount after: 1
-refcount after the object form: 1
+name: caught bad proc
+name: refcount after 2
+name, 2 args: caught bad proc
+name, 2 args: refcount after 2
+null: caught bad proc
+null: refcount after 2
+number: caught bad proc
+number: refcount after 2
+datum: caught bad proc
+datum: refcount after 2
+arglist: caught bad proc
+arglist: refcount after 2
+named: caught bad proc
+named: refcount after 2
+null arglist: caught bad proc
+null arglist: refcount after 2
+external: caught call_ext() must be used for external calls
+external: refcount after 2
+external arglist: caught call_ext() must be used for external calls
+external arglist: refcount after 2
+object: caught Cannot execute null.no_such_proc().
+object: refcount after 2
+Del
+last ref: caught bad proc
