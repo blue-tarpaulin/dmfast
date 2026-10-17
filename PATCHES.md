@@ -42,7 +42,7 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 | Patch | Key | OS | Saves | What it does |
 |---|---|---|---|---|
 | mimalloc | `mimalloc` | both | ~29% | mimalloc for small blocks, the system heap for larger ones |
-| .dmb reader | `dmbread` | both | ~17%, ~40% (Linux) | Buffered whole-value .dmb reads, cached ftell |
+| .dmb reader | `dmbread` | both | ~17%, ~40% (Linux) | Buffered whole-value reads (.dmb, also savefiles), cached ftell |
 | Proc-table index | `resids` | both | ~14% | Hash index for proc table find-or-add |
 | Sorted maps | `sortmap` | both | ~11% | One-pass, exact-size merges; grow maps geometrically |
 | String table load | `strtable` | Windows | ~3% | Native string table load; skips the redundant rebuild |
@@ -50,5 +50,7 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 | String tree | `strtree` | both | ~2%, +5 MB | Hash index replaces string tree walks |
 | Icon state name compare | `dmicmp` | Windows | ~2% | Table-based .dmi icon state name compare |
 | CRC-32 | `crc` | both | <1% | Checksums eight bytes per step |
+
+mimalloc serves the whole process, including `call_ext` DLLs; `HeapWalk` doesn't list its blocks under 4 KB.
 
 How BYOND itself could fix each of these: [PATCH-FIXES.md](PATCH-FIXES.md).
