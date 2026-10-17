@@ -3,6 +3,8 @@
 	var/blue = 1
 #define COLOR /datum/color
 #define SELF(x) x
+#define COLOR2 COLOR
+#define OBJ c
 // Forum report 2988673's case used astype(), which 515 lacks; a proc call in the macro body hits the same bug.
 #define astest(D) same(D)
 /proc/same(x)
@@ -14,4 +16,9 @@
 	world.log << SELF(c).blue
 	world.log << SELF(c)?.blue
 	world.log << astest(c)?.blue
+	world.log << "[COLOR2::blue]"
+	// `c:b` would be c's member: before a single : after a name the space stays, so this is the else branch.
+	var/f = 0
+	var/b = 2
+	world.log << (f ? OBJ:b)
 	shutdown()
