@@ -11,8 +11,10 @@ TIMEOUT = 124  # exit code of a run that hit its time limit (as timeout(1))
 
 
 def env(bin_dir, **vars):
-    """The environment for a program of the BYOND build in bin_dir: DMFAST_FIXES only when given."""
-    e = {k: v for k, v in os.environ.items() if k != "DMFAST_FIXES"}
+    """The environment for a program of the BYOND build in bin_dir: DMFAST_FIXES only when given, and no
+    RUST_MIN_STACK (a Rust build setting; inherited, it sets the stack of every thread a world's Rust library
+    starts, and 8 MiB stacks run a 32-bit DreamDaemon out of address space when rust-g runs hundreds of jobs)."""
+    e = {k: v for k, v in os.environ.items() if k not in ("DMFAST_FIXES", "RUST_MIN_STACK")}
     if not WIN:
         e["LD_LIBRARY_PATH"] = str(bin_dir)
     e.update(vars)
