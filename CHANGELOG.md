@@ -2,6 +2,20 @@
 
 Write changes under `## Unreleased`. Before tagging a release, rename that heading to the version; the release notes include that section's text as is.
 
+## Unreleased
+
+## 6.1.0
+
+- **New fix:** `dbclose` (safe) backports BYOND 516.1670's `/database` fix to older builds, where reusing a closed database crashed stock BYOND and silently corrupted memory under dmfast's allocator.
+- **Fixed:** `dm -o` and `dm -code_tree` could crash: they compile twice in one process, and the proto index still pointed into memory the first compile had freed.
+- **Fixed:** the `pickweight` fix missed many picks whose last weight is 0, e.g. `pick(1;"a", 1;"b", 1;"c", 1;"d", 0;"e")` still crashed the world.
+- **Fixed:** the `callref` fix now also covers the other failed `call()`s: a null, number or datum callee, `arglist()` or named arguments, and `call_ext()` libraries.
+- **Fixed:** the `macrospace` fix broke `c ? MACRO:b`; a single `:` after a macro keeps its space again.
+- **Fixed:** with `tick0`, the extra `/world/Tick` at time 0 saw a huge `world.tick_usage`.
+- **Fixed:** on Linux, with `inodes`, a `readdir` entry could be overwritten by later reads of other directories on the same thread.
+- **Fixed:** with the `tickinit` or `tick0` fix on, starting byond-tracy crashed DreamDaemon on the first tick.
+- The DM test suite runs about 10× faster and finishes on Windows. A stock crash that dmfast hides fails the run unless it is a known BYOND bug fixed in later builds (then a warning).
+
 ## 6.0.1
 
 - **Fixed:** on Linux, the `callref` fix broke `call("name")(...)`: every call by name failed with "bad proc".
