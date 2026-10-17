@@ -187,6 +187,15 @@ def verify():
     if rc != 0:
         fail("testworld verify-mode compile failed", out)
     else:
+        # -o and -code_tree compile twice in one process: indexes must not outlive the first compile's
+        # cleanup (a stale proto index crashed some runs). Same exit code and output as stock, 3 tries each.
+        for mode in ("-o", "-code_tree"):
+            want = run(STOCK, DM, [mode, "testworld.dme"], TW)
+            for _ in range(3):
+                rc, out = run(FAST, DM, [mode, "testworld.dme"], TW)
+                if rc != want[0] or [l for l in out.splitlines() if not l.startswith("dmfast: ")] != want[1].splitlines():
+                    fail(f"dm {mode} testworld.dme: dmfast exited {rc} (stock {want[0]}) or printed differently", out[-2000:])
+                    break
         args = ["testworld.dmb", *DD_ARGS, "-logself"]
         rc, out = run(FAST, DD, args, TW, limit=300, verify=True)
         outs.append(out)
@@ -270,8 +279,9 @@ COLUMNS = {"project": ["t_fast"], "verify": ["verify"], "load": ["l_stock", "l_f
 def report():
     for phase, keys in COLUMNS.items():
         if (WORK / f"timeout-{phase}").exists():
-            log(f"::warning::{VERSION} {OS}: the {phase} step ran past its time limit")
+            log(f"::error::{VERSION} {OS}: the {phase} step ran past its time limit, so it wasn't tested")
             S.update({k: "timed out" for k in keys})
+            S["fail"] = 1
     mask = lambda t: (re.findall(r"patched=(0x[0-9a-f]+)", t or "") or ["?"])[-1]
     groups = (S.get("compiler") or "") + "\n" + (S.get("runtime") or "")
     disabled = ",".join(re.findall(r"^dmfast: disabled (\S+)", groups, re.M)) or "none"
