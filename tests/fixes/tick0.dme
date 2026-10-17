@@ -1,6 +1,7 @@
-// Forum report 2968158: /world/Tick is not called until the second game tick (world.time 1).
+// Forum report 2968158: /world/Tick is not called until the second game tick (world.time 1). The extra call at 0 must
+// see a sensible tick_usage, as a tick's own /world/Tick does.
 /world/Tick()
-	world.log << "Tick [world.time]"
+	world.log << "Tick [world.time] usage<100=[world.tick_usage < 100]"
 
 /world/New()
 	world.log << "New [world.time]"
