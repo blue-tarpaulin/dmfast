@@ -367,6 +367,12 @@ jobs:
         run: |
           cp -r tgstation tg-boot
           if [ "$RUNNER_OS" = Linux ]; then cp rust_g/librust_g.so tg-boot/; fi
+      # tgstation ships dreamluau.dll but not libdreamluau.so; without it every Lua state is a runtime error.
+      - name: Fetch dreamluau
+        if: runner.os == 'Linux'
+        run: |
+          v=$(sed -n 's/^export DREAMLUAU_VERSION=//p' tgstation/dependencies.sh)
+          curl -sSfL --retry 4 -o tg-boot/libdreamluau.so "https://github.com/tgstation/dreamluau/releases/download/$v/libdreamluau.so"
       - name: Install BYOND 516.latest and dmfast
         shell: bash
         run: COMPAT_PHASE=setup python3 tools/compat.py 516.latest dmfast-install.exe tg-boot/tgstation.dme
