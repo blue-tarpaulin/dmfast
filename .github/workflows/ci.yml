@@ -1,4 +1,4 @@
-# Build, pack, scan and compat-test the installer. Fork PRs are skipped: no DMFAST_PATCHES_KEY secret.
+# Build, pack, scan and test the installer.
 name: CI
 
 on:
@@ -154,6 +154,11 @@ jobs:
   compat:
     name: Compat ${{ matrix.byond }} (${{ matrix.os == 'windows-latest' && 'Windows' || 'Linux' }})
     needs: pack
+    # Fork PRs can't build (no patches key), so they test with the installer from main's latest passing run.
+    if: always() && (needs.pack.result == 'success' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository))
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -170,8 +175,18 @@ jobs:
         shell: bash
         run: git submodule update --init --depth 1 tests/dm-test-suite
       - uses: actions/download-artifact@v8
+        if: needs.pack.result == 'success'
         with:
           name: dmfast-install
+      - name: Installer from main's latest passing run (fork PR)
+        if: needs.pack.result != 'success'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh run list -R "$GITHUB_REPOSITORY" -w CI -b main -e push -s success -L 1 --json databaseId -q '.[0].databaseId')
+          echo "::notice::Fork PR: testing with the installer from main's run $id"
+          gh run download "$id" -R "$GITHUB_REPOSITORY" -n dmfast-install
       - name: Install 32-bit runtime libraries
         if: runner.os == 'Linux'
         run: |
@@ -220,7 +235,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: suite-cache
-          key: suite-${{ runner.os }}-${{ matrix.byond }}-${{ steps.suite.outputs.sha }}
+          # v2: verdicts from before savefile tests ran one at a time may hold a collision in BYOND's cache.
+          key: suite-v2-${{ runner.os }}-${{ matrix.byond }}-${{ steps.suite.outputs.sha }}
       # One compat.py phase per step; a timed-out phase loses only its own column.
       - name: Install BYOND ${{ matrix.byond }} and dmfast
         shell: bash
@@ -276,3 +292,14 @@ jobs:
             echo "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
             cat compat-*.md 2>/dev/null | sort -t'|' -k4,4 -k2,2V
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # One check to require before merging: fails if any job above failed or was cancelled.
+  result:
+    name: CI result
+    needs: [windows, linux, pack, scan, compat]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check jobs
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
