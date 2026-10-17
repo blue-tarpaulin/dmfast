@@ -256,7 +256,7 @@ def fixes():
 def suite():
     S.setdefault("suite", "n/a")
     if (dmtests.SUITE / "Tests").is_dir():
-        failed, S["suite"] = dmtests.check(FAST, STOCK, jobs=4, cache=SUITE_CACHE)
+        failed, S["suite"] = dmtests.check(FAST, STOCK, cache=SUITE_CACHE)
         if failed:
             fail("the DM test suite differs between stock and dmfast")
             S["suite"] = f"FAIL: {S['suite']}"
