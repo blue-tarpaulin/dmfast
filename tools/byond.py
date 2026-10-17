@@ -37,12 +37,17 @@ def crashed(rc):
     return rc in (134, 139) or rc >= 0xC0000000 or (WIN and rc == 3)
 
 
+# Log lines that aren't the world's: dmfast's own, and BYOND's report of the hub's port check
+NOISE = ("dmfast", "The BYOND hub reports that port")
+
+
 def world_lines(text):
-    """What a world printed: the lines after BYOND's banner ("Welcome BYOND!"), without blank lines and
-    dmfast's own."""
+    """What a world printed: the non-blank lines after BYOND's banner ("Welcome BYOND!"), without NOISE."""
     lines = text.replace("\r", "").splitlines()
-    i = next((n for n, l in enumerate(lines) if "Welcome BYOND" in l), None)
-    return [] if i is None else [l for l in lines[i + 1:] if l.strip() and not l.startswith("dmfast")]
+    banner = next((n for n, line in enumerate(lines) if "Welcome BYOND" in line), None)
+    if banner is None:
+        return []
+    return [line for line in lines[banner + 1:] if line.strip() and not line.startswith(NOISE)]
 
 
 def dmfast_lines(text):
