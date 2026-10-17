@@ -6,14 +6,21 @@ usage: dmtests.py [-s <stock bin dir>] [-f <fixes>] [-j <jobs>] [-c <cache dir>]
 Verdicts: pass, compile, runtime, crash, expected-*, skip. Fails on a verdict difference, or a .dmb
 difference with -f none (default). -c caches stock's verdicts per test. Stock defaults to the _orig binaries.
 """
-import argparse, re, shutil, sys, tempfile
+import argparse, os, queue, re, shutil, sys, tempfile, threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from pathlib import Path
 
 import byond
 
 SUITE = byond.ROOT / "tests" / "dm-test-suite" / "Tests"
 TAG = re.compile(r"^// ?(COMPILE ERROR|RUNTIME ERROR|IGNORE|NOBYOND)")
+# A world takes about a second to start and stop, nearly all of it idle: a few tests per core at once.
+JOBS = min(16, 4 * (os.cpu_count() or 1))
+FILES, DIRS = {}, set()  # the suite's files (relative path -> size, mtime) and directories
+# Worlds started in the same second give their temporary savefiles the same names, in the cache of BYOND's user
+# directory, and one of them fails ("file is in use"). Savefile tests run one at a time.
+SAVEFILES = threading.Lock()
 
 
 class Side:
@@ -26,10 +33,43 @@ class Side:
         return f"{self.verdict} {self.dmb}"
 
 
-def side(dm, dd, fixes, test, tag, t):
-    """Compiles and runs one test in t (as the suite's own runner does) and judges it."""
-    shutil.rmtree(t, ignore_errors=True)
-    shutil.copytree(SUITE, t)
+def snapshot():
+    FILES.clear()
+    DIRS.clear()
+    for dp, dirs, files in os.walk(SUITE):
+        rel = Path(dp).relative_to(SUITE)
+        DIRS.update((rel / x).as_posix() for x in dirs)
+        for x in files:
+            st = (Path(dp) / x).stat()
+            FILES[(rel / x).as_posix()] = st.st_size, st.st_mtime_ns
+
+
+def fresh(t):
+    """Makes t a copy of the suite again: drops what the last run added or changed, copies back what it removed. A
+    new copy for every run took as long as the run on Windows. Copies keep size and mtime."""
+    if not t.exists():
+        shutil.copytree(SUITE, t)
+        return
+    kept = set()
+    for dp, dirs, files in os.walk(t):
+        d, rel = Path(dp), Path(dp).relative_to(t)
+        for x in [x for x in dirs if (rel / x).as_posix() not in DIRS]:
+            shutil.rmtree(d / x)
+            dirs.remove(x)
+        for x in files:
+            st = (d / x).stat()
+            if FILES.get((rel / x).as_posix()) == (st.st_size, st.st_mtime_ns):
+                kept.add((rel / x).as_posix())
+            else:
+                (d / x).unlink()
+    for x in FILES.keys() - kept:
+        (t / x).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(SUITE / x, t / x)
+
+
+def build(dm, fixes, test, t):
+    """Compiles the test in t, a fresh copy of the suite, as the suite's dm.sh does: (env, output, .dmb hash or "-")."""
+    fresh(t)
     rel = test.relative_to(SUITE).as_posix()
     # The suite's dm.sh: the test and the crash wrapper are #included on the .dme's third line.
     env_lines = (t / "environment.dme").read_bytes().splitlines(keepends=True)
@@ -37,10 +77,16 @@ def side(dm, dd, fixes, test, tag, t):
                               + b"".join(env_lines[2:]))
     env = byond.env(dm.parent, DMFAST_FIXES=fixes)
     _, out = byond.run([dm, "-max_errors", "0", "t.dme"], t, env, 120)
+    ok = "- 0 errors, " in out and (t / "t.dmb").exists()
+    return env, out, byond.sha16(t / "t.dmb") if ok else "-"
+
+
+def side(dm, dd, fixes, test, tag, t):
+    """Compiles and runs one test in t (as the suite's own runner does) and judges it."""
+    env, out, h = build(dm, fixes, test, t)
     compiler = "\n".join(l for l in out.splitlines() if re.search(r"(error|warning):", l))
-    if "- 0 errors, " not in out or not (t / "t.dmb").exists():
+    if h == "-":
         return Side("pass" if tag == "COMPILE ERROR" else "compile", compiler=compiler)
-    h = byond.sha16(t / "t.dmb")
     if tag == "COMPILE ERROR":
         return Side("expected-compile", h, compiler)
     rc, _ = byond.run([dd, "t.dmb", "-once", "-close", "-trusted", "-invisible", "-log", "errors.log", "-ip", "127.0.0.1"], t, env, 60)
@@ -55,34 +101,40 @@ def side(dm, dd, fixes, test, tag, t):
     return Side(v, h, compiler, "\n".join(printed))
 
 
-def one(n, test, a, work):
-    """(test path, stock, dmfast). DEBUG stamps the .dmb: a stock hash that changes on recompile becomes "~"."""
+def one(test, a):
+    """(test path, stock, dmfast). Both sides run in the same directory, a worker's: the .dmb holds its path."""
     rel = test.relative_to(SUITE).as_posix()
-    head = test.read_text("utf-8", "replace").splitlines()[:2]
-    tag = next((m.group(1) for m in map(TAG.match, head) if m), "")
+    text = test.read_text("utf-8", "replace")
+    tag = next((m.group(1) for m in map(TAG.match, text.splitlines()[:2]) if m), "")
     if tag in ("IGNORE", "NOBYOND"):
         return rel, Side("skip"), Side("skip")
-    t = work / str(n)
+    t = a.slots.get()
     try:
-        cached = a.cache / (rel.replace("/", "_") + ".verdict") if a.cache else None
-        if cached and cached.exists() and cached.stat().st_size:
-            s = Side(*cached.read_text().split())
-        else:
-            s = side(a.sdm, a.sdd, "none", test, tag, t / "s")
-            if cached:
-                cached.write_text(f"{s}\n")
-        f = side(a.fdm, a.fdd, a.fixes, test, tag, t / "f")
+        with SAVEFILES if "savefile" in text else nullcontext():
+            cached = a.cache / (rel.replace("/", "_") + ".verdict") if a.cache else None
+            if cached and cached.exists() and cached.stat().st_size:
+                s = Side(*cached.read_text().split())
+            else:
+                s = side(a.sdm, a.sdd, "none", test, tag, t)
+                if cached:
+                    cached.write_text(f"{s}\n")
+            f = side(a.fdm, a.fdd, a.fixes, test, tag, t)
         if s.dmb != f.dmb and "-" not in (s.dmb, f.dmb):
-            if str(side(a.sdm, a.sdd, "none", test, tag, t / "s2")) != str(s):
-                s.dmb = f.dmb = "~"
+            # A cached stock hash is from another directory: build stock here again (no run). A stock build that
+            # differs from its own rebuild here makes both "~".
+            h = build(a.sdm, "none", test, t)[2]
+            if h != f.dmb and h != build(a.sdm, "none", test, t)[2]:
+                h = f.dmb = "~"
+            s.dmb = h
         return rel, s, f
     except Exception as e:  # anything failing here counts as a crash of that test, not of the run
+        t = t.with_name(t.name + "+")  # and the next test gets a new copy of the suite
         return rel, Side("crash"), Side("crash", world=repr(e))
     finally:
-        shutil.rmtree(t, ignore_errors=True)
+        a.slots.put(t)
 
 
-def check(fast, stock=None, fixes="none", jobs=4, cache=None, filter=""):
+def check(fast, stock=None, fixes="none", jobs=None, cache=None, filter=""):
     """Runs the suite; prints the report and the "dmtests: " line. Returns (failed, summary)."""
     if not (SUITE / "Tests").is_dir():
         print("tests/dm-test-suite is empty: git submodule update --init")
@@ -95,8 +147,13 @@ def check(fast, stock=None, fixes="none", jobs=4, cache=None, filter=""):
     if not tests:
         print(f"dmtests: no tests match '{filter}'")
         return True, "no tests"
+    jobs = jobs or JOBS
+    snapshot()
     with tempfile.TemporaryDirectory(prefix="dmtests-") as tmp, ThreadPoolExecutor(jobs) as pool:
-        rows = sorted(pool.map(lambda nt: one(nt[0], nt[1], a, Path(tmp)), enumerate(tests)), key=lambda r: r[0])
+        a.slots = queue.SimpleQueue()  # a copy of the suite per worker, reused
+        for n in range(jobs):
+            a.slots.put(Path(tmp) / str(n))
+        rows = sorted(pool.map(lambda test: one(test, a), tests), key=lambda r: r[0])
 
     total = sum(1 for _, s, _ in rows if s.verdict != "skip")
     diffs = [r for r in rows if r[1].verdict != r[2].verdict and r[1].verdict != "crash"]
@@ -132,7 +189,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-s", dest="stock", help="stock BYOND bin dir")
     ap.add_argument("-f", dest="fixes", default="none", help="DMFAST_FIXES for the dmfast side")
-    ap.add_argument("-j", dest="jobs", type=int, default=4)
+    ap.add_argument("-j", dest="jobs", type=int, default=JOBS, help=f"tests at once (default {JOBS})")
     ap.add_argument("-c", dest="cache", help="cache dir for stock's verdicts")
     ap.add_argument("fast", help="bin dir with dmfast installed")
     ap.add_argument("filter", nargs="?", default="")
