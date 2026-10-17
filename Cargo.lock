@@ -41,7 +41,7 @@ checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
 
 [[package]]
 name = "dmfast"
-version = "6.0.1"
+version = "6.1.0"
 dependencies = [
  "libc",
  "libmimalloc-sys",
@@ -53,7 +53,7 @@ dependencies = [
 
 [[package]]
 name = "dmfast-install"
-version = "6.0.1"
+version = "6.1.0"
 dependencies = [
  "object",
  "windows-sys",
