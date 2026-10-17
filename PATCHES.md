@@ -54,3 +54,20 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 mimalloc serves the whole process, including `call_ext` DLLs; `HeapWalk` doesn't list its blocks under 4 KB.
 
 How BYOND itself could fix each of these: [PATCH-FIXES.md](PATCH-FIXES.md).
+
+## Native libraries
+
+Tested with stock BYOND and dmfast (default patches and each fix tier) on BYOND 516.1688, Windows and Linux, unless noted.
+
+| Library | Used by | With dmfast | Notes |
+|---|---|---|---|
+| rust-g 3.x to 7.x | most codebases | Works | tgstation, Bubber, and BeeStation CI unit tests and a 12-minute round match stock. |
+| dreamluau | tgstation and forks | Works | With `jsonutf`, its `json_encode` output is raw UTF-8 too. |
+| auxtools (current), auxmos 2.x | shiptest, yog | Works | auxtools test suite passes; auxmos atmos under load matches stock. |
+| byond-tracy | chomp, vore | Works | Before this release, `tickinit` and `tick0` crashed it on the first tick. On stock too, it crashes on `world.Reboot()` and at shutdown: BYOND unloads it, but its `destroy` does nothing, so its hooks outlive it. |
+| Paradise's byond-tracy fork | bay, aurora, paradise, azure | Works | Only on builds it supports (up to 516.1677). |
+| Paradise rustlibs (MILLA atmos) | paradise | Works | Tested on Linux 516.1666. Its Windows DLLs don't load on 516.1674 and later, on stock too. |
+| vchatlog, verdigris, libmariadb, libmysql, bapi | chomp, vore, aurora, others | Works | vchatlog and verdigris need 516.1674 or later. |
+| memorystats, byond_memprofile | monke, vanderlin | Works | Same output as stock. |
+| auxlua | bubber (shipped, not loaded) | Broken on stock | A 2024 build that doesn't find BYOND 516. Unused: Lua runs on dreamluau. |
+| byond-extools | eris, lc13, sojourn | Broken on stock | Doesn't support BYOND 516. |
