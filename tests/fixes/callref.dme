@@ -1,18 +1,43 @@
-// Forum report 2991514: call("missing proc")(x) runtimes but leaks a reference to every argument.
+// Forum report 2991514: call("missing proc")(x) runtimes but leaks a reference to every argument. So do the
+// other failures of call(callee)(...): a callee that isn't a name or proc, arglist() and named args, and an
+// external proc ("call_ext() must be used").
+/datum/t/Del()
+	world.log << "Del"
+	..()
+
+/proc/try_calls(route, datum/x)
+#if DM_VERSION >= 516
+	var/ext = load_ext(world.system_type == MS_WINDOWS ? "kernel32.dll" : "libc.so.6", world.system_type == MS_WINDOWS ? "GetTickCount" : "getpid")
+#else
+	var/ext // load_ext() is 516+; the fix needs 516.1674+ anyway
+#endif
+	for(var/i = 1 to 5)
+		try
+			switch(route)
+				if("name") call("no_such_proc")(x)
+				if("name, 2 args") call("no_such_proc")(x, x)
+				if("null") call(null)(x)
+				if("number") call(5)(x)
+				if("datum") call(x)(x)
+				if("arglist") call("no_such_proc")(arglist(list(x)))
+				if("named") call("no_such_proc")(a = x)
+				if("null arglist") call(null)(arglist(list(x)))
+				if("external") call(ext)(x)
+				if("external arglist") call(ext)(arglist(list(x)))
+				if("object") call(null, "no_such_proc")(x)
+		catch(var/exception/e)
+			if(i == 1)
+				world.log << "[route]: caught [e.name]"
+	world.log << "[route]: refcount after [refcount(x)]"
+
 /world/New()
 	..()
 	var/datum/x = new
 	world.log << "refcount before: [refcount(x)]"
-	for(var/i = 1 to 5)
-		try
-			call("no_such_proc")(x)
-		catch(var/exception/e)
-			if(i == 1)
-				world.log << "caught: [e.name]"
-	world.log << "refcount after: [refcount(x)]"
-	for(var/i = 1 to 5)
-		try
-			call(null, "no_such_proc")(x)
-		catch
-	world.log << "refcount after the object form: [refcount(x)]"
+	for(var/route in list("name", "name, 2 args", "null", "number", "datum", "arglist", "named", "null arglist", "external", "external arglist", "object"))
+		try_calls(route, x)
+	try
+		call("no_such_proc")(new /datum/t)
+	catch(var/exception/e)
+		world.log << "last ref: caught [e.name]"
 	shutdown()
