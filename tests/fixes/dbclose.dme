@@ -1,0 +1,39 @@
+// Fixed upstream in 516.1670: Close() and Open() on an open /database freed its query list but kept the pointer,
+// so the next query was stored into freed memory and del() freed the list again. Stock 515.1647-516.1669 crashes
+// (glibc: "double free"); on later builds the fix doesn't install. Open() on an open /database also set the new
+// name before closing, leaving the old file's shared connection behind: later rounds' queries returned nothing.
+/proc/count(database/db, table)
+	var/database/query/q = new("SELECT COUNT(*) FROM [table]")
+	q.Execute(db)
+	q.NextRow()
+	return q.GetColumn(1)
+
+/world/New()
+	..()
+	fdel("dbclose.db") // left behind by a run that crashed
+	fdel("dbclose2.db")
+	for(var/round in 1 to 3)
+		// Close() then Open() the same file: the next query used to go into the freed list.
+		var/database/db = new("dbclose.db")
+		var/database/query/q = new("CREATE TABLE IF NOT EXISTS t (id int)")
+		q.Execute(db)
+		q.Add("INSERT INTO t VALUES (?)", round)
+		q.Execute(db)
+		q.Close()
+		db.Close()
+		db.Open("dbclose.db")
+		var/a = count(db, "t")
+		// Open() while open: the same free, inside Open().
+		db.Open("dbclose2.db")
+		q = new("CREATE TABLE IF NOT EXISTS u (id int)")
+		q.Execute(db)
+		q.Add("INSERT INTO u VALUES (?)", round)
+		q.Execute(db)
+		var/b = count(db, "u")
+		del(q)
+		del(db)
+		world.log << "round [round]: t=[a] u=[b]"
+	fdel("dbclose.db")
+	fdel("dbclose2.db")
+	world.log << "done"
+	shutdown()
