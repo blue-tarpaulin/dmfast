@@ -29,7 +29,7 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 | String index | `strtab` | both | <1%, +21 MB | Hash index for string table lookups |
 | List intern | `lists` | both | <1%, +9 MB | Hash index for list interning |
 | Vector growth | `vecgrow` | both | <1% | Grows dword arrays geometrically, not one at a time |
-| .dmb buffer | `dmbbuf` | both | <1%, +4 MB | Larger write buffer for the .dmb |
+| .dmb buffer | `dmbbuf` | both | <1% | Larger write buffer for the .dmb |
 | Fast exit | `fastexit` | both | <1% | Exits after saving instead of freeing everything |
 | Proto index | `protos` | both | <1%, +13 MB | Hash index for proto lookups |
 | Intern index | `internidx` | both | <1% | Hash index for identifier interning |
@@ -43,7 +43,7 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 |---|---|---|---|---|
 | mimalloc | `mimalloc` | both | ~29% | mimalloc for small blocks, the system heap for larger ones |
 | .dmb reader | `dmbread` | both | ~17%, ~40% (Linux) | Buffered whole-value .dmb reads, cached ftell |
-| Resource-ID index | `resids` | both | ~14% | Hash index for resource ID find-or-add |
+| Proc-table index | `resids` | both | ~14% | Hash index for proc table find-or-add |
 | Sorted maps | `sortmap` | both | ~11% | One-pass, exact-size merges; grow maps geometrically |
 | String table load | `strtable` | Windows | ~3% | Native string table load; skips the redundant rebuild |
 | Var list inheritance | `varlist` | Windows | ~3% | Types without own vars reuse the parent's var list |

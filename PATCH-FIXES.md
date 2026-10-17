@@ -24,7 +24,7 @@ Most of the problems are one of three kinds:
 | Memory allocator | 0.86 s | 20% | The system allocator takes a lock on every call. | Use a faster allocator, such as [mimalloc](https://github.com/microsoft/mimalloc), with a heap per thread, for small blocks; keep large ones on the system heap, which doesn't round them up. |
 | Parent lookup | 0.67 s | 15% | Finding a type's parent scans its children (up to ~1,400) every time. | Store the parent on the type, or cache it until the children change. |
 | Name resolution | 0.67 s, +3 MB | 15% | Resolving a name checks every child of every enclosing scope, including scopes that don't declare it. | Keep a set of the names each scope declares, and skip scopes without the name. |
-| Other id tables | 0.50 s | 11% | They scan for a free slot from the start, like the string table. | Same as the string table. |
+| Other id tables | 0.50 s | 11% | They scan for a free slot from the start, like the string table. | Start from the lowest slot that might be free. Growing by 10 is fine here: these tables stay small. |
 | File lookups (Windows) | 0.45 s, +13 MB | 10% | The same file existence and attribute questions go to the OS over and over. | Cache the answers for the compile, and clear the cache when the compiler writes a file. |
 | Character checks (Windows) | 0.38 s | 9% | Checks like "is this a letter" look up the locale on every call. | Use a 128-entry [lookup table](https://en.wikipedia.org/wiki/Lookup_table) for ASCII. |
 | Identifier tree rebuilds | 0.28 s | 6% | The identifier tree is rebuilt from scratch every 256 inserts. | Rebuild less often, or replace the tree with a hash table. |
@@ -34,7 +34,7 @@ Most of the problems are one of three kinds:
 | Resource lookup | ~0.1 s | ~2% | Finding a resource by file name compares it with each resource in turn. | Use a hash table from file name to resource. |
 | Child lookup | ~0.1 s | ~2% | Finding a child by name scans all of the type's children. | Give types with many children a name-to-child index. |
 | Exit | ~0.1 s | ~2% | After saving, the compiler frees every object one at a time before exiting. | Exit once the `.dmb` is saved; the OS frees everything at once. |
-| `.dmb` write buffer | ~0.1 s, +4 MB | ~2% | The `.dmb` is written in 4 KB pieces. | Use a 1 MB buffer. |
+| `.dmb` write buffer | ~0.1 s | ~2% | The `.dmb` is written in 4 KB pieces. | Use a 1 MB buffer. |
 | Identifier lookup | ~0.1 s | ~2% | Identifier and path lookups walk a tree, comparing strings at each step, though most find an existing entry. | Use a hash table. |
 | Compile passes | ~0.1 s | ~2% | Every pass visits every node, including finished leaves that have nothing left to do. | Skip finished nodes that have no children. |
 | Id arrays | ~0.1 s | ~2% | Appending to an id array grows it by exactly one entry. | Double the capacity when full. |
@@ -46,7 +46,7 @@ Most of the problems are one of three kinds:
 | Area | Saves | % of fast | What's slow | Fix |
 |---|---|---|---|---|
 | `.dmb` reading | 0.94 s | 90% | The `.dmb` is read a byte at a time through locking calls, and the reader asks the OS for the file position before every string. | Read whole values, or the whole file, at once. Track the position yourself. |
-| Resource IDs | 0.88 s | 84% | Finding or adding a resource ID compares it with every existing ID, and the array grows one entry at a time. | Use a hash table. Double the array when full. |
+| Proc table | 0.88 s | 84% | While the world loads, each proc it registers is compared with every proc already in the table. | Use a hash table. |
 | Sorted maps | 0.67 s | 64% | Each insert into a small sorted map reallocates it to exactly one more entry, and merging two maps inserts entries one at a time, shifting and reallocating each time. | Grow the array geometrically when full. Merge both sorted arrays in one pass ([merge algorithm](https://en.wikipedia.org/wiki/Merge_algorithm)) into an array of the exact size. |
 | String lookup | 0.20 s, +5 MB | 19% | Every string lookup walks an unbalanced tree. | Use a hash table. |
 | CRC-32 checksum | 0.05 s | 5% | The checksum is computed one byte per step. | Process eight bytes per step ([slicing-by-8](https://en.wikipedia.org/wiki/Computation_of_cyclic_redundancy_checks#Byte-slicing_using_multiple_tables)); same result. |
