@@ -10,11 +10,14 @@ cd /d %~dp0
 set SRC=%TEMP%\dmfast-mimalloc-3.5.4
 if not exist "%SRC%" git clone -q --depth 1 --branch v3.5.4 https://github.com/microsoft/mimalloc.git "%SRC%" || exit /b 1
 if exist "%SRC%\build32" rmdir /s /q "%SRC%\build32"
-cmake -S "%SRC%" -B "%SRC%\build32" -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DMI_BUILD_TESTS=OFF
-  -DMI_BUILD_SHARED=OFF -DMI_BUILD_STATIC=ON -DMI_BUILD_OBJECT=OFF -DMI_OVERRIDE=OFF -DMI_WIN_REDIRECT=OFF
+rem Configure from inside the clone: mimalloc's CMake embeds `git describe` of the current directory.
+pushd "%SRC%"
+cmake -S "%SRC%" -B "%SRC%\build32" -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DMI_BUILD_TESTS=OFF ^
+  -DMI_BUILD_SHARED=OFF -DMI_BUILD_STATIC=ON -DMI_BUILD_OBJECT=OFF -DMI_OVERRIDE=OFF -DMI_WIN_REDIRECT=OFF ^
   -DCMAKE_SYSTEM_PROCESSOR=x86 -DMI_OPT_ARCH=OFF || exit /b 1
+popd
 cmake --build "%SRC%\build32" || exit /b 1
 set OBJ=%TEMP%\dmfast-hybrid-obj
 if not exist "%OBJ%" mkdir "%OBJ%"
-cl /nologo /O2 /W4 /MD /LD /I "%SRC%\include" hybrid.c /Fe:mimalloc.dll /Fo:"%OBJ%\\" /link /NOLOGO /IMPLIB:"%OBJ%\mimalloc.lib"
+cl /nologo /Brepro /O2 /W4 /MD /LD /I "%SRC%\include" hybrid.c /Fe:mimalloc.dll /Fo:"%OBJ%\\" /link /NOLOGO /Brepro /IMPLIB:"%OBJ%\mimalloc.lib" ^
   "%SRC%\build32\mimalloc.lib" advapi32.lib bcrypt.lib psapi.lib /EXPORT:mi_version /EXPORT:mi_is_redirected=hybrid_active || exit /b 1
