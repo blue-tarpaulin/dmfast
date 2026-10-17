@@ -21,7 +21,7 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 | Name filter | `filter` | both | ~2%, +3 MB | Skips scopes that can't contain the name |
 | mimalloc | `mimalloc` | both | ~2% | mimalloc for small blocks, the system heap for larger ones |
 | Slot hints | `slots` | both | ~2% | Hinted free-slot search in other id tables |
-| Parent cache | `parent` | both | ~1% | Caches each node's parent lookup |
+| Parent cache | `parent` | both | ~1% | Caches which child sets each type's `parent_type` |
 | Pair-list intern | `pairs` | both | ~1% | Hash index for pair-list interning |
 | Intern rebuild | `rebuild` | both | ~1% | Rebuilds the intern tree less often |
 | Char classes | `ctype` | Windows | <1% | Table-based character checks, skipping locale lookups |
