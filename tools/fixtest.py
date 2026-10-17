@@ -7,7 +7,7 @@ tests/fixes/<key>.dme must print <key>.expected with DMFAST_FIXES=<key> and =bre
 tests/fixes/keep/*.dme must print the same on stock, safe and extended. A fix that didn't install is n/a.
 Stock defaults to the _orig binaries beside dmfast. Exits non-zero on a failure.
 """
-import argparse, difflib, re, shutil, subprocess, sys, tempfile
+import argparse, difflib, os, re, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
 import byond
@@ -116,6 +116,9 @@ def check(fast, stock=None, keys=()):
                     bad = True
             if bad:
                 result(key, "fail", "FAIL")
+            elif stock_out == expected and key == "inodes" and os.stat(work).st_ino < 2**32:
+                print("fix inodes: n/a (this filesystem has 32-bit inode numbers, so stock works too; the output with the fix is right)")
+                result(key, "na", "n/a")
             elif stock_out == expected:
                 print(f"::warning::fix {key}: stock BYOND already gives the expected output (fixed upstream, or the test doesn't reproduce the bug)")
                 result(key, "na", "not needed")
