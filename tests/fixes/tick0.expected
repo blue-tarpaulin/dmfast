@@ -1,8 +1,8 @@
 New 0
 spawn0 0
-Tick 0
+Tick 0 usage<100=1
 spawn1 1
-Tick 1
-Tick 2
+Tick 1 usage<100=1
+Tick 2 usage<100=1
 shutdown 3
-Tick 3
+Tick 3 usage<100=1
