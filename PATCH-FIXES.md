@@ -28,7 +28,7 @@ Most of the problems are one of three kinds:
 | File lookups (Windows) | 0.45 s, +13 MB | 10% | The same file existence and attribute questions go to the OS over and over. | Cache the answers for the compile, and clear the cache when the compiler writes a file. |
 | Character checks (Windows) | 0.38 s | 9% | Checks like "is this a letter" look up the locale on every call. | Use a 128-entry [lookup table](https://en.wikipedia.org/wiki/Lookup_table) for ASCII. |
 | Identifier tree rebuilds | 0.28 s | 6% | The identifier tree is rebuilt from scratch every 256 inserts. | Rebuild less often, or replace the tree with a hash table. |
-| Id lists | 0.22 s, +9 MB | 5% | Id lists are found through a tree that degrades into long chains. | Use a hash table keyed by the list's contents. |
+| Id lists | 0.22 s, +9 MB | 5% | Id lists are found through a tree that only rebalances at depth 256. | Use a hash table keyed by the list's contents. |
 | Pair lists | 0.19 s | 4% | Finding a pair list checks every stored list, and storage grows one entry at a time. | Use a hash table. Double the storage when full. |
 | String lookup | 0.19 s, +21 MB | 4% | Finding an existing string walks an unbalanced tree, comparing strings at each step. | Use a hash table from string to id. |
 | Resource lookup | ~0.1 s | ~2% | Finding a resource by file name compares it with each resource in turn. | Use a hash table from file name to resource. |

@@ -28,7 +28,7 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 | Resource index | `resources` | both | <1% | Indexes resource files by name |
 | String index | `strtab` | both | <1%, +21 MB | Hash index for string table lookups |
 | List intern | `lists` | both | <1%, +9 MB | Hash index for list interning |
-| Vector growth | `vecgrow` | both | <1% | Grows dword arrays geometrically, not one at a time |
+| Vector growth | `vecgrow` | both | <1% | Grows dword arrays geometrically, not one at a time; tested that nothing reads the spare entries |
 | .dmb buffer | `dmbbuf` | both | <1% | Larger write buffer for the .dmb |
 | Fast exit | `fastexit` | both | <1% | Exits after saving instead of freeing everything |
 | Proto index | `protos` | both | <1%, +13 MB | Hash index for proto lookups |
