@@ -3,8 +3,9 @@
 
 usage: dmtests.py [-s <stock bin dir>] [-f <fixes>] [-j <jobs>] [-c <cache dir>] <dmfast bin dir> [filter]
 
-Verdicts: pass, compile, runtime, crash, expected-*, skip. Fails on a verdict difference, or a .dmb
-difference with -f none (default). -c caches stock's verdicts per test. Stock defaults to the _orig binaries.
+Verdicts: pass, compile, runtime, crash, expected-*, skip. Fails on a verdict difference, a .dmb difference with
+-f none (default), or a stock crash dmfast hides whose cause isn't known. -c caches stock's verdicts per test.
+Stock defaults to the _orig binaries.
 """
 import argparse, os, queue, re, shutil, sys, tempfile, threading
 from concurrent.futures import ThreadPoolExecutor
@@ -157,7 +158,14 @@ def check(fast, stock=None, fixes="none", jobs=None, cache=None, filter=""):
 
     total = sum(1 for _, s, _ in rows if s.verdict != "skip")
     diffs = [r for r in rows if r[1].verdict != r[2].verdict and r[1].verdict != "crash"]
-    masked = [f"{rel} (dmfast: {f.verdict})" for rel, s, f in rows if s.verdict == "crash" and f.verdict != "crash"]
+    # Stock crashes, dmfast doesn't: a BYOND memory bug that dmfast's allocator doesn't trip on, which can corrupt
+    # memory silently instead. A known bug BYOND has since fixed is a warning; an unknown one fails the run.
+    db = ("Open()/Close() free /database's query array but keep using it: use-after-free write and double free, "
+          "silent heap corruption under dmfast (fixed in BYOND 516.1670; the dbclose fix backports it)")
+    gp = "GetPixel() with an invalid dir reads frames[-1]: out-of-bounds read only (fixed in BYOND 516.1683)"
+    causes = {"Tests/Database/open_and_open.dm": db, "Tests/Database/read.dm": db, "Tests/Icon/GetPixelBadArgs.dm": gp}
+    masked = [(rel, f.verdict, causes.get(rel)) for rel, s, f in rows if s.verdict == "crash" and f.verdict != "crash"]
+    unknown = [m for m in masked if not m[2]]
     dmbdiff = [rel for rel, s, f in rows if "-" not in (s.dmb, f.dmb) and s.dmb != f.dmb]
     fails = lambda i: [f"{r[0]} ({r[i].verdict})" for r in rows if r[i].verdict not in ("pass", "skip")]
     sfail, ffail = fails(1), fails(2)
@@ -169,9 +177,14 @@ def check(fast, stock=None, fixes="none", jobs=None, cache=None, filter=""):
             print(f"== {rel}")
             for label, x in (("stock", s), ("dmfast", f)):
                 print("\n".join(f"--- {label} compiler:\n{x.compiler}\n--- world:\n{x.world}".splitlines()[:40]))
-    if masked:
-        print("::notice::dmtests: stock BYOND crashes, dmfast does not (its allocator doesn't trip on BYOND's memory bug):")
-        print(indent(masked))
+    known = [m for m in masked if m[2]]
+    if known:
+        print("::warning::dmtests: stock BYOND crashes, dmfast does not (a known BYOND bug, fixed in later builds):")
+        print(indent(f"{rel} (dmfast: {v}): {why}" for rel, v, why in known))
+    if unknown:
+        print("::error::dmtests: stock BYOND crashes, dmfast does not, cause unknown (BYOND memory bug the allocator "
+              "may hide; find it and add it to `causes`):")
+        print(indent(f"{rel} (dmfast: {v})" for rel, v, _ in unknown))
     if dmbdiff:
         print(f"::{'error' if fixes == 'none' else 'notice'}::dmtests: .dmb differs from stock (DMFAST_FIXES={fixes}):")
         print(indent(dmbdiff))
@@ -179,10 +192,11 @@ def check(fast, stock=None, fixes="none", jobs=None, cache=None, filter=""):
         print("stock BYOND fails:\n" + indent(sfail))
     if ffail:
         print(f"dmfast (DMFAST_FIXES={fixes}) fails:\n" + indent(ffail))
-    summary = (f"{total} tests, {len(diffs)} verdict differences, {len(dmbdiff)} .dmb differences; "
+    summary = (f"{total} tests, {len(diffs)} verdict differences, {len(masked)} stock crashes dmfast hides "
+               f"({len(unknown)} unknown), {len(dmbdiff)} .dmb differences; "
                f"stock fails {len(sfail)}, dmfast fails {len(ffail)}")
     print(f"dmtests: {summary}", flush=True)
-    return bool(diffs) or (fixes == "none" and bool(dmbdiff)), summary
+    return bool(diffs) or bool(unknown) or (fixes == "none" and bool(dmbdiff)), summary
 
 
 if __name__ == "__main__":
