@@ -293,10 +293,97 @@ jobs:
             cat compat-*.md 2>/dev/null | sort -t'|' -k4,4 -k2,2V
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+  # dmfast only, latest BYOND: tgstation boots MetaStation through Initializations complete and keeps running.
+  boot:
+    name: Boot tgstation (${{ matrix.os == 'windows-latest' && 'Windows' || 'Linux' }})
+    needs: pack
+    if: always() && (needs.pack.result == 'success' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository))
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      TG_COMMIT: 1568dbe1daeba67dc20939c6307d07522967e89c
+      COMPAT_WORK: ${{ github.workspace }}/compat-work
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        if: needs.pack.result == 'success'
+        with:
+          name: dmfast-install
+      - name: Installer from main's latest passing run (fork PR)
+        if: needs.pack.result != 'success'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh run list -R "$GITHUB_REPOSITORY" -w CI -b main -e push -s success -L 1 --json databaseId -q '.[0].databaseId')
+          gh run download "$id" -R "$GITHUB_REPOSITORY" -n dmfast-install
+      - name: Install 32-bit runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libc6:i386 libstdc++6:i386 libgcc-s1:i386 zlib1g:i386 libssl-dev:i386 libcurl4:i386 unzip
+      - uses: actions/cache@v6
+        id: tg
+        with:
+          path: tgstation
+          key: tgstation-${{ env.TG_COMMIT }}
+      - name: Fetch tgstation
+        if: steps.tg.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          git init -q tgstation
+          git -C tgstation fetch -q --depth 1 https://github.com/tgstation/tgstation.git "$TG_COMMIT"
+          git -C tgstation checkout -q FETCH_HEAD
+          rm -rf tgstation/.git
+      - name: rust_g version
+        id: rustg
+        if: runner.os == 'Linux'
+        run: echo "version=$(sed -n 's/^export RUST_G_VERSION=//p' tgstation/dependencies.sh)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        id: rustg-cache
+        if: runner.os == 'Linux'
+        with:
+          path: rust_g
+          key: rust_g-${{ steps.rustg.outputs.version }}
+      - name: Fetch rust_g
+        if: runner.os == 'Linux'
+        run: |
+          if [ "${{ steps.rustg-cache.outputs.cache-hit }}" != true ]; then
+            mkdir -p rust_g
+            curl -sSfL --retry 4 -o rust_g/librust_g.so \
+              "https://github.com/tgstation/rust-g/releases/download/${{ steps.rustg.outputs.version }}/librust_g.so"
+          fi
+      # The world writes data/ and logs into its folder: boot a copy, so the cached tgstation stays clean.
+      - name: Copy tgstation
+        shell: bash
+        run: |
+          cp -r tgstation tg-boot
+          if [ "$RUNNER_OS" = Linux ]; then cp rust_g/librust_g.so tg-boot/; fi
+      # tgstation ships dreamluau.dll but not libdreamluau.so; without it every Lua state is a runtime error.
+      - name: Fetch dreamluau
+        if: runner.os == 'Linux'
+        run: |
+          v=$(sed -n 's/^export DREAMLUAU_VERSION=//p' tgstation/dependencies.sh)
+          curl -sSfL --retry 4 -o tg-boot/libdreamluau.so "https://github.com/tgstation/dreamluau/releases/download/$v/libdreamluau.so"
+      - name: Install BYOND 516.latest and dmfast
+        shell: bash
+        run: COMPAT_PHASE=setup python3 tools/compat.py 516.latest dmfast-install.exe tg-boot/tgstation.dme
+      - name: Boot MetaStation
+        shell: bash
+        run: python3 tools/boot.py "$COMPAT_WORK/fast/bin" tg-boot/tgstation.dme
+
   # One check to require before merging: fails if any job above failed or was cancelled.
   result:
     name: CI result
-    needs: [windows, linux, pack, scan, compat]
+    needs: [windows, linux, pack, scan, compat, boot]
     if: always()
     runs-on: ubuntu-latest
     steps:
