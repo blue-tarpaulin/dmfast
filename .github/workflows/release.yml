@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      actions: read # ci.yml's compat and boot jobs ask for it (main's installer for fork PRs)
 
   publish:
     name: Publish
