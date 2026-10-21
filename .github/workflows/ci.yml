@@ -187,12 +187,13 @@ jobs:
           id=$(gh run list -R "$GITHUB_REPOSITORY" -w CI -b main -e push -s success -L 1 --json databaseId -q '.[0].databaseId')
           echo "::notice::Fork PR: testing with the installer from main's run $id"
           gh run download "$id" -R "$GITHUB_REPOSITORY" -n dmfast-install
+      # gcc-multilib: tests/fixes/profcpu-gen.sh builds a 32-bit helper library.
       - name: Install 32-bit runtime libraries
         if: runner.os == 'Linux'
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libc6:i386 libstdc++6:i386 libgcc-s1:i386 zlib1g:i386 libssl-dev:i386 libcurl4:i386 unzip
+          sudo apt-get install -y -qq libc6:i386 libstdc++6:i386 libgcc-s1:i386 zlib1g:i386 libssl-dev:i386 libcurl4:i386 unzip gcc-multilib
       - uses: actions/cache@v6
         id: tg
         with:
