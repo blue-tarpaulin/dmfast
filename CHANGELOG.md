@@ -4,6 +4,8 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
+## 6.2.0
+
 - **New patch:** `iconcopy` (DreamDaemon, 516.1663+): drawing a state from a .dmi no longer makes and frees a zeroed pixel buffer for every frame of the file. `getFlatIcon` on a dressed human is 2.7× faster.
 - **New patch:** `iconstates` (DreamDaemon, 516): `icon_states()` no longer scans its list once per state, which made it quadratic in the number of states. 1.3× faster.
 - **New fix:** `profself` (safe): in the profiler, a proc stopped by "Maximum recursion level reached" or by a call with wrong arguments no longer gets a self CPU time far above its total CPU time, or a negative one.
