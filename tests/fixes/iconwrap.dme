@@ -1,0 +1,45 @@
+// iconwrap: an /icon keeps its operations as a list of entries and renders them from the offset it last rendered
+// to, stored in 16 bits. Once the list passes 64 KB, stock BYOND starts rendering mid-list (operations skipped,
+// wrong pixels, "BUG: Unrecognized icon opcode") or re-runs up to 64 KB of operations at every GetPixel (a freeze
+// on a bigger icon). Each Blend with a colour below adds 7 bytes and each Flip 2, so the lists pass 64 KB near
+// the ends of the loops.
+/proc/blend()
+	var/icon/I = icon('iconwrap.dmi', "test")
+	var/wrong = 0
+	var/first = 0
+	for(var/i in 1 to 9400)
+		var/c = rgb(i % 256, round(i / 256), 77)
+		I.Blend(c, ICON_OVERLAY)
+		if(I.GetPixel(1, 1) != c)
+			wrong++
+			if(!first) first = i
+	world.log << "Blend: 9400 calls, wrong pixels: [wrong], first wrong: [first]"
+	var/icon/C = new(I)
+	world.log << "copy: [C.GetPixel(1, 1)] [C.GetPixel(32, 32)] [C.Width()]x[C.Height()]"
+	C.DrawBox("#123456", 3, 3)
+	world.log << "copy after DrawBox: [C.GetPixel(2, 2)] [C.GetPixel(3, 3)], original: [I.GetPixel(3, 3)]"
+	var/icon/B = icon('iconwrap.dmi', "test")
+	B.Blend(I, ICON_OVERLAY)
+	world.log << "blended onto another: [B.GetPixel(5, 5)]"
+	I.Blend("#ff8000", ICON_OVERLAY)
+	world.log << "one more Blend: [I.GetPixel(1, 1)]"
+
+/proc/flip()
+	var/icon/I = icon('iconwrap.dmi', "test")
+	I.DrawBox("#ff0000", 1, 1)
+	I.DrawBox("#0000ff", 32, 1)
+	var/wrong = 0
+	var/first = 0
+	for(var/i in 1 to 32790)
+		I.Flip(EAST)
+		if(I.GetPixel(1, 1) != (i % 2 ? "#0000ff" : "#ff0000"))
+			wrong++
+			if(!first) first = i
+	world.log << "Flip: 32790 calls, wrong pixels: [wrong], first wrong: [first]"
+	world.log << "after: [I.GetPixel(1, 1)] [I.GetPixel(32, 1)]"
+
+/world/New()
+	..()
+	blend()
+	flip()
+	shutdown()

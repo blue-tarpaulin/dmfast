@@ -1,0 +1,7 @@
+Blend: 9400 calls, wrong pixels: 0, first wrong: 0
+copy: #b8244d #b8244d 32x32
+copy after DrawBox: #b8244d #123456, original: #b8244d
+blended onto another: #b8244d
+one more Blend: #ff8000
+Flip: 32790 calls, wrong pixels: 0, first wrong: 0
+after: #ff0000 #0000ff
