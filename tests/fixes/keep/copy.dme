@@ -1,0 +1,27 @@
+// Icons drawn from a multi-state .dmi must match stock (iconcopy changes how BYOND copies the file's frames
+// when it draws one state): every state in four directions, a copy modified after drawing (the file's
+// frames and a fresh copy must not change), and a whole-icon copy with a state inserted.
+/proc/pix(icon/I)
+	var/list/p = list()
+	for(var/y = 1, y <= I.Height(), y += 3)
+		for(var/x = 1, x <= I.Width(), x += 3)
+			p += "[I.GetPixel(x, y)]"
+	return md5(jointext(p, ","))
+
+/world/New()
+	..()
+	var/list/hs = list()
+	for(var/s in icon_states('states.dmi'))
+		for(var/d in list(SOUTH, NORTH, EAST, WEST))
+			hs += pix(icon('states.dmi', s, d))
+	world.log << "states: [length(hs)] [md5(jointext(hs, ";"))]"
+	var/icon/A = icon('states.dmi', "st042")
+	var/before = pix(A)
+	A.DrawBox("#ff00ff", 1, 1, 32, 32)
+	var/icon/B = icon('states.dmi', "st042")
+	world.log << "copy: fresh unchanged=[pix(B) == before] modified changed=[pix(A) != before]"
+	var/icon/W = icon('states.dmi')
+	var/icon/W2 = new(W)
+	W2.Insert(icon('states.dmi', "zeta"), "added")
+	world.log << "whole: [length(icon_states(W))] [length(icon_states(W2))] [pix(icon(W2, "added"))] [pix(icon(W, "st007", EAST))]"
+	shutdown()

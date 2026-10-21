@@ -1,0 +1,10 @@
+climb: Maximum recursion level reached (perhaps there is an infinite loop)
+To avoid this safety check, set world.loop_checks=0.
+loop: Maximum recursion level reached (perhaps there is an infinite loop)
+To avoid this safety check, set world.loop_checks=0.
+target: bad arg name 'b'
+target: positional parameters must precede all named args
+/proc/leaf: calls>0=1 self<=total=1 over<=self=1
+/proc/climb: calls>0=1 self<=total=1 over<=self=1
+/proc/loop: calls>0=1 self<=total=1 over<=self=1
+/proc/target: calls>0=1 self<=total=1 over<=self=1

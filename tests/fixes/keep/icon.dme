@@ -1,0 +1,49 @@
+// Runtime /icon operations must match stock under the safe and extended tiers (iconwrap only changes icons whose
+// operation list passes 64 KB; these stay below it, including one just under).
+/proc/show(label, icon/I)
+	var/list/px = list()
+	for(var/y in list(1, 2, 16, 31, 32))
+		for(var/x in list(1, 2, 16, 31, 32))
+			px += "[I.GetPixel(x, y)]"
+	world.log << "[label]: [I.Width()]x[I.Height()] [jointext(px, ",")]"
+
+/world/New()
+	..()
+	var/icon/I = icon('icon.dmi', "test")
+	I.Blend(rgb(10, 20, 30), ICON_ADD)
+	show("add", I)
+	I.Blend(rgb(200, 100, 50, 128), ICON_MULTIPLY)
+	show("multiply", I)
+	I.Flip(EAST)
+	I.Turn(90)
+	show("flip turn", I)
+	I.Shift(NORTH, 3, 1)
+	I.SwapColor(I.GetPixel(1, 1), "#00ff00")
+	show("shift swap", I)
+	I.DrawBox("#ff00ff", 4, 4, 9, 7)
+	I.MapColors(0.5, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+	I.SetIntensity(1.2)
+	show("box map intensity", I)
+	var/icon/C = new(I)
+	C.Turn(45)
+	C.Crop(1, 1, 30, 30)
+	show("copy turn crop", C)
+	show("original", I)
+	var/icon/O = icon('icon.dmi', "test")
+	O.Blend(I, ICON_OVERLAY, 3, 2)
+	O.Insert(icon('icon.dmi', "test"), "extra")
+	show("overlay insert", O)
+	var/icon/S = new(I)
+	S.Scale(64, 48)
+	show("scale", S)
+	// 9,300 colour Blends: an operation list just under 64 KB, drawn after every one
+	var/icon/L = icon('icon.dmi', "test")
+	var/wrong = 0
+	for(var/i in 1 to 9300)
+		var/c = rgb(i % 256, round(i / 256), 77)
+		L.Blend(c, ICON_OVERLAY)
+		if(L.GetPixel(1, 1) != c)
+			wrong++
+	world.log << "9300 Blends: wrong pixels: [wrong]"
+	show("long list", L)
+	shutdown()

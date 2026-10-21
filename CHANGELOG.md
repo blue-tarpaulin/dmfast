@@ -4,6 +4,12 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
+- **New patch:** `iconcopy` (DreamDaemon, 516.1663+): drawing a state from a .dmi no longer makes and frees a zeroed pixel buffer for every frame of the file. `getFlatIcon` on a dressed human is 2.7× faster.
+- **New patch:** `iconstates` (DreamDaemon, 516): `icon_states()` no longer scans its list once per state, which made it quadratic in the number of states. 1.3× faster.
+- **New fix:** `profself` (safe): in the profiler, a proc stopped by "Maximum recursion level reached" or by a call with wrong arguments no longer gets a self CPU time far above its total CPU time, or a negative one.
+- **New fix:** `profcpu` (extended, Linux): the profiler's CPU times count only the thread running procs.
+- **New fix:** `iconwrap` (safe): a runtime `/icon` modified tens of thousands of times no longer freezes the server or breaks.
+
 ## 6.1.0
 
 - **New fix:** `dbclose` (safe) backports BYOND 516.1670's `/database` fix to older builds, where reusing a closed database crashed stock BYOND and silently corrupted memory under dmfast's allocator.

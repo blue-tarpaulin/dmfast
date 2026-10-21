@@ -54,6 +54,9 @@ Most of the problems are one of three kinds:
 | String table load (Windows) | ~0.01 s | ~1% | After the load, a rebuild re-checks every entry's checksum (always passing) and relinks the tree the load just built. | Skip the re-check after a fresh load. With a hash table for string lookups, skip the relink too. |
 | Var list inheritance (Windows) | ~0.01 s | ~1% | A type with no vars of its own rebuilds its parent's var list and gets the same list back. | Reuse the parent's list. |
 | Icon state names (Windows) | ~0.02 s | ~2% | Comparing icon state names makes locale lookups for every character. | Use 256-entry lookup tables. |
+| |
+| `icon_states()` lists | 1.3x | - | Each state name goes in with `L[name] = null`, and every key the list doesn't have yet is first searched for in the whole list: quadratic in the number of states. | The builder's list only gets keys through that set, so a key the tree misses is new. |
+| Icon state copy | `getFlatIcon` - 2.5x | - | Drawing one state from a .dmi copies the whole file's icon, and copying each frame first makes a zeroed buffer of the world's icon size, then frees it to share the source frame's pixels. | Copy only the state being drawn. |
 
 ## Memory
 

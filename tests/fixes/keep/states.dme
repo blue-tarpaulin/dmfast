@@ -1,0 +1,22 @@
+// icon_states() must give exactly stock's lists (iconstates skips a scan while building them): names, order,
+// the null associations (json_encode), for a file, an /icon and a modified /icon, in every mode, with names
+// that repeat (a movement state's twin, a plain duplicate), an empty name and names differing only in case.
+/proc/show(label, list/L)
+	world.log << "[label]: [length(L)] [json_encode(L)]"
+
+/world/New()
+	..()
+	var/icon/I = icon('states.dmi')
+	var/icon/M = icon('states.dmi')
+	M.Blend(rgb(10, 20, 30), ICON_ADD)
+	for(var/mode in list(null, 0, 1, 2))
+		show("file [mode]", isnull(mode) ? icon_states('states.dmi') : icon_states('states.dmi', mode))
+		show("icon [mode]", isnull(mode) ? icon_states(I) : icon_states(I, mode))
+		show("modified [mode]", isnull(mode) ? icon_states(M) : icon_states(M, mode))
+	var/list/S = icon_states('states.dmi')
+	S["extra"] = 5
+	S += "st000"
+	S["st000"] = 7
+	show("edited", S)
+	world.log << "in: [("st042" in icon_states('states.dmi'))] [("nope" in icon_states('states.dmi'))]"
+	shutdown()

@@ -50,6 +50,9 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 | String tree | `strtree` | both | ~2%, +5 MB | Hash index replaces string tree walks |
 | Icon state name compare | `dmicmp` | Windows | ~2% | Table-based .dmi icon state name compare |
 | CRC-32 | `crc` | both | <1% | Checksums eight bytes per step |
+| |
+| `icon_states()` | `iconstates` | both | 1.3x | Builds `icon_states()` lists without scanning the list once per state |
+| Iconstate copy | `iconcopy` | both | `getFlatIcon` - 2.5x | Copies an icon's frames without making and freeing a zeroed pixel buffer per frame |
 
 mimalloc serves the whole process, including `call_ext` DLLs; `HeapWalk` doesn't list its blocks under 4 KB.
 

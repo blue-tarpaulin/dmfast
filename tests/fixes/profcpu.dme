@@ -1,0 +1,35 @@
+// profcpu (Linux): the profiler's CPU times count every thread of DreamDaemon, so a proc running while other threads
+// work gets their CPU time too. work() keeps the proc thread busy for 0.3 s while three threads of profcpu-busy.so
+// (built by profcpu-gen.sh) burn CPU; its total CPU time must not exceed its real time. Only comparisons are logged.
+
+/proc/burn(ds)
+	set background = 1
+	var/end = world.timeofday + ds
+	var/n = 0
+	while(world.timeofday < end)
+		n++
+	return n
+
+/proc/work()
+	burn(3)
+
+/world/New()
+	..()
+	spawn(1)
+		if(!fexists("profcpu-busy.so"))
+			world.log << "no profcpu-busy.so: profcpu-gen.sh needs a C compiler for 32-bit Linux"
+			shutdown()
+			return
+		world.Profile(PROFILE_RESTART)
+		call_ext("./profcpu-busy.so", "busy")("600")
+		work()
+		var/list/L = world.Profile(PROFILE_REFRESH)
+		for(var/i = 7, i + 5 <= L.len, i += 6)
+			if(L[i] == "/proc/work")
+				var/self = L[i + 1]
+				var/total = L[i + 2]
+				var/real = L[i + 3]
+				world.log << "work: total>0=[total > 0] self<=total=[self <= total] total<=real=[total <= real + 0.001]"
+		world.Profile(PROFILE_STOP)
+		sleep(8) // the threads end before shutdown unloads the library
+		shutdown()
