@@ -4,6 +4,8 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
+- **New patch:** `argload` (DreamDaemon, Linux): faster reference counting. ~18% less CPU usage in-round.
+
 ## 6.2.0
 
 - **New patch:** `iconcopy` (DreamDaemon, 516.1663+): drawing a state from a .dmi no longer makes and frees a zeroed pixel buffer for every frame of the file. `getFlatIcon` on a dressed human is 2.7× faster.
