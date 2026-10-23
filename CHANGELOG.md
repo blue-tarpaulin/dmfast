@@ -5,6 +5,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 ## Unreleased
 
 - **New patch:** `argload` (DreamDaemon, Linux): faster reference counting. ~18% less CPU usage in-round.
+- **New patch:** `seenclear` (DreamDaemon): faster map sending. ~12% less `map_cpu` with 50 players.
 
 ## 6.2.0
 
