@@ -54,6 +54,7 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 | `icon_states()` | `iconstates` | both | 1.3x | Builds `icon_states()` lists without scanning the list once per state |
 | Iconstate copy | `iconcopy` | both | `getFlatIcon` - 2.5x | Copies an icon's frames without making and freeing a zeroed pixel buffer per frame |
 | Reference counting | `argload` | Linux | ~18% in-round | Faster reference counting: avoids a CPU stall on every call |
+| Map sending | `seenclear` | both | ~12% `map_cpu` (50 players) | Clears each player's "seen" marks in memory order instead of jumping around |
 
 mimalloc serves the whole process, including `call_ext` DLLs; `HeapWalk` doesn't list its blocks under 4 KB.
 

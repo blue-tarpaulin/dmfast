@@ -58,6 +58,7 @@ Most of the problems are one of three kinds:
 | `icon_states()` lists | 1.3x | - | Each state name goes in with `L[name] = null`, and every key the list doesn't have yet is first searched for in the whole list: quadratic in the number of states. | The builder's list only gets keys through that set, so a key the tree misses is new. |
 | Icon state copy | `getFlatIcon` - 2.5x | - | Drawing one state from a .dmi copies the whole file's icon, and copying each frame first makes a zeroed buffer of the world's icon size, then frees it to share the source frame's pixels. | Copy only the state being drawn. |
 | Reference counting (Linux) | ~18% in-round | - | The functions that add and drop a value's reference read their 8-byte argument in one load, but callers wrote it as two 4-byte halves, so the CPU stalls on every call. | Read the argument as two halves (as the Windows build does), or pass values by pointer. |
+| Map sending | ~12% `map_cpu` (50 players) | - | Every tick, for every player, map sending clears a "seen" mark on each object that player knows about by following a list in id order, which jumps all over memory. | Clear the marks in memory order, or use a tick counter instead of a mark that needs clearing. |
 
 ## Memory
 
