@@ -3,8 +3,8 @@
 Robusts BYOND's toolchain.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/speedup-5fff1e26-dark.svg">
-  <img alt="dmfast speedups on SS13 codebases: compile 7.0x faster on Windows and 9.9x on Linux; DreamDaemon world load 8.4x and 4.2x faster" src="docs/speedup-5fff1e26-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/speedup-be46d347-dark.svg">
+  <img alt="dmfast vs BYOND on an SS13 codebase: compile 7.4x faster on Windows and 12x on Linux; DreamDaemon world load 6.3x and 2.7x faster; in-round CPU 21% less on Linux; 32% less map_cpu with 16 players" src="docs/speedup-be46d347-light.svg">
 </picture>
 
 How much faster depends on your computer and codebase, but expect significant gains.
