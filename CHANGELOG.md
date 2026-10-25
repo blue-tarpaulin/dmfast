@@ -7,6 +7,12 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New patch:** `argload` (DreamDaemon, Linux): faster reference counting. ~18% less CPU usage in-round.
 - **New patch:** `seenclear` (DreamDaemon): faster map sending by clearing "seen" marks in memory order. ~12% less `map_cpu` with 50 players.
 - **New patch:** `mapskip` (DreamDaemon): faster map sending by skipping objects a player already sees unchanged. ~10% less `map_cpu` with 50 players.
+- **New patch:** `getvar` (DreamDaemon, Linux): faster var reads by avoiding the same CPU stall as `argload`. ~7% less CPU usage in-round.
+- **New patch:** `turfvar` (DreamDaemon): faster turf var reads on multi-z maps by keeping each turf hash chain in z-level order. ~2.5% less CPU in-round on a 12-z map.
+- **New patch:** `turfpf` (DreamDaemon): faster map sending by loading the next turfs' contents into cache ahead of time. ~16% less `map_cpu` with 50 players.
+- **New patch:** `locidx` (DreamDaemon): faster `view()`/`range()` by indexing the list being built. ~N× faster with N objects/turf.
+- **Internal:** dmfast's allocator (Linux) returns at once on `free(NULL)`, which BYOND does three times per proc return. ~3% faster small proc calls.
+- **Internal:** dmfast's allocator (Linux) runs mimalloc's full-heap collect walk 100× less often. ~7% less CPU in heavy allocation churn.
 
 ## 6.2.0
 

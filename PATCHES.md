@@ -6,7 +6,7 @@ Each patch finds the code it changes by signature and turns itself off if anythi
 
 These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are opt-in and listed separately in [BUGFIXES.md](BUGFIXES.md).
 
-**Saves** is roughly how much tg gets faster, and how its peak memory changes. Patches overlap & numbers vary by codebase, so treat them as rough.
+**Saves** is roughly how much tg gets faster, and how its peak memory changes. Patches overlap & numbers vary by codebase, so treat them as rough. `map_cpu` numbers are with 50 players.
 
 ## Compiler
 
@@ -51,11 +51,15 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 | Icon state name compare | `dmicmp` | Windows | ~2% | Table-based .dmi icon state name compare |
 | CRC-32 | `crc` | both | <1% | Checksums eight bytes per step |
 | |
-| `icon_states()` | `iconstates` | both | 1.3x | Builds `icon_states()` lists without scanning the list once per state |
-| Iconstate copy | `iconcopy` | both | `getFlatIcon` - 2.5x | Copies an icon's frames without making and freeing a zeroed pixel buffer per frame |
+| `icon_states()` | `iconstates` | both | 1.3× | Builds `icon_states()` lists without scanning the list once per state |
+| Iconstate copy | `iconcopy` | both | `getFlatIcon` - 2.5× | Copies an icon's frames without making and freeing a zeroed pixel buffer per frame |
+| `view()`/`range()` | `locidx` | both | ~N× with N objs/turf | Hash set of the list being built replaces the "already in it?" scan per atom |
+| Turf contents prefetch | `turfpf` | both | ~16% `map_cpu` | Fetches the next turfs' contents into cache while map sending checks the current one |
+| Map sending | `seenclear` | both | ~12% `map_cpu` | Clears each player's "seen" marks in memory order instead of jumping around |
+| Unchanged objects | `mapskip` | both | ~10% `map_cpu` | Skips rebuilding a temporary record for objects a player already sees unchanged |
 | Reference counting | `argload` | Linux | ~18% in-round | Faster reference counting: avoids a CPU stall on every call |
-| Map sending | `seenclear` | both | ~12% `map_cpu` (50 players) | Clears each player's "seen" marks in memory order instead of jumping around |
-| Unchanged objects | `mapskip` | both | ~10% `map_cpu` (50 players) | Skips rebuilding a temporary record for objects a player already sees unchanged |
+| Var reads | `getvar` | Linux | ~7% in-round | Faster `a.b` reads: avoids the same CPU stall as `argload` |
+| Turf var chains | `turfvar` | both | ~2.5% in-round (12 z-levels) | Adds new turf var records at the end of their hash chain, so early-loaded z-levels stay near the front |
 
 mimalloc serves the whole process, including `call_ext` DLLs; `HeapWalk` doesn't list its blocks under 4 KB.
 
