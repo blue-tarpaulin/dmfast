@@ -41,7 +41,11 @@ fn entries(spec: &str) -> Result<Vec<String>, Failure> {
 
 /// Whether an INI line sets `fixes` (comments and surrounding spaces ignored).
 fn is_fixes_line(line: &str) -> bool {
-    line.split([';', '#']).next().unwrap_or("").split_once('=').is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case("fixes"))
+    line.split([';', '#'])
+        .next()
+        .unwrap_or("")
+        .split_once('=')
+        .is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case("fixes"))
 }
 
 /// Checks a `--fixes` value before anything is installed.

@@ -65,7 +65,10 @@ jobs:
           key: ${{ secrets.DMFAST_PATCHES_KEY }}
       - uses: ./.github/actions/rust-linux
         with:
-          components: clippy
+          components: clippy,rustfmt
+      - name: Format
+        shell: bash
+        run: cargo fmt --all --check
       - uses: Swatinem/rust-cache@v2
       - name: Clippy (libdmfast.so)
         shell: bash

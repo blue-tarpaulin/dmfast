@@ -43,13 +43,19 @@ pub fn parse(args: &[OsString]) -> Action {
                 _ => return Action::Error("--fixes needs a value: safe, extended, breaking, none, or fix keys".into()),
             },
             _ if a.starts_with("--fixes=") => match &a["--fixes=".len()..] {
-                "" => return Action::Error("--fixes needs a value: safe, extended, breaking, none, or fix keys".into()),
+                "" => {
+                    return Action::Error("--fixes needs a value: safe, extended, breaking, none, or fix keys".into());
+                }
                 v => fixes = Some(v.to_string()),
             },
             #[cfg(windows)]
             "--elevated" => elevated = true,
             "-h" | "--help" | "/?" => {
-                return if args.next().and_then(|v| v.to_str()) == Some("bugfixes") { Action::BugFixes } else { Action::Help };
+                return if args.next().and_then(|v| v.to_str()) == Some("bugfixes") {
+                    Action::BugFixes
+                } else {
+                    Action::Help
+                };
             }
             _ if a.starts_with('-') => return Action::Error(format!("unknown option {a:?} (see --help)")),
             _ if target.is_some() => return Action::Error("more than one BYOND folder given (see --help)".into()),
