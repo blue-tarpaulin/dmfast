@@ -231,6 +231,12 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID reserved) {
 	HMODULE ntdll = GetModuleHandleA("ntdll.dll"), ucrt = GetModuleHandleA("ucrtbase.dll");
 	if (!ntdll || !ucrt) return TRUE;
 	heap = GetProcessHeap();
+	// No teardown at process exit. ExitProcess kills the other threads wherever they are (a world's rust_g
+	// job threads included) before DLL detach runs; mimalloc's exit routine would then force-collect their
+	// heaps and release its thread state while the C runtime's own termination still frees through the
+	// hooks below, which crashed DreamDaemon after "Shutdown complete". 2 = skip the exit routine entirely:
+	// the arenas stay mapped and every hook keeps working until the process is gone.
+	mi_option_set(mi_option_destroy_on_exit, 2);
 	// Initialises mimalloc (and its page map) before any hook can ask it about a pointer.
 	void* probe = mi_malloc(1);
 	if (!probe) return TRUE;

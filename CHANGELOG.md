@@ -4,6 +4,9 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
+- **Fixed:** dmfast's allocator (Windows) no longer tears itself down at process exit to prevent some edge cases.
+
+
 ## 6.3.0
 
 - **New patch:** `argload` (DreamDaemon, Linux): faster reference counting. ~18% less CPU usage in-round.

@@ -13,9 +13,11 @@ from pathlib import Path
 import byond
 
 TESTS = byond.ROOT / "tests" / "fixes"
-# What BYOND prints once a world is up, and its date line.
+# What BYOND prints once a world is up (the hub login's "connected", after any progress dots, and "Logged in
+# as" can come mid-run), and its date line.
 NOISE = re.compile(r"^(dmfast|Webclient users can visit|http://www\.byond\.com/play/|Or this code can be embedded:"
-                   r"|<iframe src=\"http://www\.byond\.com/play/|The BYOND hub reports that port [0-9]+ is not reachable)"
+                   r"|<iframe src=\"http://www\.byond\.com/play/|The BYOND hub reports that port [0-9]+ is not reachable"
+                   r"|\.*connected$|Logged in as )"
                    r"|^((Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} [ 0-9]{2} [0-9:]{8} [0-9]{4})?\s*$")
 
 
