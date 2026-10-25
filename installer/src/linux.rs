@@ -66,7 +66,8 @@ fn has_compiler(dir: &Path) -> bool {
 }
 
 pub fn bin_dir(target: &Path) -> Result<PathBuf, Failure> {
-    let mut dir = if target.is_file() { target.parent().unwrap_or(Path::new(".")).to_path_buf() } else { target.to_path_buf() };
+    let mut dir =
+        if target.is_file() { target.parent().unwrap_or(Path::new(".")).to_path_buf() } else { target.to_path_buf() };
     // The BYOND folder itself (the one holding `bin`) works too.
     if !has_compiler(&dir) && has_compiler(&dir.join("bin")) {
         dir = dir.join("bin");

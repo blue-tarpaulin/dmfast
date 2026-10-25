@@ -19,7 +19,8 @@ pub fn relaunch_elevated(args: &[String]) -> bool {
     let exe = std::env::current_exe().unwrap();
     let mut params: Vec<String> = args.iter().map(|a| format!("\"{a}\"")).collect();
     params.push("--elevated".into());
-    let (exe_w, params_w, verb) = (wide(exe.as_os_str()), wide(OsStr::new(&params.join(" "))), wide(OsStr::new("runas")));
+    let (exe_w, params_w, verb) =
+        (wide(exe.as_os_str()), wide(OsStr::new(&params.join(" "))), wide(OsStr::new("runas")));
     unsafe {
         let mut info: SHELLEXECUTEINFOW = std::mem::zeroed();
         info.cbSize = size_of::<SHELLEXECUTEINFOW>() as u32;

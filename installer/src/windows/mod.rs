@@ -44,7 +44,9 @@ pub fn state(dir: &Path) -> (bool, bool) {
 /// Where the BYOND installer put BYOND, from the machine-wide registry (read only): `installpath` under
 /// Dantom\BYOND, else the uninstall entry's `InstallLocation`. Both are in the 32-bit view.
 pub fn byond_dirs() -> Vec<PathBuf> {
-    use windows_sys::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RRF_SUBKEY_WOW6432KEY, RegGetValueW};
+    use windows_sys::Win32::System::Registry::{
+        HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RRF_SUBKEY_WOW6432KEY, RegGetValueW,
+    };
     let read = |key: &str, value: &str| -> Option<PathBuf> {
         let (key, value) = (elevate::wide(OsStr::new(key)), elevate::wide(OsStr::new(value)));
         let mut buf = [0u16; 1024];
@@ -81,7 +83,8 @@ fn has_compiler(dir: &Path) -> bool {
 }
 
 pub fn bin_dir(target: &Path) -> Result<PathBuf, Failure> {
-    let mut dir = if target.is_file() { target.parent().unwrap_or(Path::new(".")).to_path_buf() } else { target.to_path_buf() };
+    let mut dir =
+        if target.is_file() { target.parent().unwrap_or(Path::new(".")).to_path_buf() } else { target.to_path_buf() };
     // The BYOND folder itself (the one holding `bin`) works too.
     if !has_compiler(&dir) && has_compiler(&dir.join("bin")) {
         dir = dir.join("bin");
@@ -202,7 +205,11 @@ pub fn install(dir: &Path, runtime: bool) -> Result<String, Failure> {
             Restored::Yes => unpatched.push(name),
             Restored::NotPatched => {}
             Restored::NoBackup => {
-                return Err(format!("{name} has dmfast but {} is missing; reinstall BYOND", backup_of(dir, name).display()).into());
+                return Err(format!(
+                    "{name} has dmfast but {} is missing; reinstall BYOND",
+                    backup_of(dir, name).display()
+                )
+                .into());
             }
         }
     }
@@ -248,7 +255,8 @@ pub fn uninstall(dir: &Path) -> Result<Option<String>, Failure> {
     if restored.is_empty() && lost.is_empty() && !dll.is_file() {
         return Ok(None);
     }
-    for p in [dll].into_iter().chain(SUPPORT.map(|(name, _)| dir.join(name))).chain(OBSOLETE.map(|name| dir.join(name))) {
+    for p in [dll].into_iter().chain(SUPPORT.map(|(name, _)| dir.join(name))).chain(OBSOLETE.map(|name| dir.join(name)))
+    {
         if p.is_file() {
             fs::remove_file(&p).map_err(|e| io_err("cannot remove", &p, e))?;
         }
@@ -258,7 +266,10 @@ pub fn uninstall(dir: &Path) -> Result<Option<String>, Failure> {
         msg += &format!(" (restored {})", restored.join(", "));
     }
     for name in lost {
-        msg += &format!("\nwarning: {} was missing, so {name} is gone; reinstall BYOND to get it back", backup_of(dir, name).display());
+        msg += &format!(
+            "\nwarning: {} was missing, so {name} is gone; reinstall BYOND to get it back",
+            backup_of(dir, name).display()
+        );
     }
     Ok(Some(msg))
 }

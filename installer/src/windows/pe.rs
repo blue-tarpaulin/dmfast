@@ -82,12 +82,8 @@ pub fn add_imports_first(exe: &[u8], first: &[(&str, &str)]) -> Result<Vec<u8>> 
     let (idir_rva, idir_size) = (u32_at(&d, opt + 104), u32_at(&d, opt + 108));
     let pe = parse(exe)?;
     let old = pe.section_table().pe_data_at(exe, idir_rva).ok_or("import directory not in a section")?;
-    let old: Vec<&[u8; 20]> = old[..idir_size as usize]
-        .as_chunks::<20>()
-        .0
-        .iter()
-        .take_while(|c| c.iter().any(|&b| b != 0))
-        .collect();
+    let old: Vec<&[u8; 20]> =
+        old[..idir_size as usize].as_chunks::<20>().0.iter().take_while(|c| c.iter().any(|&b| b != 0)).collect();
 
     let va = align(u32_at(&d, last + 12) + u32_at(&d, last + 8), sa);
     let n = first.len() + old.len() + 1; // ours + old + terminator
