@@ -52,10 +52,19 @@ def save():
 
 # ---- running BYOND --------------------------------------------------------------------------------------------
 
+def bugs(out):
+    """Fail on dmfast's own bug reports (`dmfast: bug: ...`, e.g. an install-time reader used by a hook)."""
+    bad = [l for l in out.splitlines() if l.startswith("dmfast: bug:")]
+    if bad:
+        fail("dmfast reported a bug", "\n".join(bad))
+    return out
+
+
 def run(bin_dir, prog, args, cwd, limit=120, verify=False):
     """(exit code, output) of a BYOND program from that build, dmfast's stats on."""
     env = byond.env(bin_dir, DMFAST_STATS="1", **({"DMFAST_VERIFY": "1"} if verify else {}))
-    return byond.run([bin_dir / prog, *args], cwd, env, limit)
+    rc, out = byond.run([bin_dir / prog, *args], cwd, env, limit)
+    return rc, bugs(out)
 
 
 def compile(bin_dir, dme, verify=False):
@@ -93,7 +102,7 @@ def world(bin_dir, dmb, settle=None, limit=60):
             else:  # SIGKILL: a world may catch SIGTERM and take its time shutting down (tgstation does)
                 p.kill()
             p.wait()
-    return first, alive, out.read_text("utf-8", "replace")
+    return first, alive, bugs(out.read_text("utf-8", "replace"))
 
 
 def normalise(bin_dir, text):
@@ -282,7 +291,10 @@ def report():
             log(f"::error::{VERSION} {OS}: the {phase} step ran past its time limit, so it wasn't tested")
             S.update({k: "timed out" for k in keys})
             S["fail"] = 1
-    mask = lambda t: (re.findall(r"patched=(0x[0-9a-f]+)", t or "") or ["?"])[-1]
+    # How many speed patches applied, from the stats line's `applied=<keys>;` (the disabled ones are listed apart).
+    def count(t):
+        keys = (re.findall(r"applied=([a-z0-9,]+);", t or "") or ["?"])[-1]
+        return keys if keys == "?" else str(0 if keys == "none" else len(keys.split(",")))
     groups = (S.get("compiler") or "") + "\n" + (S.get("runtime") or "")
     disabled = ",".join(re.findall(r"^dmfast: disabled (\S+)", groups, re.M)) or "none"
     real = (re.findall(r"\d{3}\.\d{4}", run(STOCK, DM, [], WORK)[1]) or ["?"])[0]
@@ -292,9 +304,9 @@ def report():
     log(f"compile {PROJECT.name}: stock {g('t_stock')}, dmfast {g('t_fast')}, .dmb {g('h_stock')} / {g('h_fast')}")
     log(f"world load: stock {g('l_stock')}, dmfast {g('l_fast')}; output for 10 s after loading: {g('w_out')}")
     log(f"verify mode: {g('verify')}; bug fixes: {g('fixes', 'none')}; DM test suite: {g('suite')}")
-    log(f"compiler groups: {mask(S.get('compiler'))}; runtime groups: {mask(S.get('runtime'))}; disabled: {disabled}")
+    log(f"compiler groups: {count(S.get('compiler'))}; runtime groups: {count(S.get('runtime'))}; disabled: {disabled}")
     log(groups.strip())
-    row([VERSION, real, OS, result, g("t_stock"), g("t_fast"), mask(S.get("compiler")), mask(S.get("runtime")), disabled,
+    row([VERSION, real, OS, result, g("t_stock"), g("t_fast"), count(S.get("compiler")), count(S.get("runtime")), disabled,
          g("l_stock"), g("l_fast"), g("verify"), g("w_out"), g("fixes", "none"), g("suite")])
     return S["fail"]
 

@@ -4,8 +4,14 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
-- **Fixed:** dmfast's allocator (Windows) no longer tears itself down at process exit to prevent some edge cases.
+## 7.0.0
 
+- **Fixed:** dmfast's allocator (Windows) no longer tears itself down at process exit to prevent some edge cases.
+- **Fixed:** `initvar` (Linux) now installs alongside the `getvar` patch.
+- **Changed:** the fix selection accepts `experimental`, which turns on experimental fixes of the chosen tiers.
+- **Changed:** the `DMFAST_STATS` summary line lists keys instead of bit masks.
+- **Changed:** the proc-table index patch key `resids` is now `procs`.
+- **Changed:** internal reordering and restructuring of the patch system.
 
 ## 6.3.0
 
