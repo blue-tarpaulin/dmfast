@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["patches", "installer", "packer"]
+members = ["patches", "patches/base", "installer", "packer"]
 # dmfast is i686-only (inline x86 asm); the installer's build script builds it for that target.
 default-members = ["installer"]
 
