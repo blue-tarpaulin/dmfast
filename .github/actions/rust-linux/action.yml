@@ -10,9 +10,14 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - id: month
+    # The cache key can't contain commas: components go in as `clippy-rustfmt`.
+    - id: key
       shell: bash
-      run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+      env:
+        COMPONENTS: ${{ inputs.components }}
+      run: |
+        echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+        echo "components=${COMPONENTS//,/-}" >> "$GITHUB_OUTPUT"
     # ~/.rustup holds the toolchain; rustup itself (in ~/.cargo/bin) is cached too, so later steps
     # (Swatinem/rust-cache runs `rustup toolchain list`) find it on a cache hit.
     - id: cache
@@ -21,7 +26,7 @@ runs:
         path: |
           ~/.rustup
           ~/.cargo/bin/rustup
-        key: rustup-debian12-i686-${{ inputs.components }}-${{ steps.month.outputs.month }}-v2
+        key: rustup-debian12-i686-${{ steps.key.outputs.components }}-${{ steps.key.outputs.month }}-v2
     - if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
