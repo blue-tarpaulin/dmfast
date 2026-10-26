@@ -10,21 +10,26 @@ use crate::files::{Failure, io_err, read, write};
 /// Read by dmfast (`CONFIG_FILE` in the patches crate); keep the names in step.
 const FILE: &str = "dmfast.ini";
 
-const TIERS: [&str; 3] = ["safe", "extended", "breaking"];
+/// Selection words other than keys: the tiers, and `experimental`
+const WORDS: [&str; 4] = ["safe", "extended", "breaking", "experimental"];
 
 const NEW_FILE: &str = "; dmfast settings, read when a BYOND program starts. dmfast-install keeps edits to this file.\n\
                         [dmfast]\n\
                         ; Opt-in BYOND bug fixes (see BUGFIXES.md): safe or extended (recommended), breaking (causes\n\
                         ; runtime errors in code that relied on the bugs), none, or fix keys, comma-separated; -key\n\
-                        ; leaves one out. DMFAST_FIXES, if set, overrides this for a run.\n";
+                        ; leaves one out; experimental also turns on experimental fixes of the tiers chosen.\n\
+                        ; DMFAST_FIXES, if set, overrides this for a run.\n";
 
-/// The entries of a `--fixes` value: tier names, fix keys, or `-key` to leave one out, separated by commas.
+/// The entries of a `--fixes` value: tier names, `experimental`, fix keys, or `-key` to leave one out, separated
+/// by commas.
 /// `none` alone means no fixes (no entries).
 fn entries(spec: &str) -> Result<Vec<String>, Failure> {
     let entries: Vec<String> =
         spec.split(|c: char| c == ',' || c.is_whitespace()).filter(|e| !e.is_empty()).map(str::to_owned).collect();
     if entries.is_empty() {
-        return Err("--fixes needs a value: safe, extended, breaking, none, or fix keys (see BUGFIXES.md)".into());
+        return Err(
+            "--fixes needs a value: safe, extended, breaking, experimental, none, or fix keys (see BUGFIXES.md)".into(),
+        );
     }
     if entries == ["none"] {
         return Ok(Vec::new());
@@ -32,8 +37,11 @@ fn entries(spec: &str) -> Result<Vec<String>, Failure> {
     for e in &entries {
         let key = e.strip_prefix('-').unwrap_or(e);
         let word = !key.is_empty() && key.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit());
-        if !word || key == "none" || (e.starts_with('-') && TIERS.contains(&key)) {
-            return Err(format!("--fixes: {e:?} is not a tier (safe, extended, breaking), a fix key, or -key").into());
+        if !word || key == "none" || (e.starts_with('-') && WORDS.contains(&key)) {
+            return Err(format!(
+                "--fixes: {e:?} is not a tier (safe, extended, breaking), experimental, a fix key, or -key"
+            )
+            .into());
         }
     }
     Ok(entries)

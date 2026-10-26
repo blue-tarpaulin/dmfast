@@ -27,6 +27,7 @@ dmfast-install [options] <BYOND or bin folder, dm.exe or dreamdaemon.exe>
      --no-runtime       leave DreamDaemon stock (only speed up the compiler)
      --fixes <which>    opt-in bug fixes: 'safe', 'extended' (recommended), 'breaking',
                         or fix keys that are comma-separated; -key leaves one out
+                        ('experimental' adds the experimental ones of those tiers)
      --version          show version and licenses
      -h, --help         view this help
      --help bugfixes    view a list of the possible bugfixes
@@ -51,6 +52,7 @@ dmfast-install [options] <BYOND or bin folder, DreamMaker or DreamDaemon>
      --no-runtime       leave DreamDaemon stock (only speed up the compiler)
      --fixes <which>    opt-in bug fixes: 'safe', 'extended' (recommended), 'breaking',
                         or fix keys that are comma-separated; -key leaves one out
+                        ('experimental' adds the experimental ones of those tiers)
      --version          show version and licenses
      -h, --help         view this help
      --help bugfixes    view a list of the possible bugfixes

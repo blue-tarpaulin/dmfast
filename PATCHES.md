@@ -43,7 +43,7 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 |---|---|---|---|---|
 | mimalloc | `mimalloc` | both | ~29% | mimalloc for small blocks, the system heap for larger ones |
 | .dmb reader | `dmbread` | both | ~17%, ~40% (Linux) | Buffered whole-value reads (.dmb, also savefiles), cached ftell |
-| Proc-table index | `resids` | both | ~14% | Hash index for proc table find-or-add |
+| Proc-table index | `procs` | both | ~14% | Hash index for proc table find-or-add |
 | Sorted maps | `sortmap` | both | ~11% | One-pass, exact-size merges; grow maps geometrically |
 | String table load | `strtable` | Windows | ~3% | Native string table load; skips the redundant rebuild |
 | Var list inheritance | `varlist` | Windows | ~3% | Types without own vars reuse the parent's var list |

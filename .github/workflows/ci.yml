@@ -36,6 +36,9 @@ jobs:
       - name: Clippy (dmfast.dll)
         shell: bash
         run: cargo clippy --release --locked -p dmfast --target i686-pc-windows-msvc -- -D warnings
+      - name: Tests (dmfast.dll)
+        shell: bash
+        run: cargo test --release --locked -p dmfast --lib --target i686-pc-windows-msvc
       - name: Clippy (installer, packer)
         shell: bash
         run: cargo clippy --release --locked -p dmfast-install -p dmfast-pack -- -D warnings

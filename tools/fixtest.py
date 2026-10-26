@@ -53,6 +53,8 @@ def world(dm, dd, fixes, tests, key, work):
             out.append(f"dd: exit {rc}")
     else:
         out.append("dm: no .dmb")
+    # dmfast's own bug reports (an install-time reader used by a hook) fail the test.
+    out += [l for l in byond.dmfast_lines(dm_out + dd_out) if l.startswith("dmfast: bug:")]
     text = "".join(l + "\n" for l in out)
     for d in (dm.parent, t):  # paths in messages differ between runs and machines
         for p in {str(d), d.as_posix()}:
