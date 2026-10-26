@@ -53,7 +53,7 @@ def save():
 # ---- running BYOND --------------------------------------------------------------------------------------------
 
 def bugs(out):
-    """Fail on dmfast's own bug reports (`dmfast: bug: ...`, e.g. an install-time reader used by a hook)."""
+    """Fail on dmfast's own bug reports (`dmfast: bug: ...`, e.g. an install-time API used after install)."""
     bad = [l for l in out.splitlines() if l.startswith("dmfast: bug:")]
     if bad:
         fail("dmfast reported a bug", "\n".join(bad))
