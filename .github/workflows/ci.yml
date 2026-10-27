@@ -35,10 +35,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Clippy (dmfast.dll)
         shell: bash
-        run: cargo clippy --release --locked -p dmfast -p dmfast-base --target i686-pc-windows-msvc -- -D warnings
+        run: cargo clippy --release --locked -p dmfast -p dmfast-base -p dmfast-patches --target i686-pc-windows-msvc -- -D warnings
       - name: Tests (dmfast.dll)
         shell: bash
-        run: cargo test --release --locked -p dmfast -p dmfast-base --lib --target i686-pc-windows-msvc
+        run: cargo test --release --locked -p dmfast -p dmfast-base -p dmfast-patches --lib --target i686-pc-windows-msvc
       - name: Clippy (installer, packer)
         shell: bash
         run: cargo clippy --release --locked -p dmfast-install -p dmfast-pack -- -D warnings
@@ -55,7 +55,7 @@ jobs:
     name: Build (Linux)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    # Debian 12: glibc 2.34, BYOND 516's minimum.
+    # Debian 12 (glibc 2.36): binds nothing past glibc 2.34, BYOND 516's floor, which the installer's build checks.
     container: debian:12
     steps:
       - name: Install build tools
@@ -75,7 +75,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Clippy (libdmfast.so)
         shell: bash
-        run: cargo clippy --release --locked -p dmfast -p dmfast-base --target i686-unknown-linux-gnu -- -D warnings
+        run: cargo clippy --release --locked -p dmfast -p dmfast-base -p dmfast-patches --target i686-unknown-linux-gnu -- -D warnings
       - name: Clippy (installer, packer)
         shell: bash
         run: cargo clippy --release --locked -p dmfast-install -p dmfast-pack -- -D warnings

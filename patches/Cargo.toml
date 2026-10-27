@@ -1,0 +1,10 @@
+[package]
+name = "dmfast-patches"
+version.workspace = true
+edition = "2024"
+
+[dependencies]
+dmfast-base = { path = "../base" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"

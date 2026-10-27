@@ -3,9 +3,9 @@
 usage: py tools/release.py [--distro NAME]
 
 Run on Windows with WSL. Builds the Windows installer natively and the Linux installer inside WSL (needs
-Rust with the i686-unknown-linux-gnu target, 32-bit glibc dev files and glibc <= 2.34, e.g. Debian 12;
-see README), then packs both into one file with dmfast-pack. The result is a normal Windows executable
-that Linux runs with `sh dmfast-install.exe <bin dir>`.
+Rust with the i686-unknown-linux-gnu target and 32-bit glibc dev files on a system like Debian 12, whose glibc 2.36
+binds nothing past BYOND's floor of 2.34; see README), then packs both into one file with dmfast-pack. The result is a
+normal Windows executable that Linux runs with `sh dmfast-install.exe <bin dir>`.
 """
 import argparse
 import os

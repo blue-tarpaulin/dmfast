@@ -44,6 +44,7 @@ name = "dmfast"
 version = "7.0.0"
 dependencies = [
  "dmfast-base",
+ "dmfast-patches",
  "libc",
  "rustc-hash",
  "windows-sys",
@@ -75,6 +76,14 @@ name = "dmfast-pack"
 version = "1.0.0"
 dependencies = [
  "flate2",
+]
+
+[[package]]
+name = "dmfast-patches"
+version = "7.0.0"
+dependencies = [
+ "dmfast-base",
+ "libc",
 ]
 
 [[package]]
