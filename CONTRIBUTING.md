@@ -2,9 +2,9 @@
 
 ## Build
 
-The patches live in a private submodule (`patches`); building needs access to it. 
+Most patches live in a private submodule (`patches-private`); building needs access to it. 
 
- We believe that openly publishing internals of how the compiler works is not what Lummox wants at the moment. 
+We believe that openly publishing internals of how the compiler works is not what Lummox wants at the moment. 
  However, there's a description of what each one does - and for the optional bugfixes, a bit more detail on how these were accomplished if one wanted to port these to BYOND.
 
 The main motivation behind this project was to accelerate SS13's ability to create fun, creative, and engaging content.
