@@ -1,9 +1,9 @@
-name: "Fetch dmfast-patches"
-description: "Checks out the private patches/ submodule (blue-tarpaulin/dmfast-patches) with a read-only deploy key"
+name: "Fetch dmfast-patches-private"
+description: "Checks out the patches-private/ submodule (blue-tarpaulin/dmfast-patches-private) with a read-only deploy key"
 
 inputs:
   key:
-    description: "Private half of the dmfast-patches deploy key (secret DMFAST_PATCHES_KEY)"
+    description: "Private half of the dmfast-patches-private deploy key (secret DMFAST_PATCHES_KEY)"
     required: true
 
 runs:
@@ -17,5 +17,5 @@ runs:
         mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/dmfast_patches && chmod 600 ~/.ssh/dmfast_patches
         git -c url."git@github.com:".insteadOf="https://github.com/" \
             -c core.sshCommand="ssh -i $HOME/.ssh/dmfast_patches -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-            submodule update --init patches
+            submodule update --init patches-private
         rm -f ~/.ssh/dmfast_patches

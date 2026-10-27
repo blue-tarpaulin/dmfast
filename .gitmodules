@@ -1,6 +1,6 @@
 [submodule "patches"]
-	path = patches
-	url = https://github.com/blue-tarpaulin/dmfast-patches.git
+	path = patches-private
+	url = https://github.com/blue-tarpaulin/dmfast-patches-private.git
 	branch = main
 [submodule "tests/dm-test-suite"]
 	path = tests/dm-test-suite
