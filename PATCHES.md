@@ -1,12 +1,10 @@
 # Patches
 
-Each patch can be turned off for one run with `DMFAST_DISABLE=<key>` (comma-separated).
+Each patch can be turned off with `DMFAST_DISABLE=<key>` (comma-separated).
 
-Each patch finds the code it changes by signature and turns itself off if anything doesn't match.
+Fixes for BYOND bugs which change behavior, are opt-in and listed separately in [BUGFIXES.md](BUGFIXES.md).
 
-These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are opt-in and listed separately in [BUGFIXES.md](BUGFIXES.md).
-
-**Saves** is roughly how much tg gets faster, and how its peak memory changes. Patches overlap & numbers vary by codebase, so treat them as rough. `map_cpu` numbers are with 50 players.
+**Saves** is roughly how much tg gets faster, and how its peak memory changes. Patches overlap & numbers vary by codebase, so treat them as rough. `map_cpu` numbers are with ~50 players.
 
 ## Compiler
 
@@ -28,7 +26,7 @@ These patches don't change what BYOND does. Fixes for BYOND bugs, which do, are 
 | Resource index | `resources` | both | <1% | Indexes resource files by name |
 | String index | `strtab` | both | <1%, +21 MB | Hash index for string table lookups |
 | List intern | `lists` | both | <1%, +9 MB | Hash index for list interning |
-| Vector growth | `vecgrow` | both | <1% | Grows dword arrays geometrically, not one at a time; tested that nothing reads the spare entries |
+| Vector growth | `vecgrow` | both | <1% | Grows dword arrays geometrically |
 | .dmb buffer | `dmbbuf` | both | <1% | Larger write buffer for the .dmb |
 | Fast exit | `fastexit` | both | <1% | Exits after saving instead of freeing everything |
 | Proto index | `protos` | both | <1%, +13 MB | Hash index for proto lookups |
@@ -74,10 +72,10 @@ Tested with stock BYOND and dmfast (default patches and each fix tier) on BYOND 
 | rust-g 3.x to 7.x | most codebases | Works | tgstation, Bubber, and BeeStation CI unit tests and a 12-minute round match stock. |
 | dreamluau | tgstation and forks | Works | With `jsonutf`, its `json_encode` output is raw UTF-8 too. |
 | auxtools (current), auxmos 2.x | shiptest, yog | Works | auxtools test suite passes; auxmos atmos under load matches stock. |
-| byond-tracy | chomp, vore | Works | Before this release, `tickinit` and `tick0` crashed it on the first tick. On stock too, it crashes on `world.Reboot()` and at shutdown: BYOND unloads it, but its `destroy` does nothing, so its hooks outlive it. |
+| byond-tracy | chomp, vore | Works | On stock too, it crashes on `world.Reboot()` and at shutdown: BYOND unloads it, but its `destroy` does nothing, so its hooks outlive it. |
 | Paradise's byond-tracy fork | bay, aurora, paradise, azure | Works | Only on builds it supports (up to 516.1677). |
 | Paradise rustlibs (MILLA atmos) | paradise | Works | Tested on Linux 516.1666. Its Windows DLLs don't load on 516.1674 and later, on stock too. |
 | vchatlog, verdigris, libmariadb, libmysql, bapi | chomp, vore, aurora, others | Works | vchatlog and verdigris need 516.1674 or later. |
 | memorystats, byond_memprofile | monke, vanderlin | Works | Same output as stock. |
-| auxlua | bubber (shipped, not loaded) | Broken on stock | A 2024 build that doesn't find BYOND 516. Unused: Lua runs on dreamluau. |
+| auxlua | bubber (unused dlls) | Broken on stock | A 2024 build that doesn't find BYOND 516. Unused: Lua runs on dreamluau. |
 | byond-extools | eris, lc13, sojourn | Broken on stock | Doesn't support BYOND 516. |
