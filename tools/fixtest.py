@@ -7,7 +7,7 @@ tests/fixes/<key>.dme must print <key>.expected with DMFAST_FIXES=<key> and =bre
 tests/fixes/keep/*.dme must print the same on stock, safe and extended. A fix that didn't install is n/a.
 Stock defaults to the _orig binaries beside dmfast. Exits non-zero on a failure.
 """
-import argparse, difflib, os, re, shutil, subprocess, sys, tempfile
+import argparse, contextlib, difflib, os, re, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
 import byond
@@ -78,8 +78,14 @@ def check(fast, stock=None, keys=()):
         counts[kind] += 1
         results.append(f"{name} {label}")
 
-    with tempfile.TemporaryDirectory(prefix="fixtest-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="fixtest-") as tmp, contextlib.ExitStack() as stack:
         work = Path(tmp)
+        # inodes runs where inode numbers are 64-bit: in work/ when the repo has them and the temp dir doesn't
+        # (WSL's /mnt drives).
+        wide = work
+        if "inodes" in keys and not byond.WIN and os.stat(work).st_ino < 2**32 and os.stat(byond.ROOT).st_ino >= 2**32:
+            (byond.ROOT / "work").mkdir(exist_ok=True)
+            wide = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="fixtest-", dir=byond.ROOT / "work")))
         # Some builds (516.1660-1665) print nothing from any world: their empty results are n/a.
         probe = work / "probe"
         probe.mkdir()
@@ -91,7 +97,8 @@ def check(fast, stock=None, keys=()):
                 print(f"::error::fix {key}: no tests/fixes/{key}.dme")
                 result(key, "fail", "FAIL")
                 continue
-            fixed, stats = world(fdm, fdd, key, TESTS, key, work)
+            kw = wide if key == "inodes" else work
+            fixed, stats = world(fdm, fdd, key, TESTS, key, kw)
             if not any(l.startswith(f"dmfast: fix {key}: ") for l in stats):
                 if "dm: no .dmb\n" in fixed:  # a DreamDaemon fix can't have installed if the world never ran
                     print(f"::error::fix {key}: the test didn't compile with DMFAST_FIXES={key}:\n{fixed}", end="")
@@ -101,8 +108,8 @@ def check(fast, stock=None, keys=()):
                 print(f"fix {key}: n/a (didn't install{': ' + why if why else ''})")
                 result(key, "na", "n/a")
                 continue
-            stock_out = world(sdm, sdd, "", TESTS, key, work)[0]
-            all_out = world(fdm, fdd, "breaking", TESTS, key, work)[0]
+            stock_out = world(sdm, sdd, "", TESTS, key, kw)[0]
+            all_out = world(fdm, fdd, "breaking", TESTS, key, kw)[0]
             exp_file = TESTS / f"{key}.expected"
             if not exp_file.exists():
                 print(f"::error::fix {key}: no tests/fixes/{key}.expected. Stock gave:\n{stock_out}With the fix:\n{fixed}", end="")
@@ -120,7 +127,7 @@ def check(fast, stock=None, keys=()):
                     bad = True
             if bad:
                 result(key, "fail", "FAIL")
-            elif stock_out == expected and key == "inodes" and os.stat(work).st_ino < 2**32:
+            elif stock_out == expected and key == "inodes" and os.stat(kw).st_ino < 2**32:
                 print("fix inodes: n/a (this filesystem has 32-bit inode numbers, so stock works too; the output with the fix is right)")
                 result(key, "na", "n/a")
             elif stock_out == expected:
