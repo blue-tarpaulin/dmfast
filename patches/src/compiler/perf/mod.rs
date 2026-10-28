@@ -3,7 +3,9 @@
 use crate::base::feature::Ctx;
 
 pub mod banner;
+pub mod dirs;
 pub mod fastexit;
+pub mod fscache;
 pub mod listinit;
 pub mod poll;
 
