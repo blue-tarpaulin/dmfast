@@ -4,6 +4,7 @@ use crate::base::feature::Ctx;
 
 pub mod banner;
 pub mod fastexit;
+pub mod listinit;
 pub mod poll;
 
 /// The compiler executable is known (Linux: the loader can leave the main program out of its list).

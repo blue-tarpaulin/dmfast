@@ -20,7 +20,7 @@ Fixes for BYOND bugs which change behavior, are opt-in and listed separately in 
 | mimalloc | `mimalloc` | both | ~2% | mimalloc for small blocks, the system heap for larger ones |
 | Slot hints | `slots` | both | ~2% | Hinted free-slot search in other id tables |
 | Parent cache | `parent` | both | ~1% | Caches which child sets each type's `parent_type` |
-| Pair-list intern | `pairs` | both | ~1% | Hash index for pair-list interning |
+| List initializer intern | `listinit` | both | ~1% | Hash index for list-valued var initializers |
 | Intern rebuild | `rebuild` | both | ~1% | Rebuilds the intern tree less often |
 | Char classes | `ctype` | Windows | <1% | Table-based character checks, skipping locale lookups |
 | Resource index | `resources` | both | <1% | Indexes resource files by name |

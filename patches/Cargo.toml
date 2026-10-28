@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 dmfast-base = { path = "../base" }
+rustc-hash = "2.1.3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
