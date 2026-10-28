@@ -4,6 +4,8 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
+- **Changed:** the list initialization patch key `pairs` is now `listinit`.
+
 ## 7.0.0
 
 - **Fixed:** dmfast's allocator (Windows) no longer tears itself down at process exit to prevent some edge cases.

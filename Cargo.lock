@@ -84,6 +84,7 @@ version = "7.0.0"
 dependencies = [
  "dmfast-base",
  "libc",
+ "rustc-hash",
  "windows-sys",
 ]
 
