@@ -5,11 +5,11 @@
 use crate::base::feature::{Ctx, Feature, Hosts, install};
 
 #[cfg(target_os = "linux")]
-pub mod linux;
+mod linux;
 #[cfg(target_os = "linux")]
 use linux as os;
 #[cfg(windows)]
-pub mod windows;
+mod windows;
 #[cfg(windows)]
 use windows as os;
 
