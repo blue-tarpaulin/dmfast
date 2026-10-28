@@ -19,7 +19,7 @@ pub(crate) const CORE_NAME: &str = "byondcore.dll";
 pub unsafe fn dll_main(config: &'static Config, reason: u32) -> i32 {
     match (reason, Host::current()) {
         (DLL_PROCESS_ATTACH, Some(host)) => unsafe { crate::driver::install(config, host) },
-        (DLL_PROCESS_DETACH, Some(_)) if crate::driver::stats() => crate::driver::print_stats(),
+        (DLL_PROCESS_DETACH, Some(_)) => crate::driver::print_stats(),
         _ => {}
     }
     1

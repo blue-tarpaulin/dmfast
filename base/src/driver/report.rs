@@ -35,8 +35,11 @@ pub(super) fn summary(config: &Config, host: Host) -> String {
     format!("applied={}; fixes={fixes}", keys(Kind::Perf))
 }
 
-/// Every feature's counters, after a `dmfast: bug:` line if an image was used after install.
+/// With `DMFAST_STATS`: every feature's counters, after a `dmfast: bug:` line if an image was used after install.
 pub fn print_stats() {
+    if !stats() {
+        return;
+    }
     if crate::image::used_late() {
         eprintln!("dmfast: bug: install-time Image used after install");
     }
