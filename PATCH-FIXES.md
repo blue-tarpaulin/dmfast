@@ -18,55 +18,55 @@ Most of the problems are one of three kinds:
 
 | Area | Saves | % of fast | What's slow | Fix |
 |---|---|---|---|---|
-| Directory listings (Linux) | 14.9 s | 330% | Matching file names case-insensitively lists every directory on the way, then opens each entry to see whether it's a directory. | Cache each listing until the directory changes, and take the file type from the listing. |
-| String table | 14.7 s | 300% | Adding a string scans for a free slot from the start, and the table grows 10 slots at a time. | Start from the lowest slot that might be free. Double the table when full. |
-| File reading and writing | 1.7 s | 35% | Files are read and written a character at a time through locking calls, and the `.dmb` writer asks the OS for the file position before every string. | Use the non-locking calls (one thread uses these files) or read and write in blocks. Track the position yourself. |
-| Memory allocator | 0.96 s | 20% | The system allocator takes a lock on every call. | Use a faster allocator, such as [mimalloc](https://github.com/microsoft/mimalloc), with a heap per thread, for small blocks; keep large ones on the system heap, which doesn't round them up. |
-| Parent lookup | 0.74 s | 15% | Finding a type's parent scans its children (up to ~1,400) every time. | Store the parent on the type, or cache it until the children change. |
-| Name resolution | 0.74 s, +3 MB | 15% | Resolving a name checks every child of every enclosing scope, including scopes that don't declare it. | Keep a set of the names each scope declares, and skip scopes without the name. |
-| Other id tables | 0.56 s | 11% | They scan for a free slot from the start, like the string table. | Start from the lowest slot that might be free. Growing by 10 is fine here: these tables stay small. |
-| File lookups (Windows) | 0.50 s, +13 MB | 10% | The same file existence and attribute questions go to the OS over and over. | Cache the answers for the compile, and clear the cache when the compiler writes a file. |
-| Character checks (Windows) | 0.42 s | 9% | Checks like "is this a letter" look up the locale on every call. | Use a 128-entry [lookup table](https://en.wikipedia.org/wiki/Lookup_table) for ASCII. |
-| Identifier tree rebuilds | 0.31 s | 6% | The identifier tree is rebuilt from scratch every 256 inserts. | Rebuild less often, or replace the tree with a hash table. |
-| Id lists | 0.24 s, +9 MB | 5% | Id lists are found through a tree that only rebalances at depth 256. | Use a hash table keyed by the list's contents. |
-| Pair lists | 0.21 s | 4% | Finding a pair list checks every stored list, and storage grows one entry at a time. | Use a hash table. Double the storage when full. |
-| String lookup | 0.21 s, +21 MB | 4% | Finding an existing string walks an unbalanced tree, comparing strings at each step. | Use a hash table from string to id. |
-| Resource lookup | ~0.1 s | ~2% | Finding a resource by file name compares it with each resource in turn. | Use a hash table from file name to resource. |
+| Directory listings (Linux) | 12.2 s | 490% | Matching file names case-insensitively lists every directory on the way, then opens each entry to see whether it's a directory. | Cache each listing until the directory changes, and take the file type from the listing. |
+| String table | 18.2 s | 430% | Adding a string scans for a free slot from the start, and the table grows 10 slots at a time. | Start from the lowest slot that might be free. Double the table when full. |
+| File reading and writing | 1.49 s | 35% | Files are read and written a character at a time through locking calls, and the `.dmb` writer asks the OS for the file position before every string. | Use the non-locking calls (one thread uses these files) or read and write in blocks. Track the position yourself. |
+| Memory allocator | 0.69 s | 16% | The system allocator takes a lock on every call. | Use a faster allocator, such as [mimalloc](https://github.com/microsoft/mimalloc), with a heap per thread, for small blocks; keep large ones on the system heap, which doesn't round them up. |
+| Name resolution | 0.61 s, +3 MB | 15% | Resolving a name checks every child of every enclosing scope, including scopes that don't declare it. | Keep a set of the names each scope declares, and skip scopes without the name. |
+| Other id tables | 0.68 s | 16% | They scan for a free slot from the start, like the string table. | Start from the lowest slot that might be free. Growing by 10 is fine here: these tables stay small. |
+| File lookups (Windows) | 0.61 s, +18 MB | 14% | The same file existence and attribute questions go to the OS over and over. | Cache the answers for the compile, and clear the cache when the compiler writes a file. |
+| Identifier tree rebuilds | 0.54 s | 13% | The identifier tree is rebuilt from scratch every 256 inserts. | Rebuild less often, or replace the tree with a hash table. |
+| Parent lookup | 0.52 s | 12% | Finding a type's parent scans its children (up to ~1,400) every time. | Store the parent on the type, or cache it until the children change. |
+| Character checks (Windows) | 0.32 s | 8% | Checks like "is this a letter" look up the locale on every call. | Use a 128-entry [lookup table](https://en.wikipedia.org/wiki/Lookup_table) for ASCII. |
+| Id lists | 0.33 s, +10 MB | 8% | Id lists are found through a tree that only rebalances at depth 256. | Use a hash table keyed by the list's contents. |
+| Pair lists | 0.30 s | 8% | Finding a pair list checks every stored list, and storage grows one entry at a time. | Use a hash table. Double the storage when full. |
+| Resource lookup | 0.19 s | 5% | Finding a resource by file name compares it with each resource in turn. | Use a hash table from file name to resource. |
+| Exit | 0.18 s | 5% | After saving, the compiler frees every object one at a time before exiting. | Exit once the `.dmb` is saved; the OS frees everything at once. |
+| Progress check | up to 0.25 s | up to 4% | The progress thread polls every 250 ms, so a finished compile can idle up to 0.25 s. | Poll every 10 ms, or signal the thread when the compile finishes. |
+| Identifier lookup | ~0.13 s | ~3% | Identifier and path lookups walk a tree, comparing strings at each step, though most find an existing entry. | Use a hash table. |
+| String lookup | ~0.1 s, +26 MB | ~3% | Finding an existing string walks an unbalanced tree, comparing strings at each step. | Use a hash table from string to id. |
 | Child lookup | ~0.1 s | ~2% | Finding a child by name scans all of the type's children. | Give types with many children a name-to-child index. |
-| Exit | ~0.1 s | ~2% | After saving, the compiler frees every object one at a time before exiting. | Exit once the `.dmb` is saved; the OS frees everything at once. |
-| `.dmb` write buffer | ~0.1 s | ~2% | The `.dmb` is written in 4 KB pieces. | Use a 1 MB buffer. |
-| Identifier lookup | ~0.1 s | ~2% | Identifier and path lookups walk a tree, comparing strings at each step, though most find an existing entry. | Use a hash table. |
-| Compile passes | ~0.1 s | ~2% | Every pass visits every node, including finished leaves that have nothing left to do. | Skip finished nodes that have no children. |
-| Id arrays | ~0.1 s | ~2% | Appending to an id array grows it by exactly one entry. | Double the capacity when full. |
 | Proto lookup | ~0.1 s, +13 MB | ~2% | Lookups walk a tree comparing whole key arrays, though most find an existing entry. | Put a hash table in front of the tree. |
-| Progress check | up to 0.25 s | up to 5% | The progress thread polls every 250 ms, so a finished compile can idle up to 0.25 s. | Poll every 10 ms, or signal the thread when the compile finishes. |
+| `.dmb` write buffer | ~0.1 s | ~1% | The `.dmb` is written in 4 KB pieces. | Use a 1 MB buffer. |
+| Compile passes | ~0.1 s | ~1% | Every pass visits every node, including finished leaves that have nothing left to do. | Skip finished nodes that have no children. |
+| Id arrays | ~0.1 s | ~1% | Appending to an id array grows it by exactly one entry. | Double the capacity when full. |
 
 ## DreamDaemon - given stock time of 7 s until world/New
 
 | Area | Saves | % of fast | What's slow | Fix |
 |---|---|---|---|---|
-| `.dmb` reading | 0.98 s | 90% | The `.dmb` is read a byte at a time through locking calls, and the reader asks the OS for the file position before every string. | Read whole values, or the whole file, at once. Track the position yourself. |
-| Proc table | 0.92 s | 84% | While the world loads, each proc it registers is compared with every proc already in the table. | Use a hash table. |
-| Sorted maps | 0.70 s | 64% | Each insert into a small sorted map reallocates it to exactly one more entry, and merging two maps inserts entries one at a time, shifting and reallocating each time. | Grow the array geometrically when full. Merge both sorted arrays in one pass ([merge algorithm](https://en.wikipedia.org/wiki/Merge_algorithm)) into an array of the exact size. |
-| String lookup | 0.21 s, +5 MB | 19% | Every string lookup walks an unbalanced tree. | Use a hash table. |
-| CRC-32 checksum | 0.05 s | 5% | The checksum is computed one byte per step. | Process eight bytes per step ([slicing-by-8](https://en.wikipedia.org/wiki/Computation_of_cyclic_redundancy_checks#Byte-slicing_using_multiple_tables)); same result. |
-| Memory allocator | ~0.04 s | ~4% | Same as the compiler. | Same as the compiler. |
-| Icon state names (Windows) | ~0.02 s | ~2% | Comparing icon state names makes locale lookups for every character. | Use 256-entry lookup tables. |
-| String table load (Windows) | ~0.01 s | ~1% | After the load, a rebuild re-checks every entry's checksum (always passing) and relinks the tree the load just built. | Skip the re-check after a fresh load. With a hash table for string lookups, skip the relink too. |
-| Var list inheritance (Windows) | ~0.01 s | ~1% | A type with no vars of its own rebuilds its parent's var list and gets the same list back. | Reuse the parent's list. |
+| Sorted maps | 2.42 s, +6 MB | 210% | Each insert into a small sorted map reallocates it to exactly one more entry, and merging two maps inserts entries one at a time, shifting and reallocating each time. | Grow the array geometrically when full. Merge both sorted arrays in one pass ([merge algorithm](https://en.wikipedia.org/wiki/Merge_algorithm)) into an array of the exact size. |
+| `.dmb` reading | 1.16 s | 100% | The `.dmb` is read a byte at a time through locking calls, and the reader asks the OS for the file position before every string. | Read whole values, or the whole file, at once. Track the position yourself. |
+| Proc table | 1.04 s | 91% | While the world loads, each proc it registers is compared with every proc already in the table. | Use a hash table. |
+| String lookup | 0.23 s, +5 MB | 20% | Every string lookup walks an unbalanced tree. | Use a hash table. |
+| CRC-32 checksum | 0.07 s | 6% | The checksum is computed one byte per step. | Process eight bytes per step ([slicing-by-8](https://en.wikipedia.org/wiki/Computation_of_cyclic_redundancy_checks#Byte-slicing_using_multiple_tables)); same result. |
+| Var list inheritance (Windows) | 0.04 s | 4% | A type with no vars of its own rebuilds its parent's var list and gets the same list back. | Reuse the parent's list. |
+| Memory allocator | 0.04 s, +8 MB | 3% | Same as the compiler. | Same as the compiler. |
+| Icon state names (Windows) | 0.03 s | 3% | Comparing icon state names makes locale lookups for every character. | Use 256-entry lookup tables. |
+| String table load (Windows) | ~0.02 s | ~2% | After the load, a rebuild re-checks every entry's checksum (always passing) and relinks the tree the load just built. | Skip the re-check after a fresh load. With a hash table for string lookups, skip the relink too. |
 
 ### In-round
 
 | Area | Saves | What's slow | Fix |
 |---|---|---|---|
-| `icon_states()` lists | 1.3x | Each state name goes in with `L[name] = null`, and every key the list doesn't have yet is first searched for in the whole list: quadratic in the number of states. | The builder's list only gets keys through that set, so a key the tree misses is new. |
+| `icon_states()` lists | `icon_states()` - 1.3x | Each state name goes in with `L[name] = null`, and every key the list doesn't have yet is first searched for in the whole list: quadratic in the number of states. | The builder's list only gets keys through that set, so a key the tree misses is new. |
 | Icon state copy | `getFlatIcon` - 2.5x | Drawing one state from a .dmi copies the whole file's icon, and copying each frame first makes a zeroed buffer of the world's icon size, then frees it to share the source frame's pixels. | Copy only the state being drawn. |
-| Reference counting (Linux) | ~18% in-round | The functions that add and drop a value's reference read their 8-byte argument in one load, but callers wrote it as two 4-byte halves, so the CPU stalls on every call. | Read the argument as two halves (as the Windows build does), or pass values by pointer. |
+| Turf contents | ~16% `map_cpu` | For each player, map sending visits every turf in view and finds its contents through a hash chain, then each object through an id table: a chain of cache misses per turf, one turf at a time. | Prefetch the next turfs' contents while handling the current one, or keep each turf's contents next to the turf. |
 | Map sending | ~12% `map_cpu` | Every tick, for every player, map sending clears a "seen" mark on each object that player knows about by following a list in id order, which jumps all over memory. | Clear the marks in memory order, or use a tick counter instead of a mark that needs clearing. |
 | Unchanged objects | ~10% `map_cpu` | For each object a player already sees, map sending builds and destroys a full temporary record (with an exception frame) just to look the object up, even when nothing changed. | Look the object up first; only build the record when it is new or changed. |
+| Reference counting (Linux) | ~18% in-round | The functions that add and drop a value's reference read their 8-byte argument in one load, but callers wrote it as two 4-byte halves, so the CPU stalls on every call. | Read the argument as two halves (as the Windows build does), or pass values by pointer. |
 | Var reads (Linux) | ~7% in-round | Reading a variable by name (`a.b`) reads the 8-byte value in one load right after the caller wrote it as two 4-byte halves, the same stall as reference counting. | Read the value as two halves, or pass it by pointer. |
 | Turf var lookup | ~2.5% in-round (12 z-levels) | Turf var records share at most 65,536 hash buckets (the lookup masks to 16 bits), so on a big multi-z map each chain holds one record per z-level. New records go to the front and each new z-level reverses every chain, so the station level ends up last. | Use the full hash mask, or a per-turf array instead of the hash. |
-| Turf contents | ~16% `map_cpu` | For each player, map sending visits every turf in view and finds its contents through a hash chain, then each object through an id table: a chain of cache misses per turf, one turf at a time. | Prefetch the next turfs' contents while handling the current one, or keep each turf's contents next to the turf. |
 | `view()`/`range()` | ~N× with N objs/turf | Each atom added to the result is first searched for in the whole list built so far: quadratic in the number of atoms in range. | Keep a hash set of the list being built (or mark atoms while building). |
 
 ## Memory
