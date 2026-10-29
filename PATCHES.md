@@ -65,6 +65,7 @@ on, and how much more peak memory the patch uses. `map_cpu` numbers are with ~50
 | Reference counting | `argload` | Linux | ~18% in-round | Faster reference counting: avoids a CPU stall on every call |
 | Var reads | `getvar` | Linux | ~7% in-round | Faster `a.b` reads: avoids the same CPU stall as `argload` |
 | Turf var chains | `turfvar` | both | ~2.5% in-round (12 z-levels) | Adds new turf var records at the end of their hash chain, so early-loaded z-levels stay near the front |
+| Truth tests | `truth` | Linux | ~1.1% in-round | Tests numbers in `if`, `!`, `&&`, and `\|\|` with integer instructions instead of x87 |
 
 How BYOND itself could fix each of these: [PATCH-FIXES.md](PATCH-FIXES.md).
 
