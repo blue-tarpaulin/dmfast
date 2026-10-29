@@ -67,6 +67,7 @@ Most of the problems are one of three kinds:
 | Reference counting (Linux) | ~18% in-round | The functions that add and drop a value's reference read their 8-byte argument in one load, but callers wrote it as two 4-byte halves, so the CPU stalls on every call. | Read the argument as two halves (as the Windows build does), or pass values by pointer. |
 | Var reads (Linux) | ~7% in-round | Reading a variable by name (`a.b`) reads the 8-byte value in one load right after the caller wrote it as two 4-byte halves, the same stall as reference counting. | Read the value as two halves, or pass it by pointer. |
 | Turf var lookup | ~2.5% in-round (12 z-levels) | Turf var records share at most 65,536 hash buckets (the lookup masks to 16 bits), so on a big multi-z map each chain holds one record per z-level. New records go to the front and each new z-level reverses every chain, so the station level ends up last. | Use the full hash mask, or a per-turf array instead of the hash. |
+| Truth tests (Linux) | ~1.1% in-round | `if(x)`, `!x`, `&&`, and `\|\|` test a number by loading it onto the x87 stack and comparing it with zero. | Test its bits: a number is false exactly when `bits & 0x7FFFFFFF` is 0. Or compare with SSE, as the Windows build does. |
 | `view()`/`range()` | ~N× with N objs/turf | Each atom added to the result is first searched for in the whole list built so far: quadratic in the number of atoms in range. | Keep a hash set of the list being built (or mark atoms while building). |
 
 ## Memory

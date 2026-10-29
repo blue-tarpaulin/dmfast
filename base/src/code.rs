@@ -138,6 +138,13 @@ pub fn branch(op: u8, at: usize, target: usize, len: usize) -> Vec<u8> {
     v
 }
 
+/// `code` followed by NOPs up to `N` bytes, at compile time: new code for an in-place rewrite of an `N`-byte range.
+pub const fn pad<const N: usize>(code: &[u8]) -> [u8; N] {
+    let mut out = [0x90; N];
+    out.split_at_mut(code.len()).0.copy_from_slice(code);
+    out
+}
+
 /// Allocate `len` bytes of executable memory filled by `build(address)`. A wrong-length `build` is an error (the
 /// patch turns itself off), not a crash. While a feature installs, freed if it (or its part) doesn't.
 pub fn exec_code(len: usize, build: impl FnOnce(usize) -> Vec<u8>) -> Result<usize> {
