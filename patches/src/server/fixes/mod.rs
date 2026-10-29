@@ -2,4 +2,5 @@
 
 pub mod dbclose;
 pub mod iconwrap;
+pub mod jsonutf;
 pub mod pickweight;
