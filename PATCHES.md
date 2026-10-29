@@ -13,44 +13,44 @@ on, and how much more peak memory the patch uses. `map_cpu` numbers are with ~50
 
 | Patch | Key | OS | Saves | % of fast | What it does |
 |---|---|---|---|---|---|
-| Dir listing | `dirs` | Linux | 14.9 s | 330% | Caches directory listings; skips needless chdir and opens |
-| String table | `strings` | both | 14.7 s | 300% | Hinted free-slot search, geometric string table growth |
-| Stdio | `stdio` | both | 1.7 s | 35% | Unlocked file reads and writes |
+| Dir listing | `dirs` | Linux | 12.2 s | 490% | Caches directory listings; skips needless chdir and opens |
+| String table | `strings` | both | 18.2 s | 430% | Hinted free-slot search, geometric string table growth |
+| Stdio | `stdio` | both | 1.49 s | 35% | Unlocked file reads and writes |
 | ftell cache | `ftell` | both | in `stdio`'s | - | ftell without a seek syscall in the .dmb writer |
-| mimalloc | `mimalloc` | both | 0.96 s | 20% | mimalloc for small blocks, the system heap for larger ones |
-| Parent cache | `parent` | both | 0.74 s | 15% | Caches which child sets each type's `parent_type` |
-| Name filter | `filter` | both | 0.74 s, +3 MB | 15% | Skips scopes that can't contain the name |
-| Slot hints | `slots` | both | 0.56 s | 11% | Hinted free-slot search in other id tables |
-| File cache | `fscache` | Windows | 0.50 s, +13 MB | 10% | Caches file existence, attribute and listing lookups |
-| Char classes | `ctype` | Windows | 0.42 s | 9% | Table-based character checks, skipping locale lookups |
-| Intern rebuild | `rebuild` | both | 0.31 s | 6% | Rebuilds the intern tree less often |
-| List intern | `lists` | both | 0.24 s, +9 MB | 5% | Hash index for list interning |
-| List initializer intern | `listinit` | both | 0.21 s | 4% | Hash index for list-valued var initializers |
-| String index | `strtab` | both | 0.21 s, +21 MB | 4% | Hash index for string table lookups |
-| Resource index | `resources` | both | ~0.1 s | ~2% | Indexes resource files by name |
+| mimalloc | `mimalloc` | both | 0.69 s | 16% | mimalloc for small blocks, the system heap for larger ones |
+| Slot hints | `slots` | both | 0.68 s | 16% | Hinted free-slot search in other id tables |
+| Name filter | `filter` | both | 0.61 s, +3 MB | 15% | Skips scopes that can't contain the name |
+| File cache | `fscache` | Windows | 0.61 s, +18 MB | 14% | Caches file existence, attribute and listing lookups |
+| Intern rebuild | `rebuild` | both | 0.54 s | 13% | Rebuilds the intern tree less often |
+| Parent cache | `parent` | both | 0.52 s | 12% | Caches which child sets each type's `parent_type` |
+| Char classes | `ctype` | Windows | 0.32 s | 8% | Table-based character checks, skipping locale lookups |
+| List intern | `lists` | both | 0.33 s, +10 MB | 8% | Hash index for list interning |
+| List initializer intern | `listinit` | both | 0.30 s | 8% | Hash index for list-valued var initializers |
+| Resource index | `resources` | both | 0.19 s | 5% | Indexes resource files by name |
+| Fast exit | `fastexit` | both | 0.18 s | 5% | Exits after saving instead of freeing everything |
+| Progress poll | `poll` | both | up to 0.25 s | up to 4% | Progress thread polls every 10 ms, not 250 |
+| String index | `strtab` | both | ~0.1 s, +26 MB | ~3% | Hash index for string table lookups |
+| Intern index | `internidx` | both | ~0.1 s | ~3% | Hash index for identifier interning |
 | Child index | `children` | both | ~0.1 s | ~2% | Indexes children by name for path resolution |
-| Fast exit | `fastexit` | both | ~0.1 s | ~2% | Exits after saving instead of freeing everything |
-| .dmb buffer | `dmbbuf` | both | ~0.1 s | ~2% | Larger write buffer for the .dmb |
-| Intern index | `internidx` | both | ~0.1 s | ~2% | Hash index for identifier interning |
-| Compile-pass leaf skip | `leafskip` | both | ~0.1 s | ~2% | Skips finished leaf nodes in each compile pass |
-| Vector growth | `vecgrow` | both | ~0.1 s | ~2% | Grows dword arrays geometrically |
 | Proto index | `protos` | both | ~0.1 s, +13 MB | ~2% | Hash index for proto lookups |
-| Progress poll | `poll` | both | up to 0.25 s | up to 5% | Progress thread polls every 10 ms, not 250 |
+| .dmb buffer | `dmbbuf` | both | ~0.1 s | ~1% | Larger write buffer for the .dmb |
+| Compile-pass leaf skip | `leafskip` | both | ~0.1 s | ~1% | Skips finished leaf nodes in each compile pass |
+| Vector growth | `vecgrow` | both | ~0.1 s | ~1% | Grows dword arrays geometrically |
 | Version banner | `banner` | both | - | - | Adds a dmfast line to the version banner |
 
 ## DreamDaemon  - given stock time of 7 s until world/New
 
 | Patch | Key | OS | Saves | % of fast | What it does |
 |---|---|---|---|---|---|
-| .dmb reader | `dmbread` | both | 0.98 s | 90% | Buffered whole-value reads (.dmb, also savefiles), cached ftell |
-| Proc-table index | `procs` | both | 0.92 s | 84% | Hash index for proc table find-or-add |
-| Sorted maps | `sortmap` | both | 0.70 s | 64% | One-pass, exact-size merges; grow maps geometrically |
-| String tree | `strtree` | both | 0.21 s, +5 MB | 19% | Hash index replaces string tree walks |
-| CRC-32 | `crc` | both | 0.05 s | 5% | Checksums eight bytes per step |
-| mimalloc | `mimalloc` | both | ~0.04 s | ~4% | mimalloc for small blocks, the system heap for larger ones |
-| Icon state name compare | `dmicmp` | Windows | ~0.02 s | ~2% | Table-based .dmi icon state name compare |
-| String table load | `strtable` | Windows | ~0.01 s | ~1% | Native string table load; skips the redundant rebuild |
-| Var list inheritance | `varlist` | Windows | ~0.01 s | ~1% | Types without own vars reuse the parent's var list |
+| Sorted maps | `sortmap` | both | 2.42 s, +6 MB | 210% | One-pass, exact-size merges; grow maps geometrically |
+| .dmb reader | `dmbread` | both | 1.16 s | 100% | Buffered whole-value reads (.dmb, also savefiles), cached ftell |
+| Proc-table index | `procs` | both | 1.04 s | 91% | Hash index for proc table find-or-add |
+| String tree | `strtree` | both | 0.23 s, +5 MB | 20% | Hash index replaces string tree walks |
+| CRC-32 | `crc` | both | 0.07 s | 6% | Checksums eight bytes per step |
+| Var list inheritance | `varlist` | Windows | 0.04 s | 4% | Types without own vars reuse the parent's var list |
+| mimalloc | `mimalloc` | both | 0.04 s, +8 MB | 3% | mimalloc for small blocks, the system heap for larger ones |
+| Icon state name compare | `dmicmp` | Windows | 0.03 s | 3% | Table-based .dmi icon state name compare |
+| String table load | `strtable` | Windows | ~0.02 s | ~2% | Native string table load; skips the redundant rebuild |
 
 ### In-round
 
@@ -66,13 +66,13 @@ on, and how much more peak memory the patch uses. `map_cpu` numbers are with ~50
 | Var reads | `getvar` | Linux | ~7% in-round | Faster `a.b` reads: avoids the same CPU stall as `argload` |
 | Turf var chains | `turfvar` | both | ~2.5% in-round (12 z-levels) | Adds new turf var records at the end of their hash chain, so early-loaded z-levels stay near the front |
 
-mimalloc serves the whole process, including `call_ext` DLLs; `HeapWalk` doesn't list its blocks under 4 KB.
-
 How BYOND itself could fix each of these: [PATCH-FIXES.md](PATCH-FIXES.md).
 
 ## Native libraries
 
 Tested with stock BYOND and dmfast (default patches and each fix tier) on BYOND 516.1688, Windows and Linux, unless noted.
+
+mimalloc serves the whole process, including `call_ext` DLLs; `HeapWalk` doesn't list its blocks under 4 KB.
 
 | Library | Used by | With dmfast | Notes |
 |---|---|---|---|
