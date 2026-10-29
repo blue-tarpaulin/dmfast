@@ -179,6 +179,34 @@ impl Image {
         self.parts.iter().filter(|p| p.2).map(|&(a, n, _)| (a, n)).collect()
     }
 
+    /// Fails if a relocation, or a direct branch (`E8`, `E9`, or `0F 8x`) from elsewhere in the code, lands inside one
+    /// of `ranges` (`(at, len)`), code about to be rewritten in place. A branch to a range's start is fine, and so is
+    /// one from inside a range, which is rewritten too.
+    pub fn untouched(&self, ranges: &[(usize, usize)]) -> Result<()> {
+        let hits = |lo: usize, hi: usize| ranges.iter().any(|&(at, len)| hi > at && lo < at + len);
+        if let Some(r) = self.reloc_sites().into_iter().find(|&r| hits(r, r + 4)) {
+            bail!("relocation at {r:#x} in rewritten code");
+        }
+        for (start, n) in self.code_ranges() {
+            let bytes = self.haystack(start, n)?;
+            for i in 0..n.saturating_sub(6) {
+                let op = match bytes[i] {
+                    0xE8 | 0xE9 => 1,
+                    0x0F if bytes[i + 1] & 0xF0 == 0x80 => 2,
+                    _ => continue,
+                };
+                let from = start + i;
+                let rel = i32::from_le_bytes([bytes[i + op], bytes[i + op + 1], bytes[i + op + 2], bytes[i + op + 3]]);
+                let to = (from + op + 4).wrapping_add(rel as isize as usize);
+                // `hits(to, to)`: strictly inside a range.
+                if hits(to, to) && !hits(from, from + 1) {
+                    bail!("branch at {from:#x} into rewritten code at {to:#x}");
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// The parts whose executable flag is `exec` (`None`: all mapped ranges), as shipped.
     pub(crate) fn hays(&self, exec: Option<bool>) -> Result<Vec<Hay<'_>>> {
         self.open()?;
