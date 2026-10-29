@@ -1,6 +1,5 @@
 //! `turfvar`, Linux.
 
-use super::untouched;
 use crate::base::Result;
 use crate::base::feature::Ctx;
 
@@ -26,7 +25,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
         0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, // nop (8 bytes, pads to the stock loop's length)
     ];
     let at = core.find_unique(FIND, "turf var find-or-create")? + 0x24;
-    untouched(core, at, NEW.len())?;
+    core.untouched(&[(at, NEW.len())])?;
     core.write_code(at, &NEW)?;
     Ok(format!("at +{:#x}", at - core.base))
 }
