@@ -35,10 +35,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Clippy (dmfast.dll)
         shell: bash
-        run: cargo clippy --release --locked -p dmfast -p dmfast-base -p dmfast-patches --target i686-pc-windows-msvc -- -D warnings
+        run: cargo clippy --release --locked -p dmfast -p dmfast-private -p dmfast-base -p dmfast-patches --target i686-pc-windows-msvc -- -D warnings
       - name: Tests (dmfast.dll)
         shell: bash
-        run: cargo test --release --locked -p dmfast -p dmfast-base -p dmfast-patches --lib --target i686-pc-windows-msvc
+        run: cargo test --release --locked -p dmfast -p dmfast-private -p dmfast-base -p dmfast-patches --lib --target i686-pc-windows-msvc
       - name: Clippy (installer, packer)
         shell: bash
         run: cargo clippy --release --locked -p dmfast-install -p dmfast-pack -- -D warnings
@@ -75,7 +75,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Clippy (libdmfast.so)
         shell: bash
-        run: cargo clippy --release --locked -p dmfast -p dmfast-base -p dmfast-patches --target i686-unknown-linux-gnu -- -D warnings
+        run: cargo clippy --release --locked -p dmfast -p dmfast-private -p dmfast-base -p dmfast-patches --target i686-unknown-linux-gnu -- -D warnings
       - name: Clippy (installer, packer)
         shell: bash
         run: cargo clippy --release --locked -p dmfast-install -p dmfast-pack -- -D warnings

@@ -1,0 +1,18 @@
+[package]
+name = "dmfast"
+version.workspace = true
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dmfast-base = { path = "../base" }
+dmfast-patches = { path = "../patches" }
+dmfast-private = { path = "../patches-private" }
+
+[dev-dependencies]
+dmfast-base = { path = "../base", features = ["validate"] }
+
+[build-dependencies]
+winresource = "0.1.34"
