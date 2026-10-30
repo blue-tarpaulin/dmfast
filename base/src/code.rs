@@ -17,7 +17,8 @@ pub type MallocFn = unsafe extern "C" fn(usize) -> *mut c_void;
 pub type ReallocFn = unsafe extern "C" fn(*mut c_void, usize) -> *mut c_void;
 
 /// A foreign function of type `F` (an `extern "C"` fn pointer type): its address is found at install, hooks call
-/// it through [`Foreign::get`].
+/// it through [`Foreign::get`]. Laid out as its address alone, so stubs can `jmp [static]` through it.
+#[repr(transparent)]
 pub struct Foreign<F> {
     addr: AtomicUsize,
     _f: PhantomData<F>,
