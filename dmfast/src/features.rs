@@ -72,8 +72,8 @@ pub static COMPILER_FIXES: &[&Feature] = &[
 pub static SERVER_FIXES: &[&Feature] = &[
     &public::server::fixes::urlcrlf::URLCRLF,
     &public::server::fixes::jsonutf::JSONUTF,
-    &private::server::fixes::num2sig::NUM2SIG,
-    &private::server::fixes::nulldiv::NULLDIV,
+    &public::server::fixes::num2sig::NUM2SIG,
+    &public::server::fixes::nulldiv::NULLDIV,
     &private::server::fixes::minmax::MINMAX,
     &public::server::fixes::cmperr::CMPERR,
     &public::server::fixes::pickweight::PICKWEIGHT,
