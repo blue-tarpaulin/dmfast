@@ -104,7 +104,7 @@ impl Image {
     }
 
     /// The NUL-terminated string at `addr`, without the NUL, as it is now.
-    pub(crate) fn c_str(&self, addr: usize) -> Result<&[u8]> {
+    pub fn c_str(&self, addr: usize) -> Result<&[u8]> {
         let &(start, len) = self
             .mapped
             .iter()
