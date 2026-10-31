@@ -5,4 +5,5 @@ pub mod dbclose;
 pub mod iconwrap;
 pub mod jsonutf;
 pub mod pickweight;
+pub mod profcpu;
 pub mod urlcrlf;
