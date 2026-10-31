@@ -70,7 +70,7 @@ pub static COMPILER_FIXES: &[&Feature] = &[
 
 /// DreamDaemon bug fixes: opt-in, listed in BUGFIXES.md, each with a test world in `tests/fixes/<key>.dme`.
 pub static SERVER_FIXES: &[&Feature] = &[
-    &private::server::fixes::urlcrlf::URLCRLF,
+    &public::server::fixes::urlcrlf::URLCRLF,
     &public::server::fixes::jsonutf::JSONUTF,
     &private::server::fixes::num2sig::NUM2SIG,
     &private::server::fixes::nulldiv::NULLDIV,
@@ -78,7 +78,7 @@ pub static SERVER_FIXES: &[&Feature] = &[
     &private::server::fixes::cmperr::CMPERR,
     &public::server::fixes::pickweight::PICKWEIGHT,
     &private::server::fixes::initvar::INITVAR,
-    &private::server::fixes::dbbignum::DBBIGNUM,
+    &public::server::fixes::dbbignum::DBBIGNUM,
     &public::server::fixes::dbclose::DBCLOSE,
     &private::server::fixes::tick::TICKINIT,
     &private::server::fixes::tick::TICK0,
