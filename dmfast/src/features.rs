@@ -64,7 +64,7 @@ pub static COMPILER_FIXES: &[&Feature] = &[
     &private::compiler::fixes::objworld::OBJWORLD,
     &private::compiler::fixes::procargs::PROCARGS,
     &public::compiler::fixes::mapcolors::MAPCOLORS,
-    &private::compiler::fixes::regexstart::REGEXSTART,
+    &public::compiler::fixes::regexstart::REGEXSTART,
     &private::compiler::fixes::varlimit::VARLIMIT,
 ];
 
@@ -87,7 +87,7 @@ pub static SERVER_FIXES: &[&Feature] = &[
     &private::server::fixes::rscid::RSCID,
     &private::server::fixes::profself::PROFSELF,
     &public::server::fixes::iconwrap::ICONWRAP,
-    &private::server::fixes::profcpu::PROFCPU,
+    &public::server::fixes::profcpu::PROFCPU,
 ];
 
 /// Fixes for both programs.
