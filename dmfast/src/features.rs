@@ -60,10 +60,10 @@ pub static COMPILER_FIXES: &[&Feature] = &[
     &private::compiler::fixes::indent::INDENT,
     &public::compiler::fixes::contline::CONTLINE,
     &private::compiler::fixes::macrospace::MACROSPACE,
-    &private::compiler::fixes::typepath::TYPEPATH,
+    &public::compiler::fixes::typepath::TYPEPATH,
     &private::compiler::fixes::objworld::OBJWORLD,
     &private::compiler::fixes::procargs::PROCARGS,
-    &private::compiler::fixes::mapcolors::MAPCOLORS,
+    &public::compiler::fixes::mapcolors::MAPCOLORS,
     &private::compiler::fixes::regexstart::REGEXSTART,
     &private::compiler::fixes::varlimit::VARLIMIT,
 ];
