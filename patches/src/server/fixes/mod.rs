@@ -9,4 +9,5 @@ pub mod nulldiv;
 pub mod num2sig;
 pub mod pickweight;
 pub mod profcpu;
+pub mod rscid;
 pub mod urlcrlf;
