@@ -2,7 +2,7 @@
 
 use std::arch::naked_asm;
 
-use super::{FOUND, Found, drop_space};
+use super::{CURRENT, FOUND, Found, POS, TEXT, drop_space};
 use crate::base::code::{Foreign, hx};
 use crate::base::feature::Ctx;
 use crate::base::windows::ucrt::ucrt_export;
@@ -40,20 +40,20 @@ const SLOT: usize = 1;
 unsafe extern "C" fn reader() {
     naked_asm!(
         "mov edx, ecx",
-        "mov ecx, dword ptr [edx + 0x3C]",
-        "mov eax, dword ptr [edx + 0x34]",
+        "mov ecx, dword ptr [edx + {pos}]",
+        "mov eax, dword ptr [edx + {text}]",
         "movzx eax, byte ptr [eax + ecx]",
         "cmp al, 0x20",
         "je 3f",
         "2:",
-        "mov dword ptr [edx + 0x40], eax",
+        "mov dword ptr [edx + {current}], eax",
         "test eax, eax",
         "jne 4f",
         "or eax, -1",
         "ret",
         "4:",
         "inc ecx",
-        "mov dword ptr [edx + 0x3C], ecx",
+        "mov dword ptr [edx + {pos}], ecx",
         "ret",
         // A space: keep ecx and edx across the call.
         "3:",
@@ -70,10 +70,13 @@ unsafe extern "C" fn reader() {
         "jmp 2b",
         // Dropped: the end of the text.
         "5:",
-        "mov dword ptr [edx + 0x40], 0",
+        "mov dword ptr [edx + {current}], 0",
         "or eax, -1",
         "ret",
         drop_space = sym drop_space,
+        text = const TEXT,
+        pos = const POS,
+        current = const CURRENT,
     )
 }
 
