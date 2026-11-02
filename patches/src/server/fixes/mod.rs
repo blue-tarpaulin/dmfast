@@ -16,4 +16,5 @@ pub mod pickweight;
 pub mod profcpu;
 pub mod profself;
 pub mod rscid;
+pub mod tick;
 pub mod urlcrlf;

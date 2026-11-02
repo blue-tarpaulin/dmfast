@@ -11,6 +11,7 @@ pub mod indent;
 pub mod macrospace;
 pub mod mapcolors;
 pub mod objworld;
+pub mod procargs;
 pub mod regexstart;
 pub mod typepath;
 pub mod varlimit;
