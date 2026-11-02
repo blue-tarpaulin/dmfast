@@ -1,11 +1,11 @@
 //! `rscid`, Windows: both get-or-add functions' call of the dynamic set's insert (thiscall) calls [`insert`].
 
 use std::ffi::c_void;
-use std::sync::OnceLock;
 
 use super::{Key, next_is_null};
 use crate::base::code::Foreign;
 use crate::base::feature::Ctx;
+use crate::base::sync::Installed;
 use crate::base::{Result, bail};
 
 type Insert = unsafe extern "thiscall" fn(usize, *const Key) -> *mut c_void;
@@ -21,7 +21,7 @@ struct Found {
     count: usize,
 }
 
-static FOUND: OnceLock<Found> = OnceLock::new();
+static FOUND: Installed<Found> = Installed::new();
 
 /// The get-or-add: push edi ; lea ecx,[esi+2F0h] ; call insert ; mov ebx,eax ; test ebx,ebx ; je ... ;
 /// mov eax,[ebx+18h]
@@ -60,7 +60,7 @@ const COUNT: usize = 8;
 /// # Safety
 /// BYOND's call: `set` is the dynamic set and `key` a live key.
 unsafe extern "thiscall" fn insert(set: usize, key: *const Key) -> *mut c_void {
-    let Some(f) = FOUND.get() else { std::process::abort() };
+    let f = FOUND.get();
     // SAFETY: the dynamic set (caller); BYOND's functions, called as its 0xFFFF branch calls them.
     unsafe {
         if next_is_null(set, f.count) {
@@ -104,8 +104,6 @@ pub fn install(cx: &Ctx) -> Result<String> {
         Found { insert: Foreign::at(insert_fn), ctor: Foreign::at(ctor), vtable, dtor: Foreign::at(dtor), count };
     core.call(a + CALL, 5, insert as Insert)?;
     core.call(b + CALL, 5, insert as Insert)?;
-    cx.on_commit(move || {
-        let _ = FOUND.set(found);
-    });
+    FOUND.commit(cx, found);
     Ok(format!("insert at +{:#x}", insert_fn - core.base))
 }

@@ -1,9 +1,12 @@
-//! Threads: state that hooks use from one thread only ([`Owned`]), the calling thread's id, and locking.
+//! Threads: state that hooks use from one thread only ([`Owned`]), state found at install ([`Installed`]), the
+//! calling thread's id, and locking.
 
 use std::cell::UnsafeCell;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 use crate::Result;
+use crate::feature::Ctx;
 
 /// Set during install, then handed to the first thread that asks (the compiler thread) and no other; hooks run
 /// the original code on every other thread.
@@ -54,6 +57,44 @@ impl<T> Owned<T> {
     /// The owner no longer runs hooks (exit-time stats), or only shareable fields (atomics) are touched.
     pub unsafe fn shared(&self) -> Option<&T> {
         unsafe { (*self.value.get()).as_ref() }
+    }
+}
+
+/// What a feature finds while it installs, for its hooks: kept only if the install commits, which is before any hook
+/// can run.
+pub struct Installed<T>(OnceLock<T>);
+
+impl<T> Default for Installed<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> Installed<T> {
+    pub const fn new() -> Self {
+        Self(OnceLock::new())
+    }
+
+    /// Keep `value` once the installing feature commits.
+    pub fn commit(&'static self, cx: &Ctx, value: T)
+    where
+        T: Send + Sync,
+    {
+        cx.on_commit(move || {
+            let _ = self.0.set(value);
+        });
+    }
+
+    /// The state, for a hook. Hooks run only after the commit, so it is set; if not, the process aborts rather than
+    /// carry on without it.
+    #[inline(always)]
+    pub fn get(&self) -> &T {
+        self.0.get().unwrap_or_else(|| std::process::abort())
+    }
+
+    /// Whether the feature installed (for stats).
+    pub fn is_set(&self) -> bool {
+        self.0.get().is_some()
     }
 }
 

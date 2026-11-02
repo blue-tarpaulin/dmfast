@@ -40,6 +40,14 @@ struct Site {
     back: usize,
 }
 
+/// The node's parent field offset, from the type path builder: the one match of `builder` whose call at `recurse`
+/// calls itself, with the offset at `parent`.
+fn parent_offset(core: &Image, builder: &str, parent: usize, recurse: usize) -> Result<u8> {
+    let f = core.probe_unique(builder, "type path builder", |f| core.rel32(f + recurse).is_ok_and(|t| t == f))?;
+    let [offset] = core.array(f + parent)?;
+    Ok(offset)
+}
+
 /// Point `site` at a stub: `cmp dword [node],13h`, then "and the node's parent is the root" (ZF set for a world node,
 /// or a node with no parent, as stock), the copied bytes, the conditional jump, and a jump back. ecx is kept.
 fn redirect(core: &Image, site: Site, parent: u8) -> Result<()> {

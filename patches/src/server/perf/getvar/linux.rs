@@ -5,7 +5,6 @@ use std::arch::naked_asm;
 
 use crate::base::code::{Foreign, branch};
 use crate::base::feature::Ctx;
-use crate::base::image::Hits;
 use crate::base::{Result, bail};
 
 const GETVAR: &str = "55 89 E5 57 56 53 83 EC 5C F3 0F 7E 4D 0C 8B 75 08 8B 5D 14 66 0F 6F C1 66 0F 7E CA 66 0F 73 D0 20 \
@@ -75,9 +74,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let push = [&[0x68][..], &(text as u32).to_le_bytes()].concat();
     let pushes = core.probe_bytes(&push)?;
     let near = |f: usize| pushes.iter().copied().filter(move |&p| p > f && p - f < ERROR_SPAN);
-    let reads: Hits = core.probe_all(VAR_READ)?.into_iter().filter(|&f| near(f).next().is_some()).collect();
-    let read = reads.unique("user var read")?;
-    core.rely(read, VAR_READ.split_whitespace().count())?;
+    let read = core.probe_unique(VAR_READ, "user var read", |f| near(f).next().is_some())?;
     for p in near(read) {
         core.rely(p, push.len())?;
     }

@@ -30,10 +30,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let num = core.find_unique(NUMBER_CASE, "number / x case")?;
     let right_type = core.array::<4>(num + 2)?;
     let error = core.rel32(num + ERROR_AT + 2)?;
-    let dispatch: Vec<usize> =
-        core.probe_all(DISPATCH)?.into_iter().filter(|&d| core.rel32(d + 4).is_ok_and(|t| t == num)).collect();
-    let [d] = dispatch[..] else { bail!("/ dispatch: expected 1 match, found {}", dispatch.len()) };
-    core.rely(d, DISPATCH.split_whitespace().count())?;
+    let d = core.probe_unique(DISPATCH, "/ dispatch", |d| core.rel32(d + 4).is_ok_and(|t| t == num))?;
     let null = core.rel32(d + 26)?;
     if !core.is_at(null, NULL_CASE)? {
         bail!("null / x case: not where the dispatch leads");

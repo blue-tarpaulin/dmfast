@@ -230,6 +230,16 @@ impl Image {
         Ok(Hits(scan::find_pattern(&self.hays(Some(true))?, &scan::parse(ida)?)))
     }
 
+    /// The only match of [`Image::probe_all`] that `keep` accepts, relied on (`Err` naming `what` otherwise). The
+    /// matches it rejects stay candidates, relied on by nothing.
+    pub fn probe_unique(&self, ida: &str, what: &str, keep: impl Fn(usize) -> bool) -> Result<usize> {
+        let pat = scan::parse(ida)?;
+        let hits = scan::find_pattern(&self.hays(Some(true))?, &pat);
+        let at = hits.into_iter().filter(|&a| keep(a)).collect::<Hits>().unique(what)?;
+        self.rely(at, pat.len())?;
+        Ok(at)
+    }
+
     /// The only match of [`Image::find_all`] (`Err` naming `what` otherwise).
     pub fn find_unique(&self, ida: &str, what: &str) -> Result<usize> {
         self.find_all(ida)?.unique(what)

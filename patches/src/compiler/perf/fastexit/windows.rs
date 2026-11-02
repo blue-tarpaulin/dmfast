@@ -1,18 +1,17 @@
 //! dm.exe fast exit.
 
-use std::sync::OnceLock;
-
 use windows_sys::Win32::System::Console::{GetStdHandle, STD_OUTPUT_HANDLE, WriteConsoleW};
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, TerminateProcess};
 
 use crate::base::code::{Foreign, live_u32};
 use crate::base::feature::Ctx;
 use crate::base::image::Image;
+use crate::base::sync::Installed;
 use crate::base::windows::ucrt::ucrt_export;
 use crate::base::{Result, bail};
 
-/// What [`fast_exit`] redoes of the skipped teardown; set when the feature commits.
-static EXIT: OnceLock<Exit> = OnceLock::new();
+/// What [`fast_exit`] redoes of the skipped teardown.
+static EXIT: Installed<Exit> = Installed::new();
 
 struct Exit {
     /// ucrtbase's `_flushall`.
@@ -28,7 +27,7 @@ struct Exit {
 /// Replaces the builder teardown once the .dmb is written and the summary printed: clear the status line, release
 /// the resource locks, flush every CRT stream, print stats and exit with main's code.
 extern "C" fn fast_exit(code: i32) -> ! {
-    let Some(exit) = EXIT.get() else { std::process::abort() };
+    let exit = EXIT.get();
     // SAFETY: install found and checked these addresses; main has finished with them.
     unsafe {
         if let Some(status) = &exit.status {
@@ -82,10 +81,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let status = Status::find(exe, exe.rel32(m + 7)?)?;
     exe.write_code(m, &[0xFF, 0x75, ret])?; // push dword [ebp-r]
     exe.call(m + 3, 5, fast_exit as *const ())?;
-    let exit = Exit { flushall: Foreign::at(flushall), locks, data_file, release: Foreign::at(release), status };
-    cx.on_commit(move || {
-        let _ = EXIT.set(exit);
-    });
+    EXIT.commit(cx, Exit { flushall: Foreign::at(flushall), locks, data_file, release: Foreign::at(release), status });
     Ok("after summary".into())
 }
 

@@ -1,7 +1,7 @@
 //! `objworld`, Linux: the queue pass (node in eax or edi) and the var-name dispatch of an entry (node in edx), each
 //! `cmp dword [node],13h ; <mid> ; je world`.
 
-use super::{EAX, EDI, EDX, Site, redirect};
+use super::{EAX, EDI, EDX, Site, parent_offset, redirect};
 use crate::base::feature::Ctx;
 use crate::base::image::Image;
 use crate::base::{Result, bail};
@@ -19,17 +19,6 @@ const BUILDER: &str = "85 C0 0F 84 ?? ?? ?? ?? 57 56 53 89 C3 8B 40 ?? E8 ?? ?? 
 const PARENT: usize = 15;
 const RECURSE: usize = 17;
 
-fn parent_offset(core: &Image) -> Result<u8> {
-    let found: Vec<usize> =
-        core.probe_all(BUILDER)?.into_iter().filter(|&f| core.rel32(f + RECURSE).is_ok_and(|t| t == f)).collect();
-    let [f] = found[..] else {
-        bail!("type path builder: expected 1 match, found {}", found.len());
-    };
-    core.rely(f, BUILDER.split_whitespace().count())?;
-    let [parent] = core.array(f + PARENT)?;
-    Ok(parent)
-}
-
 /// `cmp dword [node],13h ; <mid bytes> ; je world` at `at`.
 fn je_world(core: &Image, at: usize, node: u8, mid: usize) -> Result<Site> {
     let je = at + 3 + mid;
@@ -42,7 +31,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     queue.extend(core.find_all(QUEUE_EDI)?.into_iter().map(|at| (at, EDI, 0)));
     let [(a, node, mid)] = queue[..] else { bail!("world node test: expected 1 match, found {}", queue.len()) };
     let b = core.find_unique(DISPATCH, "world var dispatch")?;
-    let parent = parent_offset(core)?;
+    let parent = parent_offset(core, BUILDER, PARENT, RECURSE)?;
     redirect(core, je_world(core, a, node, mid)?, parent)?;
     redirect(core, je_world(core, b, EDX, 0)?, parent)?;
     Ok(format!("at +{:#x}, +{:#x}", a - core.base, b - core.base))
