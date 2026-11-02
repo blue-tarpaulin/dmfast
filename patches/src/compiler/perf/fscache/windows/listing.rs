@@ -7,7 +7,6 @@
 //!
 //! Listings follow the cache's rules: unmodified directories only, dropped on any modification, owner thread only.
 
-use rustc_hash::FxHashMap;
 use windows_sys::Win32::Foundation::{FILETIME, INVALID_HANDLE_VALUE, MAX_PATH, SYSTEMTIME};
 use windows_sys::Win32::Storage::FileSystem::{
     FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_REPARSE_POINT, FIND_FIRST_EX_LARGE_FETCH,
@@ -18,10 +17,11 @@ use windows_sys::Win32::System::Time::{FileTimeToSystemTime, SystemTimeToTzSpeci
 use super::{is_volatile, normalize, wslice};
 use crate::base::Result;
 use crate::base::code::Foreign;
+use crate::base::hash::Map;
 use crate::base::windows::ucrt::ucrt_export;
 
 struct Listing {
-    by_name: FxHashMap<Box<[u16]>, WIN32_FIND_DATAW>,
+    by_name: Map<Box<[u16]>, WIN32_FIND_DATAW>,
     non_ascii: bool,
 }
 
@@ -36,7 +36,7 @@ pub(super) struct Counters {
 /// Each directory's listing (`None` if it can't answer), by normalized path.
 #[derive(Default)]
 pub(super) struct Listings {
-    dirs: FxHashMap<Box<[u16]>, Option<Listing>>,
+    dirs: Map<Box<[u16]>, Option<Listing>>,
     pub counters: Counters,
 }
 
@@ -46,7 +46,7 @@ fn lower(s: &[u16]) -> Box<[u16]> {
 
 fn list(dir: &[u16], counters: &mut Counters) -> Option<Listing> {
     let pattern: Vec<u16> = dir.iter().copied().chain([0x5C, 0x2A, 0]).collect();
-    let mut by_name = FxHashMap::default();
+    let mut by_name = Map::default();
     let mut non_ascii = false;
     let mut ok = true;
     unsafe {

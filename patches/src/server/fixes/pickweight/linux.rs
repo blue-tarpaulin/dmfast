@@ -1,7 +1,7 @@
 //! `pickweight`, Linux: the interpreter inlines the opcode, so its final target read is patched in place.
 
 use crate::base::Result;
-use crate::base::code::Stub;
+use crate::base::code::{Cond, Stub};
 use crate::base::feature::Ctx;
 
 pub fn install(cx: &Ctx) -> Result<String> {
@@ -16,15 +16,18 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let site = at + 14;
     let back = at + 24;
     let [lo, hi] = super::THRESHOLD.to_le_bytes();
-    let stub = Stub::new()
+    let mut s = Stub::new();
+    let ok = s.label();
+    let stub = s
         .bytes(&[0x66, 0x81, 0x3C, 0x81, lo, hi]) // cmp word [ecx+eax*4],THRESHOLD
-        .bytes(&[0x72, 0x03]) // jb ok
+        .jcc8(Cond::Below, ok) // jb ok
         .bytes(&[0x83, 0xC0, 0x01]) // add eax,1
+        .bind(ok)
         .bytes(&[0x8B, 0x04, 0x81]) // ok: the replaced code: mov eax,[ecx+eax*4]
         .bytes(&[0x83, 0xE8, 0x01]) // sub eax,1
         .bytes(&[0x66, 0x89, 0x46, 0x14]) // mov [esi+14h],ax
         .jmp(back) // jmp back
         .exec()?;
     core.jump(site, 10, stub)?;
-    Ok(format!("at +{:#x}", at - core.base))
+    Ok(core.report(&[at]))
 }

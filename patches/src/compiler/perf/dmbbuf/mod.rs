@@ -5,8 +5,7 @@
 //!
 //! No dependency guard: it only wraps the open call.
 
-use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
-
+use crate::base::driver::Counter;
 use crate::base::feature::{Feature, Hosts, install};
 use crate::compiler::perf::fscache::FSCACHE;
 
@@ -24,7 +23,7 @@ pub static DMBBUF: Feature =
 const BUFFER: usize = 1 << 20;
 
 /// Streams given the buffer.
-static BUFFERED: AtomicU32 = AtomicU32::new(0);
+static BUFFERED: Counter = Counter::new();
 
 /// Whether a file name (bytes or UTF-16 units) ends in `.dmb`, in any case.
 fn is_dmb<T: Copy + Into<u32>>(name: &[T]) -> bool {
@@ -33,5 +32,5 @@ fn is_dmb<T: Copy + Into<u32>>(name: &[T]) -> bool {
 }
 
 fn print_stats() {
-    eprintln!("dmfast: dmb buffer on {} streams", BUFFERED.load(Relaxed));
+    eprintln!("dmfast: dmb buffer on {} streams", BUFFERED);
 }

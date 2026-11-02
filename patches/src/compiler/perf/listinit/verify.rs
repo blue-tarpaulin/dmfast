@@ -1,13 +1,11 @@
 //! `DMFAST_VERIFY=1`: every intern also runs the original, whose id is used. It's a mismatch if the original returns
 //! another id for an index hit, appends for a hit, or finds an entry for a miss.
 
-use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
-
 use super::{RESERVED, State, original};
 use crate::base::code::live_u32;
-use crate::base::driver::verify;
+use crate::base::driver::{Counter, verify};
 
-pub(super) static MISMATCHES: AtomicU32 = AtomicU32::new(0);
+pub(super) static MISMATCHES: Counter = Counter::new();
 
 /// With verify on, the original's id for `list`, given the index's answer `hit` (`None` for a miss).
 ///
@@ -26,7 +24,7 @@ pub(super) unsafe fn intern(st: &mut State, list: usize, hit: Option<u32>) -> Op
         None => appended && id == if count == RESERVED { RESERVED + 1 } else { count },
     };
     if !expected {
-        MISMATCHES.fetch_add(1, Relaxed);
+        MISMATCHES.bump();
     }
     Some(id)
 }

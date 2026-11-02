@@ -31,16 +31,14 @@ fn loc_flag(core: &Image, id: u32) -> Result<(u32, usize)> {
     let id = hx(id as usize);
     let new = core.find_all(&format!("57 83 C8 ?? 50 68 {id} E9"))?;
     if let [at] = new.as_slice()[..] {
-        let t = core.rel32(at + 11)?;
-        if !core.is_at(t, "8B B5 ?? ?? ?? ?? 8B CE E8")? {
-            bail!("$loc var path: no append call after it");
-        }
+        let t = core.branch_at(at + 10)?.target;
+        core.require(t, "8B B5 ?? ?? ?? ?? 8B CE E8", "$loc var path: append call after it")?;
         let flag = core.u8_at(at + 3)?;
-        return Ok((u32::from(flag), core.rel32(t + 9)?));
+        return Ok((u32::from(flag), core.call_target(t + 8)?));
     }
     let mut old = Vec::new();
     for at in core.find_all(&format!("B8 {id} E9"))? {
-        let l = core.rel32(at + 6)?;
+        let l = core.branch_at(at + 5)?.target;
         if core.is_at(l, "B9 ?? ?? ?? ?? 6A 00 51 8B 8D ?? ?? ?? ?? 50 E8")? {
             old.push(l);
         }
@@ -48,7 +46,7 @@ fn loc_flag(core: &Image, id: u32) -> Result<(u32, usize)> {
     let [l] = old[..] else {
         bail!("$loc var path: found {} (516 form) and {} (515 form)", new.len(), old.len());
     };
-    Ok((core.u32_at(l + 1)?, core.rel32(l + 16)?))
+    Ok((core.u32_at(l + 1)?, core.call_target(l + 15)?))
 }
 
 pub fn install(cx: &Ctx) -> Result<String> {
@@ -57,6 +55,6 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let id = core.u32_at(cmp + 2)?;
     let (flag, append) = loc_flag(core, id)?;
     let flags_at = core.u8_at(core.find_unique_in(append, 0x80, STORES, "var path element stores")? + FLAGS_AT)?;
-    let other = core.rel8(cmp + CMP_LEN - 1)?;
+    let other = core.branch_at(cmp + 6)?.target;
     patch(core, cmp, CMP_LEN, other, Loc { id, flag, flags_at })
 }

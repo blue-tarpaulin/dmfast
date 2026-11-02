@@ -4,7 +4,7 @@
 use super::{FOUND, Found, keeps_pending, owns_pending};
 use crate::base::code::{Cond, Stub};
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// OpenClientSocket's registration of the pending connect: `mov ecx,[ebp+10h] (done callback) ; push eax (the
 /// {callback, data} pair) ; push CONNECT_DONE ; push [ebp+0Ch] (name) ; mov [eax],ecx ; mov ecx,edi ; push 8
@@ -49,39 +49,42 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let register = core.rel32(open + REGISTER_CALL)?;
     let overwrite = core.find_unique(OVERWRITE, "Register: existing entry")?;
     let mode0 = core.find_unique(MODE0, "Register: mode 0")?;
-    if !(register..register + 0x200).contains(&overwrite) || !(register..register + 0x40).contains(&mode0) {
-        bail!("Register sites are not in the function OpenClientSocket calls");
-    }
+    ensure!(
+        (register..register + 0x200).contains(&overwrite) && (register..register + 0x40).contains(&mode0),
+        "Register sites are not in the function OpenClientSocket calls"
+    );
     let count = core.u8_at(mode0 + COUNT)?;
     let entries = core.u8_at(mode0 + ENTRIES)?;
 
     // The close function is the one the connect timer's callback calls (other copies of CLOSE are candidates).
-    let close_fn = core.rel32(core.find_unique(TIMER, "connect timer callback")? + 3)?;
+    let close_fn = core.call_target(core.find_unique(TIMER, "connect timer callback")? + 2)?;
     let close = core.probe_unique(CLOSE, "clisock close", |c| (close_fn..close_fn + CLOSE_SPAN).contains(&c))?;
     let cmp = close + CLOSE_CMP;
     let skip = core.rel8(cmp + 4)?;
     let after = cmp + 5;
-    if skip != close + CLOSE_LEN {
-        bail!("clisock close: unexpected skip target");
-    }
-    let cb = connect_done.to_le_bytes();
+    ensure!(skip == close + CLOSE_LEN, "clisock close: unexpected skip target");
 
     // Register, existing entry (ecx): don't turn a pending connect into anything but a connect.
-    let stub_overwrite = Stub::new()
-        .bytes(&[&[0x81, 0x79, 0x04][..], &cb].concat()) // cmp dword [ecx+4],CB
-        .bytes(&[0x75, 0x10]) // jne orig
-        .bytes(&[&[0x81, 0x7D, 0x14][..], &cb].concat()) // cmp dword [ebp+14h],CB (the new callback)
-        .bytes(&[0x74, 0x07]) // je orig
+    let mut s = Stub::new();
+    let orig = s.label();
+    let stub_overwrite = s
+        .bytes_u32(&[0x81, 0x79, 0x04], connect_done, &[]) // cmp dword [ecx+4],CB
+        .jcc8(Cond::NotEqual, orig) // jne orig
+        .bytes_u32(&[0x81, 0x7D, 0x14], connect_done, &[]) // cmp dword [ebp+14h],CB (the new callback)
+        .jcc8(Cond::Equal, orig) // je orig
         .bytes(&[0x5F]) // pop edi
         .bytes(&[0x5E]) // pop esi
         .bytes(&[0x5B]) // pop ebx
         .bytes(&[0x5D]) // pop ebp
         .bytes(&[0xC2, 0x14, 0x00]) // ret 14h
+        .bind(orig)
         .bytes(core.bytes(overwrite, OVERWRITE_LEN)?) // orig: mov al,[ebp+0Ch] ; mov [ecx+10h],al
         .jmp(overwrite + OVERWRITE_LEN) // jmp back
         .exec()?;
     // Register, mode 0 (ebx = this, esi = socket): keep a pending connect's entry.
-    let stub_mode0 = Stub::new()
+    let mut s = Stub::new();
+    let unregister = s.label();
+    let stub_mode0 = s
         .bytes(&[0x83, 0xFE, 0xFE]) // cmp esi,-2
         .jcc(Cond::LessOrEqual, mode0 + SEARCH) // jle search
         .bytes(&[0x56]) // push esi
@@ -89,11 +92,12 @@ pub fn install(cx: &Ctx) -> Result<String> {
         .call(keeps_pending as unsafe extern "C" fn(usize, i32) -> bool) // call keeps_pending
         .bytes(&[0x83, 0xC4, 0x08]) // add esp,8
         .bytes(&[0x84, 0xC0]) // test al,al
-        .bytes(&[0x74, 0x06]) // je unregister
+        .jcc8(Cond::Equal, unregister) // je unregister
         .bytes(&[0x5E]) // pop esi
         .bytes(&[0x5B]) // pop ebx
         .bytes(&[0x5D]) // pop ebp
         .bytes(&[0xC2, 0x14, 0x00]) // ret 14h
+        .bind(unregister)
         .bytes(&[0x8B, 0xCB]) // unregister: mov ecx,ebx
         .jmp(mode0 + UNREGISTER) // jmp Unregister's call
         .exec()?;
@@ -119,5 +123,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     core.jump(cmp, 5, stub_close)?;
     let socklib = core.ptr_at(close + SOCKLIB)?;
     FOUND.commit(cx, Found { connect_done, socklib, entries: usize::from(entries), count: usize::from(count) });
-    Ok(format!("at +{:#x}", register - core.base))
+    Ok(core.report(&[register]))
 }

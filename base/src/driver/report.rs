@@ -1,7 +1,9 @@
 //! `DMFAST_STATS`: the summary on the stats line and each feature's counters at exit. `DMFAST_VERIFY`: features
 //! check their fast paths against the original.
 
+use std::fmt;
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
 use crate::driver::select::has_selection;
 use crate::driver::{Config, INSTALLED};
@@ -17,6 +19,36 @@ pub fn stats() -> bool {
 pub fn verify() -> bool {
     static ON: LazyLock<bool> = LazyLock::new(|| std::env::var_os("DMFAST_VERIFY").is_some());
     *ON
+}
+
+/// An event counter for a feature's stats (`static HITS: Counter = Counter::new();`, `HITS.bump()`, `{HITS}` in its
+/// stats line). Relaxed: counts may lag a little across threads.
+#[derive(Default)]
+pub struct Counter(AtomicU32);
+
+impl Counter {
+    pub const fn new() -> Self {
+        Self(AtomicU32::new(0))
+    }
+
+    pub fn bump(&self) {
+        self.0.fetch_add(1, Relaxed);
+    }
+
+    /// [`Counter::bump`], and whether this was one of the first `n` (to print the first few mismatches).
+    pub fn bump_first(&self, n: u32) -> bool {
+        self.0.fetch_add(1, Relaxed) < n
+    }
+
+    pub fn get(&self) -> u32 {
+        self.0.load(Relaxed)
+    }
+}
+
+impl fmt::Display for Counter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.get().fmt(f)
+    }
 }
 
 /// `mimalloc <x.y.z>, <split>` for the stats line, from `mi_version()` (`30504` is 3.5.4).

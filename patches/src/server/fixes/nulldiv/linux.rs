@@ -3,9 +3,9 @@
 //! to "Division by zero".
 
 use super::{NULL, NUMBER};
+use crate::base::Result;
 use crate::base::code::{Cond, Stub};
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
 
 /// The number case: `cmp byte [ebp+right type],2Ah ; jne other ; fldz ; fld [right value] ; fucompi st(1) ;
 /// fstp st(0) ; jp div ; je error ; div: fld [right value] ; fdivr [ebx+4] ; fstp [ebx+4] ; jmp loop`.
@@ -28,23 +28,20 @@ const DISPATCH: &str = "3C 2A 0F 84 ?? ?? ?? ?? 0F 87 ?? ?? ?? ?? 3C 0C 0F 84 ??
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let num = core.find_unique(NUMBER_CASE, "number / x case")?;
-    let right_type = core.array::<4>(num + 2)?;
+    let right_type = u32::from_le_bytes(core.array::<4>(num + 2)?);
     let error = core.rel32(num + ERROR_AT + 2)?;
     let d = core.probe_unique(DISPATCH, "/ dispatch", |d| core.rel32(d + 4).is_ok_and(|t| t == num))?;
     let null = core.rel32(d + 26)?;
-    if !core.is_at(null, NULL_CASE)? {
-        bail!("null / x case: not where the dispatch leads");
-    }
+    core.require(null, NULL_CASE, "null / x case where the dispatch leads")?;
     let jmp = null + LOOP_AT;
     let loop_head = core.rel32(jmp + 1)?;
-    let cmp_right = |imm: u8| [&[0x80, 0xBD][..], &right_type, &[imm]].concat();
     let stub = Stub::new()
-        .bytes(&cmp_right(NUMBER)) // cmp byte [ebp+right type],2Ah
+        .bytes_u32(&[0x80, 0xBD], right_type, &[NUMBER]) // cmp byte [ebp+right type],2Ah
         .jcc(Cond::Equal, num) // je number case
-        .bytes(&cmp_right(NULL)) // cmp byte [ebp+right type],0
+        .bytes_u32(&[0x80, 0xBD], right_type, &[NULL]) // cmp byte [ebp+right type],0
         .jcc(Cond::Equal, error) // je error
         .jmp(loop_head) // jmp loop (stock)
         .exec()?;
     core.jump(jmp, 5, stub)?;
-    Ok(format!("at +{:#x}", null - core.base))
+    Ok(core.report(&[null]))
 }

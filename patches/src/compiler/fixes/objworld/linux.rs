@@ -23,7 +23,7 @@ const RECURSE: usize = 17;
 /// `cmp dword [node],13h ; <mid bytes> ; je world` at `at`.
 fn je_world(core: &Image, at: usize, node: u8, mid: usize) -> Result<Site> {
     let je = at + 3 + mid;
-    Ok(Site { at, node, copy: mid, jcc: Some((Cond::Equal, core.rel32(je + 2)?)), back: je + 6 })
+    Ok(Site { at, node, copy: mid, jcc: Some(core.jcc_at(je, Cond::Equal)?), back: je + 6 })
 }
 
 pub fn install(cx: &Ctx) -> Result<String> {
@@ -35,5 +35,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let parent = parent_offset(core, BUILDER, PARENT, RECURSE)?;
     redirect(core, je_world(core, a, node, mid)?, parent)?;
     redirect(core, je_world(core, b, EDX, 0)?, parent)?;
-    Ok(format!("at +{:#x}, +{:#x}", a - core.base, b - core.base))
+    Ok(core.report(&[a, b]))
 }

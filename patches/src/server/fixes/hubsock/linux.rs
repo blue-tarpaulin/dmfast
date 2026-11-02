@@ -4,7 +4,7 @@
 use super::{FOUND, Found, keeps_pending, owns_pending};
 use crate::base::code::{Cond, Stub};
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// OpenClientSocket's registration of the pending connect: `mov [eax+4],data ; mov [eax],callback ; pop edx ;
 /// pop ecx ; push eax (the {callback, data} pair) ; push CONNECT_DONE ; push name ; push 8 (mode) ; push ebx (socket) ;
@@ -44,9 +44,10 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let register = core.rel32(open + REGISTER_CALL)?;
     let overwrite = core.find_unique(OVERWRITE, "Register: existing entry")?;
     let mode0 = core.find_unique(MODE0, "Register: mode 0")?;
-    if !(register..register + 0x200).contains(&overwrite) || !(register..register + 0x40).contains(&mode0) {
-        bail!("Register sites are not in the function OpenClientSocket calls");
-    }
+    ensure!(
+        (register..register + 0x200).contains(&overwrite) && (register..register + 0x40).contains(&mode0),
+        "Register sites are not in the function OpenClientSocket calls"
+    );
     let epilogue = overwrite + EPILOGUE;
     let unregister = core.rel32(mode0 + MODE0_CMP + 5)?;
     let after_mode0 = mode0 + MODE0_CMP + MODE0_LEN;
@@ -57,25 +58,27 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let cmp = close + CLOSE_CMP;
     let skip = core.rel8(cmp + 4)?;
     let after = cmp + 5;
-    if skip != close + CLOSE_LEN {
-        bail!("clisock close: unexpected skip target");
-    }
-    let cb = connect_done.to_le_bytes();
+    ensure!(skip == close + CLOSE_LEN, "clisock close: unexpected skip target");
 
     // Register, existing entry (esi): don't turn a pending connect into anything but a connect.
-    let stub_overwrite = Stub::new()
-        .bytes(&[&[0x81, 0x7E, 0x04][..], &cb].concat()) // cmp dword [esi+4],CB
-        .bytes(&[0x75, 0x0F]) // jne orig
-        .bytes(&[&[0x81, 0x7C, 0x24, 0x08][..], &cb].concat()) // cmp dword [esp+8],CB (the new callback)
-        .bytes(&[0x74, 0x05]) // je orig
+    let mut s = Stub::new();
+    let orig = s.label();
+    let stub_overwrite = s
+        .bytes_u32(&[0x81, 0x7E, 0x04], connect_done, &[]) // cmp dword [esi+4],CB
+        .jcc8(Cond::NotEqual, orig) // jne orig
+        .bytes_u32(&[0x81, 0x7C, 0x24, 0x08], connect_done, &[]) // cmp dword [esp+8],CB (the new callback)
+        .jcc8(Cond::Equal, orig) // je orig
         .jmp(epilogue) // jmp epilogue
+        .bind(orig)
         .bytes(&[0x0F, 0xB6, 0x44, 0x24, 0x04]) // orig: movzx eax,byte [esp+4]
         .jmp(overwrite + 5) // jmp back
         .exec()?;
     // Register, mode 0 (edi = this, ebx = socket): keep a pending connect's entry. The stack is 16-byte aligned here.
-    let stub_mode0 = Stub::new()
+    let mut s = Stub::new();
+    let cont = s.label();
+    let stub_mode0 = s
         .bytes(&[0x83, 0xFB, 0xFF]) // cmp ebx,-1
-        .bytes(&[0x7C, 0x1A]) // jl cont
+        .jcc8(Cond::Less, cont) // jl cont
         .bytes(&[0x83, 0xEC, 0x08]) // sub esp,8
         .bytes(&[0x53]) // push ebx
         .bytes(&[0x57]) // push edi
@@ -84,6 +87,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
         .bytes(&[0x84, 0xC0]) // test al,al
         .jcc(Cond::NotEqual, epilogue) // jne epilogue
         .jmp(unregister) // jmp unregister
+        .bind(cont)
         .jmp(after_mode0) // cont: jmp search
         .exec()?;
     // The connection's close (ebx = connection, eax = its connecting socket): close it only if the pending connect
@@ -109,5 +113,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     core.jump(cmp, 5, stub_close)?;
     let socklib = core.ptr_at(close + SOCKLIB)?;
     FOUND.commit(cx, Found { connect_done, socklib, entries: usize::from(entries), count: usize::from(count) });
-    Ok(format!("at +{:#x}", register - core.base))
+    Ok(core.report(&[register]))
 }

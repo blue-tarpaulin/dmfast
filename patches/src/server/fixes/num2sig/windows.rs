@@ -64,8 +64,8 @@ pub fn install(cx: &Ctx) -> Result<String> {
     };
     core.rely(test, SIGN.split_whitespace().count())?;
     let call = decimal + CALL;
-    SPRINTF.set(core.rel32(call + 1)?);
+    SPRINTF.set(core.call_target(call)?);
     core.call(call, 5, format as unsafe extern "C" fn())?;
     core.write_code(arg + BASE, &[MARK as u8])?;
-    Ok(format!("at +{:#x}, +{:#x}", arg - core.base, decimal - core.base))
+    Ok(core.report(&[arg, decimal]))
 }

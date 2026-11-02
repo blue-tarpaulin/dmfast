@@ -54,6 +54,16 @@ macro_rules! bail {
     };
 }
 
+/// `bail!(..)` unless `cond`.
+#[macro_export]
+macro_rules! ensure {
+    ($cond:expr, $($t:tt)*) => {
+        if !($cond) {
+            $crate::bail!($($t)*)
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

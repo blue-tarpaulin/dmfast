@@ -4,7 +4,7 @@
 use super::{Loc, patch};
 use crate::base::feature::Ctx;
 use crate::base::image::Image;
-use crate::base::{Result, bail};
+use crate::base::{Result, bail, ensure};
 
 /// The var reference codegen: cmp word [eax+1Eh],0 ; jne ; sub esp,0Ch ; push [eax+0Ch] ; call (var path by index) ;
 /// add esp,10h ; cmp word [eax+6],1 ; jne ; mov eax,[eax] ; cmp dword [eax],<locIdx> ; jne other
@@ -28,9 +28,7 @@ fn loc_flag(core: &Image, id: u32) -> Result<u32> {
     if let Some(at) = core.find_bytes_in(after, 0x20, &[0xC7, 0x40, 0x04])?.first() {
         return core.u32_at(at + 3);
     }
-    if core.find_bytes_in(after, 0x20, &[0x89, 0x70, 0x04])?.is_empty() {
-        bail!("no flags store after the $loc element");
-    }
+    ensure!(!core.find_bytes_in(after, 0x20, &[0x89, 0x70, 0x04])?.is_empty(), "no flags store after the $loc element");
     let Some(&or) = core.find_bytes_in(before, 0x30, &[0x83, 0xCE])?.as_slice().last() else {
         bail!("no `or esi,<flag>` before the $loc store");
     };
@@ -43,6 +41,6 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let cmp = core.find_unique(CHECK, "var reference $loc check")? + CMP;
     let id = core.u32_at(cmp + 2)?;
     let flag = loc_flag(core, id)?;
-    let other = core.rel32(cmp + CMP_LEN - 4)?;
+    let other = core.branch_at(cmp + 6)?.target;
     patch(core, cmp, CMP_LEN, other, Loc { id, flag, flags_at: 4 })
 }

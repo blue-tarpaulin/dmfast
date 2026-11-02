@@ -6,7 +6,7 @@ use super::{CURRENT, FOUND, Found, POS, TEXT, drop_space};
 use crate::base::code::{Foreign, hx};
 use crate::base::feature::Ctx;
 use crate::base::windows::ucrt::ucrt_export;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// The text stream's reader: `mov edx,ecx ; mov ecx,[edx+3Ch] ; mov eax,[edx+34h] ; movzx eax,byte [eax+ecx] ;
 /// mov [edx+40h],eax ; test eax,eax ; jne ok ; or eax,-1 ; ret ; ok: inc ecx ; mov [edx+3Ch],ecx ; ret`.
@@ -87,9 +87,10 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let file_reader = core.find_unique(&pattern, "file stream reader")? - 5;
     let push = core.find_unique(PUSH, "macro text push")?;
     // It builds the hooked reader's class.
-    if core.ptr_at(core.ptr_at(push + VTABLE)? + 4 * SLOT)? != g {
-        bail!("macro text push: not the text stream reader's class");
-    }
+    ensure!(
+        core.ptr_at(core.ptr_at(push + VTABLE)? + 4 * SLOT)? == g,
+        "macro text push: not the text stream reader's class"
+    );
     let save = core.find_unique_in(push, 0x100, SAVE, "macro text push: current character save")?;
     let parent = core.u8_at(push + PARENT)?;
     let kind = core.u8_at(push + KIND)?;
@@ -107,5 +108,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     core.untouched(&[(g, ENTRY)])?;
     core.jump(g, ENTRY, reader as unsafe extern "C" fn())?;
     FOUND.commit(cx, found);
-    Ok(format!("at +{:#x}", g - core.base))
+    Ok(core.report(&[g]))
 }

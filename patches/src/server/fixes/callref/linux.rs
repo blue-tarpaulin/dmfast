@@ -5,7 +5,7 @@ use super::{Slot, args, release_first};
 use crate::base::code::{Foreign, live_u32};
 use crate::base::feature::Ctx;
 use crate::base::sync::Installed;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// BYOND's assign: release a slot's value and store (type, data) in it (cdecl).
 type Assign = unsafe extern "C" fn(*mut Slot, u32, u32);
@@ -79,25 +79,19 @@ pub fn install(cx: &Ctx) -> Result<String> {
         let routes_ok = core.is_at(call - 13, STRING_END)?
             && core.is_at(ext, EXT)?
             && EXT_BAD_JUMPS.iter().all(|&j| core.rel32(ext + j).is_ok_and(|t| t == bad));
-        if !routes_ok {
-            bail!("a call() opcode's failure routes are not as expected");
-        }
+        ensure!(routes_ok, "a call() opcode's failure routes are not as expected");
         let list = call == at + CALL_ROUTE;
         sites.extend([(bad, list), (ext + EXT_REPORT, list), (core.rel32(call - 4)?, list)]);
     }
-    if sites.len() != 6 || sites.iter().filter(|s| s.1).count() != 3 {
-        bail!("expected two call() opcodes");
-    }
+    ensure!(sites.len() == 6 && sites.iter().filter(|s| s.1).count() == 3, "expected two call() opcodes");
     // Each report's `sub esp,0Ch ; push msg` becomes a jump to: release(count) ; sub esp,0Ch ; push msg ; jmp back.
     // The extra `sub esp,0Ch` keeps the stack 16-byte aligned at the call.
     for (site, list) in sites {
-        if !core.is_at(site, "83 EC 0C 68")? {
-            bail!("unexpected failure report at +{:#x}", site - core.base);
-        }
+        ensure!(core.is_at(site, "83 EC 0C 68")?, "unexpected failure report at +{:#x}", site - core.base);
         // sub esp,0Ch ; push ebx (the arg count), or push 1
         let push: &[u8] = if list { &[0x83, 0xEC, 0x0C, 0x53] } else { &[0x83, 0xEC, 0x0C, 0x6A, 0x01] };
         release_first(core, site, 8, push, 0x10, release as unsafe extern "C" fn(u32))?;
     }
     FOUND.commit(cx, found);
-    Ok(format!("at +{:#x}", at + CMP - core.base))
+    Ok(core.report(&[at + CMP]))
 }

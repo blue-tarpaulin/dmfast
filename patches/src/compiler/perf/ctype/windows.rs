@@ -2,7 +2,7 @@
 
 use crate::base::code::{Foreign, hx};
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// A CRT classification function, its 0/1 answers for 0..127, the original, and its replacement.
 struct Class {
@@ -68,14 +68,12 @@ pub fn install(cx: &Ctx) -> Result<String> {
         if sites.is_empty() {
             continue;
         }
-        class.original.set(core.live_u32(slot)? as usize);
+        class.original.set(core.live_ptr(slot)?);
         for &site in &sites {
             core.call_iat_to(site, slot, class.hook as *const ())?;
         }
         patched.push(format!("{} {}", class.name, sites.len()));
     }
-    if patched.is_empty() {
-        bail!("no classification call sites");
-    }
+    ensure!(!patched.is_empty(), "no classification call sites");
     Ok(patched.join(", "))
 }

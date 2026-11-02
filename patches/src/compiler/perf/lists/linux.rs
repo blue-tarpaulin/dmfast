@@ -5,7 +5,7 @@ use super::{FOUND, Found, intern};
 use crate::base::code::{Foreign, MallocFn, ReallocFn};
 use crate::base::feature::Ctx;
 use crate::base::linux::alloc::{malloc, realloc};
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// The intern: push ebp ; push edi ; push esi ; push ebx ; sub esp,1Ch ; mov ebx,[root] ; mov esi,[esp+30h] ;
 /// test ebx,ebx ; je new ; mov edi,[esi+8] ; xor ebp,ebp
@@ -31,24 +31,25 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let f = core.find_unique(INTERN, "list intern")?;
     let grow = core.find_unique_in(f, SPAN, GROWTH, "list intern growth")?;
     let capacity = core.ptr_at(grow + CAPACITY)?;
-    if core.ptr_at(grow + CAPACITY_STORE)? != capacity {
-        bail!("list intern: growth does not store the capacity it compares");
-    }
+    ensure!(
+        core.ptr_at(grow + CAPACITY_STORE)? == capacity,
+        "list intern: growth does not store the capacity it compares"
+    );
     let append = core.find_unique_in(f, SPAN, APPEND, "list intern append")?;
     // sub esp,0Ch ; push 18h ; call operator new
-    let Some(call) = core.find_bytes_in(f, SPAN, &[0x83, 0xEC, 0x0C, 0x6A, 0x18, 0xE8])?.first() else {
-        bail!("list intern: operator new call not found");
-    };
+    let call = core
+        .find_bytes_in(f, SPAN, &[0x83, 0xEC, 0x0C, 0x6A, 0x18, 0xE8])?
+        .first_or("list intern: operator new call")?;
     let found = Found {
         array: core.ptr_at(grow + ARRAY)?,
         count: core.ptr_at(append + 2)?,
         capacity,
-        new: Foreign::at(core.rel32(call + 6)?),
+        new: Foreign::at(core.call_target(call + 5)?),
         malloc: Foreign::at(malloc as MallocFn),
         realloc: Foreign::at(realloc as ReallocFn),
     };
     core.untouched(&[(f, ENTRY)])?;
     core.jump(f, ENTRY, intern as unsafe extern "C" fn(usize) -> u32)?;
     FOUND.commit(cx, found);
-    Ok(format!("at +{:#x}", f - core.base))
+    Ok(core.report(&[f]))
 }

@@ -2,16 +2,15 @@
 
 use std::ops::Range;
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 
 use super::verify;
 use crate::base::code::{Foreign, hx};
-use crate::base::driver;
+use crate::base::driver::{self, Counter};
 use crate::base::feature::Ctx;
 use crate::base::sync::Installed;
 use crate::base::windows::module_range;
 use crate::base::windows::ucrt::ucrt_export;
-use crate::base::{Result, bail};
+use crate::base::{Result, bail, ensure};
 
 type Compare = unsafe extern "C" fn(*const u8, *const u8) -> i32;
 type Char = unsafe extern "C" fn(i32) -> i32;
@@ -41,8 +40,8 @@ struct Tables {
 
 static TABLES: OnceLock<Tables> = OnceLock::new();
 
-static FAST: AtomicU64 = AtomicU64::new(0);
-static FALLBACK: AtomicU64 = AtomicU64::new(0);
+static FAST: Counter = Counter::new();
+static FALLBACK: Counter = Counter::new();
 
 /// The compare: push ebp ; mov ebp,esp ; push ebx ; push esi ; mov esi,[ebp+8] ; push edi ; mov edi,[ebp+0Ch] ;
 /// cmp esi,edi ; je equal ; test esi,esi ; je less ; test edi,edi ; je greater ;
@@ -130,11 +129,11 @@ unsafe extern "C" fn compare(a: *const u8, b: *const u8) -> i32 {
     }
     let f = FOUND.get();
     let Some(t) = tables(f) else {
-        FALLBACK.fetch_add(1, Relaxed);
+        FALLBACK.bump();
         // SAFETY: NUL-terminated (caller).
         return unsafe { original(f, a, b) };
     };
-    FAST.fetch_add(1, Relaxed);
+    FAST.bump();
     // SAFETY: NUL-terminated (caller).
     unsafe { verify::check(f, a, b, t.compare(a, b)) }
 }
@@ -142,11 +141,9 @@ unsafe extern "C" fn compare(a: *const u8, b: *const u8) -> i32 {
 pub(super) fn print_stats() {
     if FOUND.is_set() {
         eprintln!(
-            "dmfast: icon state name compare fast={} fallback={} verify={} mismatches={}",
-            FAST.load(Relaxed),
-            FALLBACK.load(Relaxed),
+            "dmfast: icon state name compare fast={FAST} fallback={FALLBACK} verify={} mismatches={}",
             driver::verify(),
-            verify::MISMATCHES.load(Relaxed)
+            verify::MISMATCHES
         );
     }
 }
@@ -159,9 +156,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let Some((start, end)) = module_range("ucrtbase.dll") else { bail!("ucrtbase.dll not loaded") };
     let ucrt = start..end;
     let (toupper, isalnum) = (core.ptr_at(tu)?, core.ptr_at(ia)?);
-    if !ucrt.contains(&toupper) || !ucrt.contains(&isalnum) {
-        bail!("toupper/isalnum are not ucrtbase's");
-    }
+    ensure!(ucrt.contains(&toupper) && ucrt.contains(&isalnum), "toupper/isalnum are not ucrtbase's");
     let pctype = ucrt_export("__pctype_func")?;
     let found = Found {
         original: Foreign::at(core.hook(f, ENTRY, compare as Compare)?),
@@ -171,5 +166,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
         ucrt,
     };
     FOUND.commit(cx, found);
-    Ok(format!("at +{:#x}", f - core.base))
+    Ok(core.report(&[f]))
 }

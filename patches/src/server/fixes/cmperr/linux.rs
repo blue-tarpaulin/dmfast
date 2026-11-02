@@ -6,7 +6,7 @@
 use super::HANDLERS;
 use crate::base::code::Stub;
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// `cmp al,2Ah ; je load ; mov esi,[state] ; test al,al ; jne skip`. Other code with this head is a candidate, not
 /// relied on.
@@ -35,9 +35,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
         core.rely(h, HEAD.split_whitespace().count())?;
         sites.push((h, load));
     }
-    if sites.len() < HANDLERS {
-        bail!("comparison handlers: expected at least {HANDLERS}, found {}", sites.len());
-    }
+    ensure!(sites.len() >= HANDLERS, "comparison handlers: expected at least {HANDLERS}, found {}", sites.len());
     let fetches = sites.iter().map(|&(_, load)| core.bytes(load, FETCH_LEN)).collect::<Result<Vec<_>>>()?;
     // One stub per site: the fetch, then `jmp error`.
     let mut stub = Stub::new();

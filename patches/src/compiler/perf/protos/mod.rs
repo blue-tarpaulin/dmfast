@@ -14,12 +14,11 @@
 
 use std::hash::Hasher;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHasher};
-
-use crate::base::code::live_u32;
+use crate::base::code::{live_u32, read};
+use crate::base::driver::Counter;
 use crate::base::feature::{Feature, Hosts, install};
+use crate::base::hash::{FxHasher, Map, map};
 use crate::base::sync::lock;
 
 #[cfg(target_os = "linux")]
@@ -36,18 +35,17 @@ type Slot = (u32, u64);
 
 struct Index {
     /// Keys are compared on every hit, so a hash collision only costs a fallback.
-    nodes: FxHashMap<Slot, u32>,
+    nodes: Map<Slot, u32>,
     /// Each node's index key, to evict it.
-    keys: FxHashMap<u32, Slot>,
+    keys: Map<u32, Slot>,
 }
 
-static INDEX: Mutex<Index> =
-    Mutex::new(Index { nodes: FxHashMap::with_hasher(FxBuildHasher), keys: FxHashMap::with_hasher(FxBuildHasher) });
-static HITS: AtomicU32 = AtomicU32::new(0);
-static MISSES: AtomicU32 = AtomicU32::new(0);
-static STALE: AtomicU32 = AtomicU32::new(0);
-static EVICTED: AtomicU32 = AtomicU32::new(0);
-static CLEARED: AtomicU32 = AtomicU32::new(0);
+static INDEX: Mutex<Index> = Mutex::new(Index { nodes: map(), keys: map() });
+static HITS: Counter = Counter::new();
+static MISSES: Counter = Counter::new();
+static STALE: Counter = Counter::new();
+static EVICTED: Counter = Counter::new();
+static CLEARED: Counter = Counter::new();
 
 /// The colour unlinking gives a node.
 const UNLINKED: u16 = 0xFFFF;
@@ -60,7 +58,7 @@ unsafe fn key<'a>(holder: usize) -> &'a [u32] {
     // SAFETY: a live holder (caller): its key array and entries.
     unsafe {
         let array = live_u32(holder + 0x1C) as usize;
-        let n = usize::from(((array + 6) as *const u16).read_unaligned()) * 3;
+        let n = usize::from(read::<u16>(array + 6)) * 3;
         if n == 0 {
             return &[];
         }
@@ -89,21 +87,21 @@ unsafe extern "C" fn lookup(tree: usize, holder: usize) -> usize {
             if !index.nodes.is_empty() {
                 index.nodes.clear();
                 index.keys.clear();
-                CLEARED.fetch_add(1, Relaxed);
+                CLEARED.bump();
             }
             return 0;
         }
         let k = key(holder);
         let Some(&node) = index.nodes.get(&(tree as u32, hash(k))) else {
-            MISSES.fetch_add(1, Relaxed);
+            MISSES.bump();
             return 0;
         };
         let node = node as usize;
-        if ((node + 0x18) as *const u16).read_unaligned() == UNLINKED || key(node) != k {
-            STALE.fetch_add(1, Relaxed);
+        if read::<u16>(node + 0x18) == UNLINKED || key(node) != k {
+            STALE.bump();
             return 0;
         }
-        HITS.fetch_add(1, Relaxed);
+        HITS.bump();
         node
     }
 }
@@ -130,10 +128,6 @@ unsafe extern "C" fn record(tree: usize, holder: usize, node: usize) {
 fn print_stats() {
     eprintln!(
         "dmfast: proto index hits={} misses={} stale={} evicted={} cleared={}",
-        HITS.load(Relaxed),
-        MISSES.load(Relaxed),
-        STALE.load(Relaxed),
-        EVICTED.load(Relaxed),
-        CLEARED.load(Relaxed)
+        HITS, MISSES, STALE, EVICTED, CLEARED
     );
 }

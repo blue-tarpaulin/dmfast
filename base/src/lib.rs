@@ -8,6 +8,7 @@ pub mod code;
 pub mod deps;
 pub mod driver;
 pub mod feature;
+pub mod hash;
 pub mod image;
 pub mod ledger;
 #[cfg(target_os = "linux")]

@@ -1,7 +1,5 @@
 //! `dmbbuf`, Windows: byondcore's `_wfopen` import calls [`wfopen`].
 
-use std::sync::atomic::Ordering::Relaxed;
-
 use libc::FILE;
 
 use super::{BUFFER, BUFFERED, is_dmb};
@@ -28,7 +26,7 @@ unsafe extern "C" fn wfopen(name: *const u16, mode: *const u16) -> *mut FILE {
             if is_dmb(std::slice::from_raw_parts(name, len))
                 && SETVBUF.get()(f, std::ptr::null_mut(), libc::_IOFBF, BUFFER) == 0
             {
-                BUFFERED.fetch_add(1, Relaxed);
+                BUFFERED.bump();
             }
         }
         f
@@ -41,7 +39,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     core.ucrt_slot("fclose")?;
     SETVBUF.set(ucrt_export("setvbuf")?);
     let open = core.iat_slot("_wfopen")?;
-    WFOPEN.set(core.live_u32(open)? as usize);
+    WFOPEN.set(core.live_ptr(open)?);
     core.wrap_data(open, &(wfopen as *const () as u32).to_le_bytes())?;
     Ok(format!("{} KB .dmb buffer", BUFFER / 1024))
 }

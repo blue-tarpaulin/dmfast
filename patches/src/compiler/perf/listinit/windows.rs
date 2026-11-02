@@ -4,7 +4,7 @@
 use super::{Found, init, intern};
 use crate::base::code::Foreign;
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
@@ -17,9 +17,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let count = core.ptr_at(f + 12)?;
     // The entry array is the dword right before the count; the function must use it.
     let array = count - 4;
-    if !core.mentions(f, 0x180, array)? {
-        bail!("list initializer intern: entry array not where expected");
-    }
+    ensure!(core.mentions(f, 0x180, array)?, "list initializer intern: entry array not where expected");
     // The 6 bytes: push ebp ; mov ebp,esp ; sub esp,8.
     let original = core.hook(f, 6, intern as extern "C" fn(usize) -> u32)?;
     let (malloc, realloc) = core.crt_alloc()?;
@@ -30,5 +28,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
         realloc: Foreign::at(realloc),
         original: Foreign::at(original),
     });
-    Ok(format!("at +{:#x}", f - core.base))
+    Ok(core.report(&[f]))
 }

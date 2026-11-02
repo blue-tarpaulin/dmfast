@@ -14,14 +14,16 @@ pub fn install(cx: &Ctx) -> Result<String> {
         "backslash newline skip",
     )?;
     let at = p + 25;
-    let stub = Stub::new()
-        .bytes(&[0x83, 0xC4, 0x10]) // add esp,10h
+    let mut s = Stub::new();
+    let done = s.label();
+    s.bytes(&[0x83, 0xC4, 0x10]) // add esp,10h
         .bytes(&[0x85, 0xC0]) // test eax,eax
-        .bytes(&[0x74, 0x09]) // je done
+        .jcc8(Cond::Equal, done) // je done
         .bytes(&[0x83, 0xFF, 0x0A]) // cmp edi,0Ah
         .jcc(Cond::NotEqual, p) // jne loop
-        .jmp(p + 32) // done: jmp after the loop
-        .exec()?;
+        .bind(done)
+        .jmp(p + 32); // done: jmp after the loop
+    let stub = s.exec()?;
     core.jump(at, 7, stub)?;
-    Ok(format!("at +{:#x}", at - core.base))
+    Ok(core.report(&[at]))
 }

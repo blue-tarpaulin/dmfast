@@ -5,20 +5,19 @@ use std::ffi::{CStr, OsStr, c_char, c_int};
 use std::mem::offset_of;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
-use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use libc::{__errno_location, DIR, DT_DIR, DT_LNK, DT_UNKNOWN, ENOTDIR, dirent};
-use rustc_hash::FxHashMap;
 
 use crate::base::code::Foreign;
-use crate::base::driver::verify;
+use crate::base::driver::{Counter, verify};
 use crate::base::feature::Ctx;
+use crate::base::hash::Map;
 use crate::base::image::Image;
 use crate::base::linux::symbol;
 use crate::base::sync::{Owned, lock};
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 // libbyond reads `d_type` at +0Ah and `d_name` at +0Bh of glibc's 32-bit `struct dirent`.
 const _: () = assert!(offset_of!(dirent, d_type) == 10 && offset_of!(dirent, d_name) == 11);
@@ -126,14 +125,14 @@ pub(super) fn read_listing(path: *const c_char) -> Option<Listing> {
 }
 
 /// Each cached directory's stamp and listing, by device and inode.
-type Dirs = FxHashMap<(u64, u64), (Stamp, Listing)>;
+type Dirs = Map<(u64, u64), (Stamp, Listing)>;
 
 static CACHE: Mutex<Option<Dirs>> = Mutex::new(None);
-static HITS: AtomicU32 = AtomicU32::new(0);
-static WITHOUT_CHDIR: AtomicU32 = AtomicU32::new(0);
-static READS: AtomicU32 = AtomicU32::new(0);
-static OPENED: AtomicU32 = AtomicU32::new(0);
-static SKIPPED: AtomicU32 = AtomicU32::new(0);
+static HITS: Counter = Counter::new();
+static WITHOUT_CHDIR: Counter = Counter::new();
+static READS: Counter = Counter::new();
+static OPENED: Counter = Counter::new();
+static SKIPPED: Counter = Counter::new();
 
 /// The directory of a listing whose `ChangeDir` was skipped: a NUL-terminated string that outlives the listing.
 static PENDING: Owned<Option<*const c_char>> = Owned::new();
@@ -186,15 +185,15 @@ unsafe extern "C" fn list_opendir(path: *const c_char) -> *mut DIR {
     let cached = st.and_then(|s| dirs.get(&s.key).filter(|(stamp, _)| *stamp == s.stamp).map(|(_, l)| l.clone()));
     let listing = match cached {
         Some(l) => {
-            HITS.fetch_add(1, Relaxed);
+            HITS.bump();
             if pending.is_some() {
-                WITHOUT_CHDIR.fetch_add(1, Relaxed);
+                WITHOUT_CHDIR.bump();
             }
             super::verify::hit(path, &l, st);
             l
         }
         None => {
-            READS.fetch_add(1, Relaxed);
+            READS.bump();
             if !change_now() {
                 return std::ptr::null_mut();
             }
@@ -230,11 +229,11 @@ unsafe extern "C" fn list_opendir_entry(name: *const c_char) -> *mut DIR {
     let is_dir = match e.is_dir.get() {
         Some(&is_dir) => is_dir,
         None if cannot_be_dir(e.dirent.d_type) => {
-            SKIPPED.fetch_add(1, Relaxed);
+            SKIPPED.bump();
             *e.is_dir.get_or_init(|| false)
         }
         None => {
-            OPENED.fetch_add(1, Relaxed);
+            OPENED.bump();
             // The real opendir resolves `name` in the real directory.
             if !change_now() {
                 return not_dir();
@@ -257,10 +256,10 @@ unsafe extern "C" fn list_closedir_entry(_d: *mut DIR) -> c_int {
 unsafe extern "C" fn complete_opendir_entry(name: *const c_char) -> *mut DIR {
     // SAFETY: `name` is a `d_name`, so the byte before it is `d_type`.
     if cannot_be_dir(unsafe { *name.sub(1) } as u8) {
-        SKIPPED.fetch_add(1, Relaxed);
+        SKIPPED.bump();
         return not_dir();
     }
-    OPENED.fetch_add(1, Relaxed);
+    OPENED.bump();
     opendir(name)
 }
 
@@ -269,9 +268,7 @@ type Site = (usize, usize, usize);
 
 fn check(core: &Image, sites: &[Site]) -> Result<()> {
     for &(call, expect, _) in sites {
-        if core.rel32(call + 1)? != expect {
-            bail!("call at {call:#x} is not the expected function");
-        }
+        ensure!(core.call_target(call)? == expect, "call at {call:#x} is not the expected function");
     }
     Ok(())
 }
@@ -301,15 +298,13 @@ fn main_listing(core: &Image) -> Result<Vec<Site>> {
         "E8 ?? ?? ?? ?? 83 C4 10 84 C0 0F 84 ?? ?? ?? ?? 83 EC 0C 68 ?? ?? ?? ?? E8 ?? ?? ?? ?? 89 45 AC",
         "directory listing chdir",
     )?;
-    if enter_at + 0x10 != list {
-        bail!("directory listing chdir is not at the listing");
-    }
-    let change_dir = core.rel32(enter_at + 1)?;
-    if core.bytes(change_dir, 14)?
-        != [0x55, 0x89, 0xE5, 0x56, 0x53, 0x83, 0xEC, 0x10, 0x8B, 0x45, 0x08, 0x85, 0xC0, 0x74]
-    {
-        bail!("directory listing chdir is not ChangeDir");
-    }
+    ensure!(enter_at + 0x10 == list, "directory listing chdir is not at the listing");
+    let change_dir = core.call_target(enter_at)?;
+    ensure!(
+        core.bytes(change_dir, 14)?
+            == [0x55, 0x89, 0xE5, 0x56, 0x53, 0x83, 0xEC, 0x10, 0x8B, 0x45, 0x08, 0x85, 0xC0, 0x74],
+        "directory listing chdir is not ChangeDir"
+    );
     let (opendir, readdir, closedir) = (OPENDIR.addr(), READDIR.addr(), CLOSEDIR.addr());
     let sites = vec![
         (enter_at, change_dir, enter as *const () as usize),
@@ -363,14 +358,14 @@ pub fn print_stats() {
     if let Some(dirs) = lock(&CACHE).as_ref() {
         eprintln!(
             "dmfast: dir listings hits={} (without chdir {}) reads={} dirs={} verify={} mismatches={}; entries opened={} skipped={}",
-            HITS.load(Relaxed),
-            WITHOUT_CHDIR.load(Relaxed),
-            READS.load(Relaxed),
+            HITS,
+            WITHOUT_CHDIR,
+            READS,
             dirs.len(),
             verify(),
-            super::verify::MISMATCHES.load(Relaxed),
-            OPENED.load(Relaxed),
-            SKIPPED.load(Relaxed)
+            super::verify::MISMATCHES,
+            OPENED,
+            SKIPPED
         );
     }
 }

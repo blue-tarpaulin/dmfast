@@ -10,7 +10,7 @@
 use crate::base::code::{Cond, Stub};
 use crate::base::feature::{Feature, Hosts, Tier, install};
 use crate::base::image::Image;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -36,18 +36,12 @@ struct Loc {
 /// tests the register flag.
 fn patch(core: &Image, cmp: usize, len: usize, other: usize, loc: Loc) -> Result<String> {
     let Loc { id, flag, flags_at } = loc;
-    if !(0xFF00..0x10000).contains(&id) {
-        bail!("the $loc check compares with {id:#x}, not a register id");
-    }
-    if flag.count_ones() != 1 || flag > 0x80 {
-        bail!("$loc flag {flag:#x} is not a single low bit");
-    }
-    if flags_at > 0x7F {
-        bail!("element flags at {flags_at:#x}");
-    }
+    ensure!((0xFF00..0x10000).contains(&id), "the $loc check compares with {id:#x}, not a register id");
+    ensure!(flag.count_ones() == 1 && flag <= 0x80, "$loc flag {flag:#x} is not a single low bit");
+    ensure!(flags_at <= 0x7F, "element flags at {flags_at:#x}");
     let back = cmp + len;
     let stub = Stub::new()
-        .bytes(&[&[0x81, 0x38][..], &id.to_le_bytes()].concat()) // cmp dword [eax],locIdx
+        .bytes_u32(&[0x81, 0x38], id, &[]) // cmp dword [eax],locIdx
         .jcc(Cond::NotEqual, other) // jne other
         .bytes(&[0xF6, 0x40, flags_at, flag as u8]) // test byte [eax+flags],flag
         .jcc(Cond::Equal, other) // je other

@@ -53,6 +53,32 @@ impl<F: Copy> Default for Foreign<F> {
     }
 }
 
+/// A code address in BYOND's code that a stub jumps to through a static (`jmp dword ptr [{back}]`, `back = sym BACK`):
+/// a label, never called from Rust. Set at install. For a function to call, use [`Foreign`].
+#[repr(transparent)]
+pub struct Addr(AtomicUsize);
+
+impl Addr {
+    pub const fn new() -> Self {
+        Self(AtomicUsize::new(0))
+    }
+
+    /// Set it (install time).
+    pub fn set(&self, addr: impl CodeAddr) {
+        self.0.store(addr.code_addr(), Relaxed);
+    }
+
+    pub fn get(&self) -> usize {
+        self.0.load(Relaxed)
+    }
+}
+
+impl Default for Addr {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A code address: a `usize`, a fn pointer (a hook, a stub) or a naked function `as *const ()`.
 pub trait CodeAddr {
     fn code_addr(self) -> usize;

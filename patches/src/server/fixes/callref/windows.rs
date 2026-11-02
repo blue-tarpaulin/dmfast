@@ -4,7 +4,7 @@
 use super::{args, release_first};
 use crate::base::code::{Foreign, trampoline};
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// BYOND's release of a value (cdecl: type, data).
 static UNREF: Foreign<unsafe extern "C" fn(u32, u32)> = Foreign::new();
@@ -76,14 +76,10 @@ pub fn install(cx: &Ctx) -> Result<String> {
         && BAD_JUMPS.iter().all(|&j| core.rel8(other + j).is_ok_and(|t| t == bad))
         && core.rel8(bad - 1)? == core.rel32(al + ARGLIST_CALL_JE)?
         && core.ptr_at(bad + 1)? == msg;
-    if !routes_ok {
-        bail!("the call() opcodes' failure routes are not as expected");
-    }
+    ensure!(routes_ok, "the call() opcodes' failure routes are not as expected");
     let sites = [fail + BAD_PROC_PUSH, bad, ext];
     for site in sites {
-        if !core.is_at(site, "68 ?? ?? ?? ?? E8")? {
-            bail!("unexpected failure report at +{:#x}", site - core.base);
-        }
+        ensure!(core.is_at(site, "68 ?? ?? ?? ?? E8")?, "unexpected failure report at +{:#x}", site - core.base);
     }
     // The arglist opcode stores its arg count: mov dword [ebp-224h],1 ; mov eax,0FFFEh (the replaced instruction).
     let count = trampoline(&[0xC7, 0x85, 0xDC, 0xFD, 0xFF, 0xFF, 1, 0, 0, 0, 0xB8, 0xFE, 0xFF, 0, 0], al + 5)?;
@@ -94,5 +90,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
         release_first(core, site, 5, &push, 8, release as unsafe extern "C" fn(usize, u32))?;
     }
     UNREF.set(unref);
-    Ok(format!("at +{:#x}", fail - core.base))
+    Ok(core.report(&[fail]))
 }

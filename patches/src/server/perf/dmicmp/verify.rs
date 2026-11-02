@@ -1,11 +1,9 @@
 //! `DMFAST_VERIFY=1`: every compare answered from the tables also runs BYOND's; a different result is a mismatch.
 
-use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
-
 use super::windows::{Found, original};
-use crate::base::driver::verify;
+use crate::base::driver::{Counter, verify};
 
-pub(super) static MISMATCHES: AtomicU64 = AtomicU64::new(0);
+pub(super) static MISMATCHES: Counter = Counter::new();
 
 /// The result to return for `a` and `b`: `ours`, or with verify on, BYOND's (counting a mismatch if it differs).
 ///
@@ -19,7 +17,7 @@ pub(super) unsafe fn check(f: &Found, a: *const u8, b: *const u8, ours: i32) -> 
     // SAFETY: NUL-terminated (caller).
     let byond = unsafe { original(f, a, b) };
     if byond != ours {
-        MISMATCHES.fetch_add(1, Relaxed);
+        MISMATCHES.bump();
     }
     byond
 }

@@ -2,10 +2,10 @@
 
 use std::ffi::CStr;
 
-use crate::base::code::branch;
+use crate::base::code::Stub;
 use crate::base::feature::Ctx;
 use crate::base::image::Image;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 const INCREF: &str = "55 89 E5 56 53 83 EC 20 F3 0F 7E 4D 08 66 0F 6F C1 66 0F 7E C9 66 0F 73 D0 20 66 0F 7E C0 \
                       80 F9 4A 77 ?? 0F B6 C9 FF 24 8D";
@@ -30,30 +30,29 @@ fn refcount(hi: u8) -> Vec<u8> {
     v
 }
 
-/// `assign(Value *p, Value v)` at `s` (+7): the new value moves through ecx/edx and the old one goes straight into
+/// `assign(Value *p, Value v)` at +7: the new value moves through ecx/edx and the old one goes straight into
 /// the dead argument slot `[esp+30h]`, so both calls' loads are store-forwarded. The IncRef call is re-encoded
-/// (return address +37 -> +42: same unwind rule); stock's `jmp DecRef` tail follows (42 bytes).
-fn assign(s: usize, incref: usize) -> Vec<u8> {
-    let mut v = Vec::new();
-    v.extend([0x8B, 0x4C, 0x24, 0x34]); // mov ecx,[esp+34h]
-    v.extend([0x8B, 0x54, 0x24, 0x38]); // mov edx,[esp+38h]
-    v.extend([0xF3, 0x0F, 0x7E, 0x08]); // movq xmm1,[eax]
-    v.extend([0x89, 0x08]); // mov [eax],ecx
-    v.extend([0x89, 0x50, 0x04]); // mov [eax+4],edx
-    v.extend([0x89, 0x0C, 0x24]); // mov [esp],ecx
-    v.extend([0x89, 0x54, 0x24, 0x04]); // mov [esp+4],edx
-    v.extend([0x66, 0x0F, 0xD6, 0x4C, 0x24, 0x30]); // movq [esp+30h],xmm1
-    v.extend(branch(0xE8, s + v.len(), incref, 5)); // call IncRef
-    v.extend([0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00]); // nop7
-    v
+/// (return address +37 -> +42: same unwind rule); stock's `jmp DecRef` tail follows ([`ASSIGN_LEN`] bytes).
+fn assign(incref: usize) -> Stub {
+    let mut s = Stub::new();
+    s.bytes(&[0x8B, 0x4C, 0x24, 0x34]) // mov ecx,[esp+34h]
+        .bytes(&[0x8B, 0x54, 0x24, 0x38]) // mov edx,[esp+38h]
+        .bytes(&[0xF3, 0x0F, 0x7E, 0x08]) // movq xmm1,[eax]
+        .bytes(&[0x89, 0x08]) // mov [eax],ecx
+        .bytes(&[0x89, 0x50, 0x04]) // mov [eax+4],edx
+        .bytes(&[0x89, 0x0C, 0x24]) // mov [esp],ecx
+        .bytes(&[0x89, 0x54, 0x24, 0x04]) // mov [esp+4],edx
+        .bytes(&[0x66, 0x0F, 0xD6, 0x4C, 0x24, 0x30]) // movq [esp+30h],xmm1
+        .call(incref) // call IncRef
+        .bytes(&[0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00]); // nop7
+    s
 }
+const ASSIGN_LEN: usize = 42;
 
 /// Fails unless the exported `wrapper` calls `target` within its first [`WRAPPER_SPAN`] bytes.
 fn called_by(core: &Image, wrapper: &CStr, target: usize, what: &str) -> Result<()> {
     let w = core.export(wrapper)?;
-    if core.calls_in(w, WRAPPER_SPAN - 1, target)?.is_empty() {
-        bail!("{what}: not the function {wrapper:?} calls");
-    }
+    ensure!(!core.calls_in(w, WRAPPER_SPAN - 1, target)?.is_empty(), "{what}: not the function {wrapper:?} calls");
     Ok(())
 }
 
@@ -66,15 +65,16 @@ pub fn install(cx: &Ctx) -> Result<String> {
     // tail-jump to the DecRef just found.
     called_by(core, c"ByondValue_IncRef", incref, "Value IncRef")?;
     called_by(core, c"ByondValue_DecRef", decref, "Value DecRef")?;
-    if core.rel32(assign_fn + 33)? != incref || core.rel32(assign_fn + 53)? != decref {
-        bail!("Value assign: call/jmp targets are not IncRef/DecRef");
-    }
+    ensure!(
+        core.call_target(assign_fn + 32)? == incref && core.branch_at(assign_fn + 52)?.target == decref,
+        "Value assign: call/jmp targets are not IncRef/DecRef"
+    );
     // eax and ebx: the high dword's register in IncRef and DecRef.
-    let sites = [(incref + 8, refcount(0)), (decref + 8, refcount(3)), (assign_fn + 7, assign(assign_fn + 7, incref))];
-    core.untouched(&sites.each_ref().map(|(at, code)| (*at, code.len())))?;
-    for (at, code) in &sites {
-        core.write_code(*at, code)?;
-    }
+    let (inc, dec) = (refcount(0), refcount(3));
+    core.untouched(&[(incref + 8, inc.len()), (decref + 8, dec.len()), (assign_fn + 7, ASSIGN_LEN)])?;
+    core.write_code(incref + 8, &inc)?;
+    core.write_code(decref + 8, &dec)?;
+    core.write_stub(assign_fn + 7, ASSIGN_LEN, &assign(incref))?;
     Ok(format!(
         "IncRef +{:#x}, DecRef +{:#x}, assign +{:#x}",
         incref - core.base,

@@ -3,10 +3,10 @@
 use std::arch::naked_asm;
 
 use super::cache::{Found, Kind, STATE, State, Value, flush, read};
-use crate::base::code::{Foreign, hx};
+use crate::base::code::{Addr, Cond, Foreign, hx};
 use crate::base::feature::Ctx;
 use crate::base::image::Image;
-use crate::base::{Result, bail};
+use crate::base::{Result, bail, ensure};
 
 /// The read: own vars (binary search), then type, initial-value search, declaration search (static: the statics
 /// table, else the undefined-variable error). Offsets below are into this.
@@ -59,7 +59,7 @@ const TAGS: [u8; 4] = [0x21, 0x02, 0x03, 0x04];
 
 /// The original read (its moved entry, then the rest) and the original .dmb load, for the stubs.
 static ORIGINAL: Foreign<unsafe extern "C" fn(u32, u32, u32) -> u64> = Foreign::new();
-static LOAD: Foreign<unsafe extern "C" fn()> = Foreign::new();
+static LOAD: Addr = Addr::new();
 
 /// BYOND's functions the cache is filled from (cdecl; a value comes back in EDX:EAX).
 pub(super) struct Calls {
@@ -145,22 +145,11 @@ unsafe extern "C" fn load_stub() {
     )
 }
 
-/// The instruction after a short (`op8 rel8`) or near (`0F op+10h rel32`) conditional jump at `a`.
-fn after_jcc(core: &Image, a: usize, short: u8) -> Result<usize> {
-    match core.array::<2>(a)? {
-        [b, _] if b == short => Ok(a + 2),
-        [0x0F, b] if b == short + 0x10 => Ok(a + 6),
-        _ => bail!("expected a conditional jump at {a:#x}"),
-    }
-}
-
 /// Case address of `tag` in a `dec eax ; cmp eax,max ; ... movzx eax,byte [map+eax] ; jmp [cases+eax*4]` switch
 /// at `f`, its `max`, `map`, and `cases` operands at the `ops` offsets.
 fn case(core: &Image, f: usize, ops: [usize; 3], tag: u8) -> Result<usize> {
     let i = tag as usize - 1;
-    if i > core.u8_at(f + ops[0])? as usize {
-        bail!("no case for value tag {tag:#x}");
-    }
+    ensure!(i <= core.u8_at(f + ops[0])? as usize, "no case for value tag {tag:#x}");
     let slot = core.u8_at(core.ptr_at(f + ops[1])? + i)?;
     core.ptr_at(core.ptr_at(f + ops[2])? + 4 * slot as usize)
 }
@@ -168,19 +157,14 @@ fn case(core: &Image, f: usize, ops: [usize; 3], tag: u8) -> Result<usize> {
 /// An own-var-list case: `mov ecx,[ebp+0Ch] ; cmp ecx,[count] ; jae null ; mov eax,[table] ; mov eax,[eax+ecx*4] ;
 /// test eax,eax ; jz null ; add eax,own ; pop esi ; pop ebp ; ret`. (count, table, offset).
 fn own_case(core: &Image, a: usize) -> Result<(usize, usize, usize)> {
-    if !core.is_at(a, "8B 4D 0C 3B 0D")? {
-        bail!("own var list case: not as expected");
-    }
+    let what = "own var list case";
+    core.require(a, "8B 4D 0C 3B 0D", what)?;
     let count = core.ptr_at(a + 5)?;
-    let a = after_jcc(core, a + 9, 0x73)?;
-    if !core.is_at(a, "A1 ?? ?? ?? ?? 8B 04 88 85 C0")? {
-        bail!("own var list case: not as expected");
-    }
+    let a = core.jcc_at(a + 9, Cond::AboveOrEqual)?.next;
+    core.require(a, "A1 ?? ?? ?? ?? 8B 04 88 85 C0", what)?;
     let table = core.ptr_at(a + 1)?;
-    let a = after_jcc(core, a + 10, 0x74)?;
-    if !core.is_at(a, "83 C0 ?? 5E 5D C3")? {
-        bail!("own var list case: not as expected");
-    }
+    let a = core.jcc_at(a + 10, Cond::Equal)?.next;
+    core.require(a, "83 C0 ?? 5E 5D C3", what)?;
     Ok((count, table, core.u8_at(a + 2)? as usize))
 }
 
@@ -188,19 +172,17 @@ fn own_case(core: &Image, a: usize) -> Result<(usize, usize, usize)> {
 /// `id_of(value, tag)`), null: no type, else a value of the field at `[eax+key]`. (getter, key).
 fn type_case(core: &Image, a: usize, tag: u8, id_of: usize) -> Result<(usize, usize)> {
     let (getter, a) = if core.is_at(a, "FF 75 0C E8 ?? ?? ?? ?? 83 C4 04 85 C0")? {
-        (core.rel32(a + 4)?, a + 13)
+        (core.call_target(a + 3)?, a + 13)
     } else if core.is_at(a, "6A ?? FF 75 0C 51 E8 ?? ?? ?? ?? 50 E8 ?? ?? ?? ?? 83 C4 10 85 C0")?
         && core.u8_at(a + 1)? == tag
-        && core.rel32(a + 7)? == id_of
+        && core.call_target(a + 6)? == id_of
     {
-        (core.rel32(a + 13)?, a + 22)
+        (core.call_target(a + 12)?, a + 22)
     } else {
         bail!("type field case: not as expected");
     };
-    let a = after_jcc(core, a, 0x74)?;
-    if !core.is_at(a, "6A")? {
-        bail!("type field case: not as expected");
-    }
+    let a = core.jcc_at(a, Cond::Equal)?.next;
+    core.require(a, "6A", "type field case")?;
     let key = match core.array::<2>(a + 2)? {
         [0xFF, 0x30] => 0,
         [0xFF, 0x70] => core.u8_at(a + 4)? as usize,
@@ -213,25 +195,21 @@ fn type_case(core: &Image, a: usize, tag: u8, id_of: usize) -> Result<(usize, us
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(READ, "user var read")?;
-    let own = core.rel32(f + 0x12)?;
-    let type_path = core.rel32(f + 0x5D)?;
-    let id_of = core.rel32(f + 0x66)?;
-    let init = core.rel32(f + 0x71)?;
-    let decl = core.rel32(f + 0xB3)?;
-    if core.rel32(f + 0x9B)? != type_path || core.rel32(f + 0xA4)? != id_of {
-        bail!("user var read: the two type lookups differ");
-    }
+    let own = core.call_target(f + 0x11)?;
+    let type_path = core.call_target(f + 0x5C)?;
+    let id_of = core.call_target(f + 0x65)?;
+    let init = core.call_target(f + 0x70)?;
+    let decl = core.call_target(f + 0xB2)?;
+    ensure!(
+        core.call_target(f + 0x9A)? == type_path && core.call_target(f + 0xA3)? == id_of,
+        "user var read: the two type lookups differ"
+    );
     let statics = core.ptr_at(f + 0xC6)?;
     for (at, pat, what) in [(id_of, ID_OF, "value id"), (own, OWN, "own var list"), (type_path, TYPE_PATH, "type path")]
     {
-        if !core.is_at(at, pat)? {
-            bail!("{what}: not as expected");
-        }
+        core.require(at, pat, what)?;
     }
-    let field = core.rel32(type_path + 12)?;
-    if !core.is_at(field, TYPE_FIELD)? {
-        bail!("type field: not as expected");
-    }
+    let field = core.follow_call(type_path + 11, TYPE_FIELD, "type field")?;
     let mut offsets = None;
     for (pat, o) in FIND_INIT {
         if core.is_at(init, pat)? {
@@ -247,9 +225,10 @@ pub fn install(cx: &Ctx) -> Result<String> {
         let (count, table, own_off) = own_case(core, case(core, own, [0xD, 0x17, 0x1E], tag)?)?;
         let (getter, key) = type_case(core, case(core, field, [0xC, 0x16, 0x1D], tag)?, tag, id_of)?;
         // The type's object is the own vars' object.
-        if !core.is_at(getter, GETTER)? || core.ptr_at(getter + 8)? != count || core.ptr_at(getter + 19)? != table {
-            bail!("type field (value tag {tag:#x}): object from another table");
-        }
+        ensure!(
+            core.is_at(getter, GETTER)? && core.ptr_at(getter + 8)? == count && core.ptr_at(getter + 19)? == table,
+            "type field (value tag {tag:#x}): object from another table"
+        );
         kinds[tag as usize] = Some(Kind { count, table, own: own_off, key });
     }
 

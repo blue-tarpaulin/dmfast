@@ -4,7 +4,7 @@
 use super::{ARRAY, CAPACITY};
 use crate::base::code::Stub;
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
@@ -27,15 +27,11 @@ pub fn install(cx: &Ctx) -> Result<String> {
         "database open",
     )?;
     let sites = [close + 3, open + 0x3D];
-    let free = core.rel32(sites[0] + 1)?;
+    let free = core.call_target(sites[0])?;
     let frees = core.import_calls("free", free)?;
-    if !sites.iter().all(|s| frees.contains(s)) {
-        bail!("database close: doesn't call free");
-    }
-    let assign = core.rel32(open + 0x10)?;
-    if core.rel32(open + 0x53)? != assign {
-        bail!("database open: name not set with DMString::operator=");
-    }
+    ensure!(sites.iter().all(|s| frees.contains(s)), "database close: doesn't call free");
+    let assign = core.call_target(open + 0x0F)?;
+    ensure!(core.call_target(open + 0x52)? == assign, "database open: name not set with DMString::operator=");
     let clear = Stub::new()
         .bytes(&[0xC7, 0x43, ARRAY, 0, 0, 0, 0]) // mov dword [ebx+18h],0
         .bytes(&[0xC7, 0x43, CAPACITY, 0, 0, 0, 0]) // mov dword [ebx+20h],0
@@ -58,5 +54,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     // The early assignment becomes sub esp,8, keeping the add esp,10h after it balanced.
     core.write_code(open + 0x0D, &[0x83, 0xEC, 0x08, 0x90, 0x90, 0x90, 0x90])?;
     core.jump(open + 0x5A, 8, tail)?;
-    Ok(format!("at +{:#x}, +{:#x}", close - core.base, open - core.base))
+    Ok(core.report(&[close, open]))
 }

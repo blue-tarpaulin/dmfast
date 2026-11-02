@@ -2,13 +2,11 @@
 //! [`find`], and the tree's unlink call calls [`unlink`], which also drops the node from the index (the pool frees a
 //! block once all its nodes are unlinked).
 
-use std::sync::atomic::Ordering::Relaxed;
-
 use super::{EVICTED, INDEX, lookup, record};
 use crate::base::code::{Foreign, hx};
 use crate::base::feature::Ctx;
 use crate::base::sync::lock;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 type Find = unsafe extern "C" fn(usize, usize, *mut u8) -> usize;
 type Unlink = unsafe extern "C" fn(usize, usize) -> usize;
@@ -33,7 +31,7 @@ fn evict(node: usize) {
     let mut index = lock(&INDEX);
     if let Some(slot) = index.keys.remove(&(node as u32)) {
         index.nodes.remove(&slot);
-        EVICTED.fetch_add(1, Relaxed);
+        EVICTED.bump();
     }
 }
 
@@ -69,15 +67,13 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let site = core.find_unique(FIND_CALL, "proto find call")? + CALL;
     let tree = core.u32_at(site - 4)?;
-    let f = core.rel32(site + 1)?;
-    if core.find_unique(LOOKUP, "proto tree lookup")? != f {
-        bail!("proto find call does not target the tree lookup");
-    }
+    let f = core.call_target(site)?;
+    ensure!(core.find_unique(LOOKUP, "proto tree lookup")? == f, "proto find call does not target the tree lookup");
     let pattern = UNLINK_CALL.replace("{tree}", &hx(tree as usize));
     let unlink_site = core.find_unique(&pattern, "proto unlink call")? + UNLINK_AT;
     ORIGINAL_FIND.set(f);
-    ORIGINAL_UNLINK.set(core.rel32(unlink_site + 1)?);
+    ORIGINAL_UNLINK.set(core.call_target(unlink_site)?);
     core.call(site, 5, find as Find)?;
     core.call(unlink_site, 5, unlink as Unlink)?;
-    Ok(format!("at +{:#x}", f - core.base))
+    Ok(core.report(&[f]))
 }

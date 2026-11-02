@@ -18,7 +18,7 @@ use crate::feature::{Ctx, Feature, Host, Kind, State, Status};
 use crate::image::Image;
 pub(crate) use report::mimalloc;
 use report::summary;
-pub use report::{print_stats, stats, verify};
+pub use report::{Counter, print_stats, stats, verify};
 use select::{check_keys, disabled, selection, wanted};
 
 /// What the driver installs and how it reports it, handed in from the loader entry.

@@ -3,12 +3,12 @@
 use windows_sys::Win32::System::Console::{GetStdHandle, STD_OUTPUT_HANDLE, WriteConsoleW};
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, TerminateProcess};
 
-use crate::base::code::{Foreign, live_u32};
+use crate::base::code::{Foreign, live_u32, read};
 use crate::base::feature::Ctx;
 use crate::base::image::Image;
 use crate::base::sync::Installed;
 use crate::base::windows::ucrt::ucrt_export;
-use crate::base::{Result, bail};
+use crate::base::{Result, bail, ensure};
 
 /// What [`fast_exit`] redoes of the skipped teardown.
 static EXIT: Installed<Exit> = Installed::new();
@@ -66,19 +66,18 @@ pub fn install(cx: &Ctx) -> Result<String> {
         "resource lock release",
     )?;
     let locks = core.ptr_at(release + 38)?;
-    if core.find_bytes_in(release, 0x100, &(locks as u32).to_le_bytes())?.len() < 2 {
-        bail!("resource lock list not where expected");
-    }
+    ensure!(
+        core.find_bytes_in(release, 0x100, &(locks as u32).to_le_bytes())?.len() >= 2,
+        "resource lock list not where expected"
+    );
     let data_file = usize::from(core.u8_at(release + 57)?);
     let m = exe.find_unique("8D 8D ?? ?? FF FF E8 ?? ?? ?? ?? 8D 4D ?? FF D3 8D 4D ?? FF D3", "builder teardown")?;
     let epilogue = if exe.u8_at(m + 21)? == 0xE9 { exe.rel32(m + 22)? } else { m + 21 };
     // lea ecx,[ebp-a] ; call ; lea ecx,[ebp-b] ; call ; mov eax,[ebp-r] ; mov ecx,[ebp-0Ch]
     let tail = "8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 45 ?? 8B 4D F4";
-    if !exe.is_at(epilogue, tail)? {
-        bail!("unexpected epilogue after the builder teardown");
-    }
+    exe.require(epilogue, tail, "builder teardown epilogue")?;
     let ret = exe.u8_at(epilogue + 24)?;
-    let status = Status::find(exe, exe.rel32(m + 7)?)?;
+    let status = Status::find(exe, exe.call_target(m + 6)?)?;
     exe.write_code(m, &[0xFF, 0x75, ret])?; // push dword [ebp-r]
     exe.call(m + 3, 5, fast_exit as *const ())?;
     EXIT.commit(cx, Exit { flushall: Foreign::at(flushall), locks, data_file, release: Foreign::at(release), status });
@@ -109,9 +108,7 @@ impl Status {
             return Ok(None);
         };
         let lock_slot = exe.iat_slot("?Lock@DungMutex@@QAEXXZ")?;
-        if exe.ptr_at(printer + 0x37)? != lock_slot {
-            bail!("status printer: unexpected lock");
-        }
+        ensure!(exe.ptr_at(printer + 0x37)? == lock_slot, "status printer: unexpected lock");
         let console = usize::from(exe.u8_at(printer + 0x47)?);
         // Past the console check, the printer draws only while `cmp byte [esi+showing],0` is nonzero (twice in 516).
         let mut flags = exe
@@ -121,7 +118,7 @@ impl Status {
             .collect::<Result<Vec<u8>>>()?;
         flags.dedup();
         let [showing] = flags[..] else { bail!("status printer: expected one \"showing\" flag, found {flags:?}") };
-        let call = exe.calls_in(teardown + 5, 0xFF - 5, printer)?.first().ok_or("status printer call not found")?;
+        let call = exe.calls_in(teardown + 5, 0xFF - 5, printer)?.first_or("status printer call")?;
         exe.expect(call - 5, &[0xB9], "status line object not found in the teardown")?;
         Ok(Some(Status {
             object: exe.ptr_at(call - 4)?,
@@ -140,7 +137,7 @@ impl Status {
         // SAFETY: the object and its Lock were found and checked at install.
         unsafe {
             self.lock.get()(self.object);
-            let flag = |offset: usize| *((self.object + offset) as *const u8) != 0;
+            let flag = |offset: usize| read::<u8>(self.object + offset) != 0;
             if flag(self.showing) && flag(self.console) {
                 let text = b"\x1b[2K\r".map(u16::from);
                 let out = GetStdHandle(STD_OUTPUT_HANDLE);
