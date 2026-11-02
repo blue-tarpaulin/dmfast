@@ -4,6 +4,8 @@ pub mod argload;
 pub mod dmicmp;
 pub mod getvar;
 pub mod iconcopy;
+pub mod iconstates;
+pub mod locidx;
 pub mod truth;
 pub mod turfvar;
 pub mod varlist;
