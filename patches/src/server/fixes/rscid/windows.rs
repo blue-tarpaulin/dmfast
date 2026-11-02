@@ -98,7 +98,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     {
         bail!("the two 0xFFFF branches build different sentinel keys");
     }
-    let [count] = core.array(core.find_unique(ALLOC, "rsc set entry count")? + COUNT)?;
+    let count = core.u8_at(core.find_unique(ALLOC, "rsc set entry count")? + COUNT)?;
     let count = usize::from(count);
     let found =
         Found { insert: Foreign::at(insert_fn), ctor: Foreign::at(ctor), vtable, dtor: Foreign::at(dtor), count };

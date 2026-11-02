@@ -1,7 +1,7 @@
 //! `cmperr`, Windows: the handlers share one error block, so their `jne skip` all go to one stub.
 
 use super::HANDLERS;
-use crate::base::code::{branch, exec_code};
+use crate::base::code::Stub;
 use crate::base::feature::Ctx;
 use crate::base::{Result, bail};
 
@@ -32,13 +32,12 @@ pub fn install(cx: &Ctx) -> Result<String> {
     if fetch[0] != 0xA1 || fetch[5..8] != [0x0F, 0xB7, 0x48] || fetch[9..11] != [0x8B, 0x50] {
         bail!("comparison handler: left operand fetch not as expected");
     }
-    let stub = exec_code(fetch.len() + 5, |p| {
-        let mut v = fetch.to_vec();
-        v.extend(branch(0xE9, p + v.len(), error, 5)); // jmp error
-        v
-    })?;
+    let stub = Stub::new()
+        .bytes(&fetch) // the fetch
+        .jmp(error) // jmp error
+        .exec()?;
     for &s in sites.iter() {
-        core.write_code(s + 4, &(stub.wrapping_sub(s + 8) as u32).to_le_bytes())?;
+        core.retarget(s + 4, stub)?;
     }
     Ok(format!("{} handlers", sites.len()))
 }

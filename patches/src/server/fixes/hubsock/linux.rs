@@ -2,7 +2,7 @@
 //! (connection in ebx, its connecting socket at +530h).
 
 use super::{FOUND, Found, keeps_pending, owns_pending};
-use crate::base::code::{branch, exec_code, jcc};
+use crate::base::code::{Cond, Stub};
 use crate::base::feature::Ctx;
 use crate::base::{Result, bail};
 
@@ -50,8 +50,8 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let epilogue = overwrite + EPILOGUE;
     let unregister = core.rel32(mode0 + MODE0_CMP + 5)?;
     let after_mode0 = mode0 + MODE0_CMP + MODE0_LEN;
-    let [count] = core.array(mode0 + COUNT)?;
-    let [entries] = core.array(mode0 + ENTRIES)?;
+    let count = core.u8_at(mode0 + COUNT)?;
+    let entries = core.u8_at(mode0 + ENTRIES)?;
 
     let close = core.find_unique(CLOSE, "clisock close")?;
     let cmp = close + CLOSE_CMP;
@@ -63,51 +63,46 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let cb = connect_done.to_le_bytes();
 
     // Register, existing entry (esi): don't turn a pending connect into anything but a connect.
-    let stub_overwrite = exec_code(34, |s| {
-        let mut v = vec![0x81, 0x7E, 0x04]; // cmp dword [esi+4],CB
-        v.extend(cb);
-        v.extend([0x75, 0x0F]); // jne orig
-        v.extend([0x81, 0x7C, 0x24, 0x08]); // cmp dword [esp+8],CB (the new callback)
-        v.extend(cb);
-        v.extend([0x74, 0x05]); // je orig
-        v.extend(branch(0xE9, s + v.len(), epilogue, 5)); // jmp epilogue
-        v.extend([0x0F, 0xB6, 0x44, 0x24, 0x04]); // orig: movzx eax,byte [esp+4]
-        v.extend(branch(0xE9, s + v.len(), overwrite + 5, 5)); // jmp back
-        v
-    })?;
+    let stub_overwrite = Stub::new()
+        .bytes(&[&[0x81, 0x7E, 0x04][..], &cb].concat()) // cmp dword [esi+4],CB
+        .bytes(&[0x75, 0x0F]) // jne orig
+        .bytes(&[&[0x81, 0x7C, 0x24, 0x08][..], &cb].concat()) // cmp dword [esp+8],CB (the new callback)
+        .bytes(&[0x74, 0x05]) // je orig
+        .jmp(epilogue) // jmp epilogue
+        .bytes(&[0x0F, 0xB6, 0x44, 0x24, 0x04]) // orig: movzx eax,byte [esp+4]
+        .jmp(overwrite + 5) // jmp back
+        .exec()?;
     // Register, mode 0 (edi = this, ebx = socket): keep a pending connect's entry. The stack is 16-byte aligned here.
-    let stub_mode0 = exec_code(36, |s| {
-        let mut v = vec![0x83, 0xFB, 0xFF]; // cmp ebx,-1
-        v.extend([0x7C, 0x1A]); // jl cont
-        v.extend([0x83, 0xEC, 0x08]); // sub esp,8
-        v.push(0x53); // push ebx
-        v.push(0x57); // push edi
-        v.extend(branch(0xE8, s + v.len(), keeps_pending as unsafe extern "C" fn(usize, i32) -> bool as usize, 5));
-        v.extend([0x83, 0xC4, 0x10]); // add esp,10h
-        v.extend([0x84, 0xC0]); // test al,al
-        v.extend(jcc(0x85, s + v.len(), epilogue)); // jne epilogue
-        v.extend(branch(0xE9, s + v.len(), unregister, 5)); // jmp unregister
-        v.extend(branch(0xE9, s + v.len(), after_mode0, 5)); // cont: jmp search
-        v
-    })?;
+    let stub_mode0 = Stub::new()
+        .bytes(&[0x83, 0xFB, 0xFF]) // cmp ebx,-1
+        .bytes(&[0x7C, 0x1A]) // jl cont
+        .bytes(&[0x83, 0xEC, 0x08]) // sub esp,8
+        .bytes(&[0x53]) // push ebx
+        .bytes(&[0x57]) // push edi
+        .call(keeps_pending as unsafe extern "C" fn(usize, i32) -> bool) // call keeps_pending
+        .bytes(&[0x83, 0xC4, 0x10]) // add esp,10h
+        .bytes(&[0x84, 0xC0]) // test al,al
+        .jcc(Cond::NotEqual, epilogue) // jne epilogue
+        .jmp(unregister) // jmp unregister
+        .jmp(after_mode0) // cont: jmp search
+        .exec()?;
     // The connection's close (ebx = connection, eax = its connecting socket): close it only if the pending connect
     // is ours, else forget the number. The stack is 16-byte aligned here.
-    let stub_close = exec_code(47, |s| {
-        let mut v = vec![0x83, 0xF8, 0xFF]; // cmp eax,-1
-        v.extend(jcc(0x84, s + v.len(), skip)); // je skip
-        v.push(0x50); // push eax
-        v.extend([0x83, 0xEC, 0x04]); // sub esp,4
-        v.push(0x53); // push ebx
-        v.push(0x50); // push eax
-        v.extend(branch(0xE8, s + v.len(), owns_pending as unsafe extern "C" fn(i32, usize) -> bool as usize, 5));
-        v.extend([0x83, 0xC4, 0x0C]); // add esp,0Ch
-        v.extend([0x84, 0xC0]); // test al,al
-        v.push(0x58); // pop eax
-        v.extend(jcc(0x85, s + v.len(), after)); // jne close
-        v.extend([0xC7, 0x83, 0x30, 0x05, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF]); // mov dword [ebx+530h],-1
-        v.extend(branch(0xE9, s + v.len(), skip, 5)); // jmp skip
-        v
-    })?;
+    let stub_close = Stub::new()
+        .bytes(&[0x83, 0xF8, 0xFF]) // cmp eax,-1
+        .jcc(Cond::Equal, skip) // je skip
+        .bytes(&[0x50]) // push eax
+        .bytes(&[0x83, 0xEC, 0x04]) // sub esp,4
+        .bytes(&[0x53]) // push ebx
+        .bytes(&[0x50]) // push eax
+        .call(owns_pending as unsafe extern "C" fn(i32, usize) -> bool) // call owns_pending
+        .bytes(&[0x83, 0xC4, 0x0C]) // add esp,0Ch
+        .bytes(&[0x84, 0xC0]) // test al,al
+        .bytes(&[0x58]) // pop eax
+        .jcc(Cond::NotEqual, after) // jne close
+        .bytes(&[0xC7, 0x83, 0x30, 0x05, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF]) // mov dword [ebx+530h],-1
+        .jmp(skip) // jmp skip
+        .exec()?;
 
     core.jump(overwrite, 5, stub_overwrite)?;
     core.jump(mode0 + MODE0_CMP, MODE0_LEN, stub_mode0)?;

@@ -64,7 +64,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let mut rest = m + 0x25;
     exe.expect(rest, &[0x83, 0xC4, 0x10], "main: unexpected code after the compiler destructor")?;
     rest += 3;
-    match exe.bytes(rest, 1)?[0] {
+    match exe.u8_at(rest)? {
         0xE9 => rest = exe.rel32(rest + 1)?,
         0xEB => rest = exe.rel8(rest + 1)?,
         _ => {}

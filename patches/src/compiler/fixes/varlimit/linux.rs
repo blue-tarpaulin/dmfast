@@ -34,7 +34,7 @@ fn loc_flag(core: &Image, id: u32) -> Result<u32> {
     let Some(&or) = core.find_bytes_in(before, 0x30, &[0x83, 0xCE])?.as_slice().last() else {
         bail!("no `or esi,<flag>` before the $loc store");
     };
-    let [flag] = core.array(or + 2)?;
+    let flag = core.u8_at(or + 2)?;
     Ok(u32::from(flag))
 }
 

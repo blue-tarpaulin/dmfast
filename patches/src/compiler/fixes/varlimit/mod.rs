@@ -7,7 +7,7 @@
 //! The id, flag, and flags offset are read from the code that builds the `$loc` path. Once BYOND ships its fix, the
 //! old check is gone and this turns itself off.
 
-use crate::base::code::{branch, exec_code, jcc};
+use crate::base::code::{Cond, Stub};
 use crate::base::feature::{Feature, Hosts, Tier, install};
 use crate::base::image::Image;
 use crate::base::{Result, bail};
@@ -46,15 +46,13 @@ fn patch(core: &Image, cmp: usize, len: usize, other: usize, loc: Loc) -> Result
         bail!("element flags at {flags_at:#x}");
     }
     let back = cmp + len;
-    let stub = exec_code(27, |s| {
-        let mut v = vec![0x81, 0x38]; // cmp dword [eax],locIdx
-        v.extend(id.to_le_bytes());
-        v.extend(jcc(0x85, s + v.len(), other)); // jne other
-        v.extend([0xF6, 0x40, flags_at, flag as u8]); // test byte [eax+flags],flag
-        v.extend(jcc(0x84, s + v.len(), other)); // je other
-        v.extend(branch(0xE9, s + v.len(), back, 5)); // jmp back
-        v
-    })?;
+    let stub = Stub::new()
+        .bytes(&[&[0x81, 0x38][..], &id.to_le_bytes()].concat()) // cmp dword [eax],locIdx
+        .jcc(Cond::NotEqual, other) // jne other
+        .bytes(&[0xF6, 0x40, flags_at, flag as u8]) // test byte [eax+flags],flag
+        .jcc(Cond::Equal, other) // je other
+        .jmp(back) // jmp back
+        .exec()?;
     core.untouched(&[(cmp, len)])?;
     core.jump(cmp, len, stub)?;
     Ok(format!("at +{:#x} (id {id:#x}, flag {flag:#x})", cmp - core.base))

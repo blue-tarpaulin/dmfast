@@ -35,7 +35,7 @@ fn loc_flag(core: &Image, id: u32) -> Result<(u32, usize)> {
         if !core.is_at(t, "8B B5 ?? ?? ?? ?? 8B CE E8")? {
             bail!("$loc var path: no append call after it");
         }
-        let [flag] = core.array(at + 3)?;
+        let flag = core.u8_at(at + 3)?;
         return Ok((u32::from(flag), core.rel32(t + 9)?));
     }
     let mut old = Vec::new();
@@ -56,7 +56,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let cmp = core.find_unique(CHECK, "var reference $loc check")? + CMP;
     let id = core.u32_at(cmp + 2)?;
     let (flag, append) = loc_flag(core, id)?;
-    let [flags_at] = core.array(core.find_unique_in(append, 0x80, STORES, "var path element stores")? + FLAGS_AT)?;
+    let flags_at = core.u8_at(core.find_unique_in(append, 0x80, STORES, "var path element stores")? + FLAGS_AT)?;
     let other = core.rel8(cmp + CMP_LEN - 1)?;
     patch(core, cmp, CMP_LEN, other, Loc { id, flag, flags_at })
 }

@@ -51,5 +51,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     STATE.store(core.ptr_at(f + 5)?, Relaxed);
     ORIGINAL.set(trampoline(core.bytes(f, 12)?, f + 12)?);
     core.jump(f, 12, pick as extern "C" fn())?;
-    Ok(format!("at {:#x}", f - core.base))
+    Ok(format!("at +{:#x}", f - core.base))
 }

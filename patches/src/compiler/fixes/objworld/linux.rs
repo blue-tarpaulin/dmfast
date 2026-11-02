@@ -2,6 +2,7 @@
 //! `cmp dword [node],13h ; <mid> ; je world`.
 
 use super::{EAX, EDI, EDX, Site, parent_offset, redirect};
+use crate::base::code::Cond;
 use crate::base::feature::Ctx;
 use crate::base::image::Image;
 use crate::base::{Result, bail};
@@ -22,7 +23,7 @@ const RECURSE: usize = 17;
 /// `cmp dword [node],13h ; <mid bytes> ; je world` at `at`.
 fn je_world(core: &Image, at: usize, node: u8, mid: usize) -> Result<Site> {
     let je = at + 3 + mid;
-    Ok(Site { at, node, copy: mid, jcc: Some((0x84, core.rel32(je + 2)?)), back: je + 6 })
+    Ok(Site { at, node, copy: mid, jcc: Some((Cond::Equal, core.rel32(je + 2)?)), back: je + 6 })
 }
 
 pub fn install(cx: &Ctx) -> Result<String> {

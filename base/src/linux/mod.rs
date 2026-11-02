@@ -3,7 +3,7 @@
 
 pub mod alloc;
 pub mod glibc;
-pub mod mem;
+pub(crate) mod mem;
 
 use std::ffi::OsString;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};

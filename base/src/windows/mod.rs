@@ -3,8 +3,10 @@
 //! loading program's features ([`crate::feature::Host`], [`crate::driver`]).
 
 pub(crate) mod alloc;
-pub mod mem;
+pub(crate) mod mem;
 pub mod ucrt;
+
+pub use mem::module_range;
 
 use windows_sys::Win32::System::SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH};
 

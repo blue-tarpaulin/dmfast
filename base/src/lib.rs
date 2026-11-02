@@ -1,4 +1,5 @@
-//! Shared infrastructure for dmfast: features, their installer, and safe access to BYOND's loaded code.
+//! Shared infrastructure for dmfast: features, their installer, and safe access to BYOND's loaded code. What a patch
+//! can use, by task: `WRITING-PATCHES.md` in the repository root.
 
 mod error;
 pub use error::{Error, Result};

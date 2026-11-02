@@ -25,5 +25,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     )?;
     // Over the first 5 bytes of the decode's call sequence; the rest is unreachable.
     core.jump(decode + 9, 5, copy)?;
-    Ok(format!("at {:#x}", decode - core.base))
+    Ok(format!("at +{:#x}", decode - core.base))
 }

@@ -211,11 +211,6 @@ impl Ctx {
         crate::ledger::on_commit(Box::new(f));
     }
 
-    /// Run `f` if this feature (or the [`Parts::part`] it is called in) doesn't install, newest first.
-    pub fn on_abort(&self, f: impl FnOnce() + Send + 'static) {
-        crate::ledger::on_abort(Box::new(f));
-    }
-
     /// Independently installed parts of this feature.
     pub fn parts(&self) -> Parts<'_> {
         Parts { _cx: PhantomData, done: Vec::new(), missing: Vec::new() }
@@ -223,7 +218,7 @@ impl Ctx {
 }
 
 /// Parts of a feature that install independently: a part that fails is left out with everything it recorded
-/// (writes, relied ranges, [`Ctx::on_commit`]; its [`Ctx::on_abort`] actions run), the others still apply.
+/// (writes, relied ranges, [`Ctx::on_commit`] actions, its stubs freed), the others still apply.
 pub struct Parts<'a> {
     _cx: PhantomData<&'a Ctx>,
     done: Vec<String>,
@@ -280,13 +275,17 @@ impl Parts<'_> {
 
 /// Locates, checks and writes a feature; returns its detail line or why it can't install. Its writes are held
 /// until it returns (see [`crate::ledger`]): all applied after `Ok`, none after `Err`.
+#[doc(hidden)]
 pub type InstallFn = fn(&Ctx) -> Result<String>;
 
 /// [`Install::os`] bits.
+#[doc(hidden)]
 pub const WINDOWS: u8 = 1;
+#[doc(hidden)]
 pub const LINUX: u8 = 2;
 
 /// Built by [`install!`](crate::feature::install): this OS's install fn (`None`: not here), OSes with one.
+#[doc(hidden)]
 #[derive(Clone, Copy)]
 pub struct Install {
     pub os: u8,
@@ -369,11 +368,14 @@ impl Feature {
         f
     }
 
+    /// Install after these, if listed: data one sets up and this one reads, or another's hook this one wraps. Only
+    /// these may have writes this feature's `wrap_code` and `wrap_data` write over.
     pub const fn after(mut self, features: &'static [&'static Feature]) -> Feature {
         self.after = features;
         self
     }
 
+    /// Install only if all of these applied (and after them). To wrap one's writes, list it in `after` too.
     pub const fn requires(mut self, features: &'static [&'static Feature]) -> Feature {
         self.requires = features;
         self
@@ -397,21 +399,25 @@ impl Feature {
         self
     }
 
+    /// Installs only when selected by key or by `experimental` (a fix also needs its tier); never by default.
     pub const fn experimental(mut self) -> Feature {
         self.status = Status::Experimental;
         self
     }
 
+    /// Never installs; the key stays valid. `reason` shows under `DMFAST_STATS`.
     pub const fn deprecated(mut self, reason: &'static str) -> Feature {
         self.status = Status::Deprecated(reason);
         self
     }
 
+    /// Offered in this program only if `f` says so (e.g. only if the code it changes exists).
     pub const fn offered_if(mut self, f: fn(&Ctx) -> bool) -> Feature {
         self.offered = Some(f);
         self
     }
 
+    /// Print its counters at exit under `DMFAST_STATS` (and verify mismatches under `DMFAST_VERIFY`).
     pub const fn stats(mut self, f: fn()) -> Feature {
         self.stats = Some(f);
         self

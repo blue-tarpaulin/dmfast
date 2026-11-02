@@ -70,7 +70,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
         }
         class.original.set(core.live_u32(slot)? as usize);
         for &site in &sites {
-            core.call_iat_to(site, slot, class.hook as *const () as usize)?;
+            core.call_iat_to(site, slot, class.hook as *const ())?;
         }
         patched.push(format!("{} {}", class.name, sites.len()));
     }

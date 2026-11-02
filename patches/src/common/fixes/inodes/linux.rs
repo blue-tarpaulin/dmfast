@@ -156,7 +156,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     }
     // `__xstat`/`lstat` imports aren't covered. readdir's call sites aren't checked: `dirs` rewrites them to calls
     // through the lookup checked above.
-    if cx.core().import_calls("stat", stat as StatFn as usize)?.is_empty() {
+    if cx.core().import_calls("stat", stat as StatFn)?.is_empty() {
         bail!("libbyond does not import stat");
     }
     ON.store(true, Relaxed);

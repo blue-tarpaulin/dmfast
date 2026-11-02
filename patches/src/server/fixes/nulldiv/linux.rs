@@ -3,7 +3,7 @@
 //! to "Division by zero".
 
 use super::{NULL, NUMBER};
-use crate::base::code::{branch, exec_code, jcc};
+use crate::base::code::{Cond, Stub};
 use crate::base::feature::Ctx;
 use crate::base::{Result, bail};
 
@@ -37,19 +37,14 @@ pub fn install(cx: &Ctx) -> Result<String> {
     }
     let jmp = null + LOOP_AT;
     let loop_head = core.rel32(jmp + 1)?;
-    let stub = exec_code(31, |s| {
-        let mut v = Vec::new();
-        v.extend([0x80, 0xBD]);
-        v.extend(right_type);
-        v.push(NUMBER); // cmp byte [ebp+right type],2Ah
-        v.extend(jcc(0x84, s + v.len(), num)); // je number case
-        v.extend([0x80, 0xBD]);
-        v.extend(right_type);
-        v.push(NULL); // cmp byte [ebp+right type],0
-        v.extend(jcc(0x84, s + v.len(), error)); // je error
-        v.extend(branch(0xE9, s + v.len(), loop_head, 5)); // jmp loop (stock)
-        v
-    })?;
+    let cmp_right = |imm: u8| [&[0x80, 0xBD][..], &right_type, &[imm]].concat();
+    let stub = Stub::new()
+        .bytes(&cmp_right(NUMBER)) // cmp byte [ebp+right type],2Ah
+        .jcc(Cond::Equal, num) // je number case
+        .bytes(&cmp_right(NULL)) // cmp byte [ebp+right type],0
+        .jcc(Cond::Equal, error) // je error
+        .jmp(loop_head) // jmp loop (stock)
+        .exec()?;
     core.jump(jmp, 5, stub)?;
     Ok(format!("at +{:#x}", null - core.base))
 }

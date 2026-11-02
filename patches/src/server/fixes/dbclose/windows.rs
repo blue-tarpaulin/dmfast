@@ -2,7 +2,7 @@
 //! reordered in place.
 
 use super::{ARRAY, CAPACITY};
-use crate::base::code::{branch, exec_code};
+use crate::base::code::{Stub, branch};
 use crate::base::feature::Ctx;
 use crate::base::{Result, bail};
 
@@ -34,13 +34,11 @@ pub fn install(cx: &Ctx) -> Result<String> {
     {
         bail!("database open: doesn't call the close above");
     }
-    let stub = exec_code(20, |_| {
-        let mut v = vec![0xC7, 0x46, ARRAY, 0, 0, 0, 0]; // mov dword [esi+18h],0
-        v.extend([0xC7, 0x46, CAPACITY, 0, 0, 0, 0]); // mov dword [esi+20h],0
-        v.extend([0xFF, 0x25]); // jmp [free]
-        v.extend((slot as u32).to_le_bytes());
-        v
-    })?;
+    let stub = Stub::new()
+        .bytes(&[0xC7, 0x46, ARRAY, 0, 0, 0, 0]) // mov dword [esi+18h],0
+        .bytes(&[0xC7, 0x46, CAPACITY, 0, 0, 0, 0]) // mov dword [esi+20h],0
+        .bytes(&[&[0xFF, 0x25][..], &(slot as u32).to_le_bytes()].concat()) // jmp [free]
+        .exec()?;
     // Open+2, the same 21 bytes in 516.1670's order: cmp dword [edi+4],0 ; je +5 ; call Close (ecx is still edi) ;
     // push [ebp+8] ; mov ecx,edi ; call DMString::operator=
     let mut code = vec![0x83, 0x7F, 0x04, 0x00, 0x74, 0x05];
@@ -49,5 +47,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     code.extend(branch(0xE8, open + 18, assign, 5));
     core.call_iat_to(at + 3, slot, stub)?;
     core.write_code(open + 2, &code)?;
-    Ok(format!("at {:#x}, {:#x}", at - core.base, open - core.base))
+    Ok(format!("at +{:#x}, +{:#x}", at - core.base, open - core.base))
 }

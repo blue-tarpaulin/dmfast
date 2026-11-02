@@ -2,6 +2,7 @@
 
 use super::{EAX, Site, parent_offset, redirect};
 use crate::base::Result;
+use crate::base::code::Cond;
 use crate::base::feature::Ctx;
 
 /// The entry pass for a `world` node: mov eax,[edi+0Ch] ; add esp,1Ch ; cmp dword [eax],13h ; jne skip ;
@@ -26,7 +27,11 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let q = core.find_unique(DISPATCH, "world var dispatch")?;
     let parent = parent_offset(core, BUILDER, PARENT, RECURSE)?;
     // jne skip, re-encoded.
-    redirect(core, Site { at: p, node: EAX, copy: 0, jcc: Some((0x85, core.rel8(p + 4)?)), back: p + 5 }, parent)?;
+    redirect(
+        core,
+        Site { at: p, node: EAX, copy: 0, jcc: Some((Cond::NotEqual, core.rel8(p + 4)?)), back: p + 5 },
+        parent,
+    )?;
     // mov ecx,[ebp-9Ch] copied; the jne after it stays.
     redirect(core, Site { at: q, node: EAX, copy: 6, jcc: None, back: q + 9 }, parent)?;
     Ok(format!("at +{:#x}, +{:#x}", p - core.base, q - core.base))

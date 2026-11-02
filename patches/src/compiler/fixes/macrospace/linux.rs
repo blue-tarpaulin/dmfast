@@ -109,15 +109,15 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let mut saved = Vec::new();
     for pattern in PUSHES {
         for s in core.find_all(pattern)? {
-            let [b] = core.array(s + SAVED)?;
+            let b = core.u8_at(s + SAVED)?;
             saved.push(b);
         }
     }
     let Some(&first) = saved.first().filter(|&&o| saved.iter().all(|&s| s == o)) else {
         bail!("stream push: {} sites, not all with the same saved character offset", saved.len());
     };
-    let [parent] = core.array(ctor + PARENT)?;
-    let [kind] = core.array(ctor + KIND)?;
+    let parent = core.u8_at(ctor + PARENT)?;
+    let kind = core.u8_at(ctor + KIND)?;
     let found = Found {
         parent: usize::from(parent),
         kind: usize::from(kind),
@@ -125,8 +125,8 @@ pub fn install(cx: &Ctx) -> Result<String> {
         slot: SLOT,
         text_reader: g,
         file_reader,
-        getc: Foreign::at(getc as Getc as usize),
-        ungetc: Foreign::at(ungetc as Ungetc as usize),
+        getc: Foreign::at(getc as Getc),
+        ungetc: Foreign::at(ungetc as Ungetc),
     };
     core.untouched(&[(g, ENTRY)])?;
     core.jump(g, ENTRY, reader as unsafe extern "C" fn())?;

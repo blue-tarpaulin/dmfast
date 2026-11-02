@@ -51,9 +51,9 @@ pub fn install(cx: &Ctx) -> Result<String> {
     init(Found {
         array,
         count,
-        malloc: Foreign::at(crate::base::linux::alloc::malloc as MallocFn as usize),
-        realloc: Foreign::at(crate::base::linux::alloc::realloc as ReallocFn as usize),
-        original: Foreign::at(original as unsafe extern "C" fn(usize) -> u32 as usize),
+        malloc: Foreign::at(crate::base::linux::alloc::malloc as MallocFn),
+        realloc: Foreign::at(crate::base::linux::alloc::realloc as ReallocFn),
+        original: Foreign::at(original as unsafe extern "C" fn(usize) -> u32),
     });
     core.jump(f, 7, intern as extern "C" fn(usize) -> u32)?;
     Ok(format!("at +{:#x}", f - core.base))
