@@ -255,14 +255,8 @@ pub fn install(cx: &Ctx) -> Result<String> {
 
     // The .dmb load: the function that allocates the id-array table.
     let store = format!("A3 {}", hx(ids));
-    let mut loads = Vec::new();
-    for l in core.probe_all(LOAD_FN)? {
-        if !core.find_in(l, LOAD_SPAN, &store)?.is_empty() {
-            loads.push(l);
-        }
-    }
-    let [load] = loads[..] else { bail!(".dmb load: expected 1 match, found {}", loads.len()) };
-    core.rely(load, LOAD_FN.split_whitespace().count())?;
+    let load =
+        core.probe_unique(LOAD_FN, ".dmb load", |l| core.find_in(l, LOAD_SPAN, &store).is_ok_and(|h| !h.is_empty()))?;
 
     core.untouched(&[(f, ENTRY), (load, LOAD_ENTRY)])?;
     ORIGINAL.set(trampoline(core.bytes(f, ENTRY)?, f + ENTRY)?);

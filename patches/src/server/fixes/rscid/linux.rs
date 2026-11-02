@@ -1,11 +1,11 @@
 //! `rscid`, Linux: the get-or-add's call of the dynamic set's insert (cdecl; the only one) calls [`insert`].
 
 use std::ffi::c_void;
-use std::sync::OnceLock;
 
 use super::{Key, next_is_null};
 use crate::base::code::Foreign;
 use crate::base::feature::Ctx;
+use crate::base::sync::Installed;
 use crate::base::{Result, bail};
 
 type Insert = unsafe extern "C" fn(usize, *const Key) -> *mut c_void;
@@ -22,7 +22,7 @@ struct Found {
     count: usize,
 }
 
-static FOUND: OnceLock<Found> = OnceLock::new();
+static FOUND: Installed<Found> = Installed::new();
 
 /// The get-or-add: push the dynamic set and key ; call insert ; mov esi,eax ; test eax,eax ; je ... ;
 /// mov eax,[ebx+318h] ; add eax,[esi+18h] ; cmp eax,0FFFFh ; jne ... ; then the 0FFFFh branch: construct the
@@ -51,7 +51,7 @@ const COUNT: usize = 7;
 /// # Safety
 /// BYOND's call: `set` is the dynamic set and `key` a live key.
 unsafe extern "C" fn insert(set: usize, key: *const Key) -> *mut c_void {
-    let Some(f) = FOUND.get() else { std::process::abort() };
+    let f = FOUND.get();
     // SAFETY: the dynamic set (caller); BYOND's functions, called as its 0xFFFF branch calls them.
     unsafe {
         if next_is_null(set, f.count) {
@@ -76,17 +76,17 @@ pub fn install(cx: &Ctx) -> Result<String> {
         }
     }
     let [count] = core.array(core.find_unique(ALLOC, "rsc set entry count")? + COUNT)?;
-    let found = Found {
-        insert: Foreign::at(insert_fn),
-        ctor: Foreign::at(core.rel32(s + CTOR)?),
-        vtable: core.u32_at(s + VTABLE)?,
-        base_vtable: core.u32_at(s + BASE_VTABLE)?,
-        dtor: Foreign::at(core.rel32(s + DTOR)?),
-        count: usize::from(count),
-    };
+    FOUND.commit(
+        cx,
+        Found {
+            insert: Foreign::at(insert_fn),
+            ctor: Foreign::at(core.rel32(s + CTOR)?),
+            vtable: core.u32_at(s + VTABLE)?,
+            base_vtable: core.u32_at(s + BASE_VTABLE)?,
+            dtor: Foreign::at(core.rel32(s + DTOR)?),
+            count: usize::from(count),
+        },
+    );
     core.call(s + CALL, 5, insert as Insert)?;
-    cx.on_commit(move || {
-        let _ = FOUND.set(found);
-    });
     Ok(format!("insert at +{:#x}", insert_fn - core.base))
 }

@@ -21,15 +21,9 @@ const STORE: &str = "8D 04 40 C7 04 81 ?? ?? 00 00 0F B7 47 06";
 /// The register flag, after the `$loc` element's store: a constant (`mov dword [eax+4],<flags>`), or esi
 /// (`mov [eax+4],esi`) after an `or esi,<flag>` before it.
 fn loc_flag(core: &Image, id: u32) -> Result<u32> {
-    let stores: Vec<usize> = core
-        .probe_all(STORE)?
-        .into_iter()
-        .filter(|&s| core.array::<2>(s + 6).is_ok_and(|b| u32::from(u16::from_le_bytes(b)) == id))
-        .collect();
-    let [store] = stores[..] else {
-        bail!("$loc element store: expected 1, found {}", stores.len());
-    };
-    core.rely(store, STORE.split_whitespace().count())?;
+    let store = core.probe_unique(STORE, "$loc element store", |s| {
+        core.array::<2>(s + 6).is_ok_and(|b| u32::from(u16::from_le_bytes(b)) == id)
+    })?;
     let (after, before) = (store + 10, store - 0x30);
     if let Some(at) = core.find_bytes_in(after, 0x20, &[0xC7, 0x40, 0x04])?.first() {
         return core.u32_at(at + 3);

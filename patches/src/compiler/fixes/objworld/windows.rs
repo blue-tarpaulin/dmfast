@@ -1,9 +1,8 @@
 //! `objworld`, Windows: the world node's entry pass and the var-name dispatch of an entry (node in eax in both).
 
-use super::{EAX, Site, redirect};
+use super::{EAX, Site, parent_offset, redirect};
+use crate::base::Result;
 use crate::base::feature::Ctx;
-use crate::base::image::Image;
-use crate::base::{Result, bail};
 
 /// The entry pass for a `world` node: mov eax,[edi+0Ch] ; add esp,1Ch ; cmp dword [eax],13h ; jne skip ;
 /// mov eax,[edi+8] ; test eax,eax ; je ; xor ecx,ecx ; xor ebx,ebx ; cmp cx,[eax+66h]
@@ -21,22 +20,11 @@ const BUILDER: &str =
 const PARENT: usize = 27;
 const RECURSE: usize = 29;
 
-fn parent_offset(core: &Image) -> Result<u8> {
-    let found: Vec<usize> =
-        core.probe_all(BUILDER)?.into_iter().filter(|&f| core.rel32(f + RECURSE).is_ok_and(|t| t == f)).collect();
-    let [f] = found[..] else {
-        bail!("type path builder: expected 1 match, found {}", found.len());
-    };
-    core.rely(f, BUILDER.split_whitespace().count())?;
-    let [parent] = core.array(f + PARENT)?;
-    Ok(parent)
-}
-
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let p = core.find_unique(PASS, "world node test")? + PASS_CMP;
     let q = core.find_unique(DISPATCH, "world var dispatch")?;
-    let parent = parent_offset(core)?;
+    let parent = parent_offset(core, BUILDER, PARENT, RECURSE)?;
     // jne skip, re-encoded.
     redirect(core, Site { at: p, node: EAX, copy: 0, jcc: Some((0x85, core.rel8(p + 4)?)), back: p + 5 }, parent)?;
     // mov ecx,[ebp-9Ch] copied; the jne after it stays.
