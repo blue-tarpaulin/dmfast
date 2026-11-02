@@ -26,9 +26,9 @@ pub static COMPILER_PERF: &[&Feature] = &[
     &public::compiler::perf::dmbbuf::DMBBUF,
     &private::compiler::perf::slots::SLOTS,
     &private::compiler::perf::intern::REBUILD,
-    &private::compiler::perf::lists::LISTS,
+    &public::compiler::perf::lists::LISTS,
     &public::compiler::perf::listinit::LISTINIT,
-    &private::compiler::perf::protos::PROTOS,
+    &public::compiler::perf::protos::PROTOS,
     &private::compiler::perf::intern::INTERNIDX,
 ];
 
