@@ -88,6 +88,7 @@ pub static SERVER_FIXES: &[&Feature] = &[
     &public::server::fixes::profself::PROFSELF,
     &public::server::fixes::iconwrap::ICONWRAP,
     &public::server::fixes::profcpu::PROFCPU,
+    &public::server::fixes::filtername::FILTERNAME,
 ];
 
 /// Fixes for both programs.

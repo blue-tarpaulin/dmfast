@@ -1,0 +1,14 @@
++=: a/2
+Add: a/2
+Add two: a/2
++= list: b/3 a/2
+= list: b/3 a/2
+= filter, +=: a/2
+moves to the end: b/3 a/2
+[3] =: b/3 a/2
+[1] =: b/2
+[1] = same name: a/2
+re-add: a/1
+unnamed: -/1 -/2 -/1
+different names: a/1 b/2 -/3
+obj: a/2
