@@ -5,7 +5,7 @@
 //! render function's store of the offset is replaced with [`store_offset`], which first flattens a list over 0xFFFF
 //! bytes to BYOND's one-byte `?` entry ("start from the rendered copy"), as BYOND's own flatten does.
 
-use crate::base::code::{Foreign, live_u32};
+use crate::base::code::{self, Foreign, live_u32};
 use crate::base::feature::{Feature, Hosts, Tier, install};
 
 #[cfg(target_os = "linux")]
@@ -37,6 +37,6 @@ extern "C" fn store_offset(record: usize) {
         if live_u32(record + 0x0C) > 0xFFFF {
             FLATTEN.get()(record + 8);
         }
-        ((record + 0x14) as *mut u16).write(live_u32(record + 0x0C) as u16);
+        code::write::<u16>(record + 0x14, live_u32(record + 0x0C) as u16);
     }
 }

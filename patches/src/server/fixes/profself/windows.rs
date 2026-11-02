@@ -4,7 +4,7 @@
 use super::{is_message, move_test};
 use crate::base::code::trampoline;
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, bail, ensure};
 
 /// The recursion test: add word [counter],-1 ; mov eax,[flags] ; jne block ; test al,2 ; jne block. The error path:
 /// call ; test eax,eax ; jne ; push eax ; call ; add esp,4 ; push message ; call error ; add esp,4 ; jmp return path.
@@ -45,17 +45,16 @@ const STORE: usize = 0x3A;
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let at = core.find_unique(TEST, "recursion test and profiler entry")?;
-    if !is_message(core, core.ptr_at(at + MESSAGE_PUSH)?)? {
-        bail!("recursion test: not the recursion error");
-    }
+    ensure!(is_message(core, core.ptr_at(at + MESSAGE_PUSH)?)?, "recursion test: not the recursion error");
     // je join-5
     let join = core.rel32(at + BLOCK + 7)? + 5;
     let flags = core.u32_at(at + FLAGS)?;
     let clock = core.rel32(at + CLOCK)?;
     let self_clock = core.u32_at(at + SELF_LO)?;
-    if core.u32_at(at + SELF_HI)? != self_clock.wrapping_add(4) {
-        bail!("profiler entry: self-time clock not one 8-byte field");
-    }
+    ensure!(
+        core.u32_at(at + SELF_HI)? == self_clock.wrapping_add(4),
+        "profiler entry: self-time clock not one 8-byte field"
+    );
 
     let setup = core.find_unique(SETUP, "frame setup profiler clocks")?;
     let store = setup + STORE;
@@ -64,12 +63,12 @@ pub fn install(cx: &Ctx) -> Result<String> {
         [0x89, 0x46, _, 0x89, 0x96, _, _, _, _] => 9,
         _ => bail!("frame setup: total-time clock store not as expected"),
     };
-    if core.u32_at(setup + SETUP_FLAGS)? != flags
-        || core.rel32(setup + SETUP_CLOCK)? != clock
-        || core.rel8(setup + DONE_JE)? != store + store_len
-    {
-        bail!("frame setup: not the profiler's flag, clock or layout");
-    }
+    ensure!(
+        core.u32_at(setup + SETUP_FLAGS)? == flags
+            && core.rel32(setup + SETUP_CLOCK)? == clock
+            && core.rel8(setup + DONE_JE)? == store + store_len,
+        "frame setup: not the profiler's flag, clock or layout"
+    );
 
     // Frame setup also starts the self-time clock: the total-time stores (moved) ; mov [esi+self],eax ;
     // mov [esi+self+4],edx ; jmp back

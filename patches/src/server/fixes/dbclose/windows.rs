@@ -2,9 +2,9 @@
 //! reordered in place.
 
 use super::{ARRAY, CAPACITY};
-use crate::base::code::{Stub, branch};
+use crate::base::code::{Cond, Stub};
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
@@ -22,30 +22,33 @@ pub fn install(cx: &Ctx) -> Result<String> {
         "database open",
     )?;
     let slot = core.iat_slot("free")?;
-    if core.ptr_at(at + 5)? != slot {
-        bail!("database close: doesn't call free");
-    }
-    let assign = core.rel32(open + 6)?;
-    let close = core.rel32(open + 19)?;
+    ensure!(core.ptr_at(at + 5)? == slot, "database close: doesn't call free");
+    let assign = core.call_target(open + 5)?;
+    let close = core.call_target(open + 18)?;
     // Open's Close() holds the free: push esi ; mov esi,ecx ; cmp dword [esi+1Ch],0
-    if core.rel32(at + 25)? != assign
-        || !(at - 0x3F..at).contains(&close)
-        || core.bytes(close, 7)? != [0x56, 0x8B, 0xF1, 0x83, 0x7E, 0x1C, 0x00]
-    {
-        bail!("database open: doesn't call the close above");
-    }
+    ensure!(
+        core.call_target(at + 24)? == assign
+            && (at - 0x3F..at).contains(&close)
+            && core.bytes(close, 7)? == [0x56, 0x8B, 0xF1, 0x83, 0x7E, 0x1C, 0x00],
+        "database open: doesn't call the close above"
+    );
     let stub = Stub::new()
         .bytes(&[0xC7, 0x46, ARRAY, 0, 0, 0, 0]) // mov dword [esi+18h],0
         .bytes(&[0xC7, 0x46, CAPACITY, 0, 0, 0, 0]) // mov dword [esi+20h],0
-        .bytes(&[&[0xFF, 0x25][..], &(slot as u32).to_le_bytes()].concat()) // jmp [free]
+        .bytes_u32(&[0xFF, 0x25], slot as u32, &[]) // jmp [free]
         .exec()?;
     // Open+2, the same 21 bytes in 516.1670's order: cmp dword [edi+4],0 ; je +5 ; call Close (ecx is still edi) ;
     // push [ebp+8] ; mov ecx,edi ; call DMString::operator=
-    let mut code = vec![0x83, 0x7F, 0x04, 0x00, 0x74, 0x05];
-    code.extend(branch(0xE8, open + 8, close, 5));
-    code.extend([0xFF, 0x75, 0x08, 0x8B, 0xCF]);
-    code.extend(branch(0xE8, open + 18, assign, 5));
+    let mut code = Stub::new();
+    let named = code.label();
+    code.bytes(&[0x83, 0x7F, 0x04, 0x00]) // cmp dword [edi+4],0
+        .jcc8(Cond::Equal, named) // je +5
+        .call(close) // call Close
+        .bind(named)
+        .bytes(&[0xFF, 0x75, 0x08]) // push [ebp+8]
+        .bytes(&[0x8B, 0xCF]) // mov ecx,edi
+        .call(assign); // call DMString::operator=
     core.call_iat_to(at + 3, slot, stub)?;
-    core.write_code(open + 2, &code)?;
-    Ok(format!("at +{:#x}, +{:#x}", at - core.base, open - core.base))
+    core.write_stub(open + 2, 21, &code)?;
+    Ok(core.report(&[at, open]))
 }

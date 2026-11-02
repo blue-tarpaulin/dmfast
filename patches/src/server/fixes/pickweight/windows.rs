@@ -2,9 +2,9 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
-use crate::base::code::{Foreign, live_u32, trampoline};
+use crate::base::code::{self, Foreign, live_u32, trampoline};
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 static ORIGINAL: Foreign<unsafe extern "C" fn()> = Foreign::new();
 /// The global holding the interpreter state: `+0x10` the code (one dword per word), `+0x14` the program counter.
@@ -18,12 +18,12 @@ extern "C" fn pick() {
         let word = |i: usize| live_u32(code + 4 * i) as u16;
         let start = usize::from(live_u32(state() + 0x14) as u16);
         ORIGINAL.get()();
-        let pc = (state() + 0x14) as *mut u16;
+        let pc = state() + 0x14;
         let last = start + 2 + 2 * usize::from(word(start + 1));
         let target = word(last);
         // A jump stores target - 1.
-        if target >= super::THRESHOLD && *pc == target.wrapping_sub(1) {
-            *pc = word(last + 1).wrapping_sub(1);
+        if target >= super::THRESHOLD && code::read::<u16>(pc) == target.wrapping_sub(1) {
+            code::write::<u16>(pc, word(last + 1).wrapping_sub(1));
         }
     }
 }
@@ -45,11 +45,9 @@ pub fn install(cx: &Ctx) -> Result<String> {
          66 FF 42 14 0F B7 4A 14 8B 42 10 5F 5E 5B 0F B7 04 88 66 48 66 89 42 14",
         "weighted pick final target",
     )?;
-    if !(f + 1..=f + 0x100).contains(&tail) {
-        bail!("weighted pick final target: not in the opcode found");
-    }
+    ensure!((f + 1..=f + 0x100).contains(&tail), "weighted pick final target: not in the opcode found");
     STATE.store(core.ptr_at(f + 5)?, Relaxed);
     ORIGINAL.set(trampoline(core.bytes(f, 12)?, f + 12)?);
     core.jump(f, 12, pick as extern "C" fn())?;
-    Ok(format!("at +{:#x}", f - core.base))
+    Ok(core.report(&[f]))
 }

@@ -4,7 +4,7 @@ use std::arch::naked_asm;
 
 use super::SPAN;
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// The frame loop: `push 20h ; call new` (ebx = the frame) ; esi = the source frame ; `mov [esp],ebx ;
 /// call DMFrameBase()`, then the assignment: copy +14h..+1Ch, and if the holders differ drop ours (count -1).
@@ -47,15 +47,13 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let s = core.find_unique(LOOP, "icon state copy")?;
     // It must be the loop of `DMGraphic::operator=(DMGraphic const&)` itself, not a lookalike elsewhere.
     let f = core.export(c"_ZN9DMGraphicaSERKS_")?;
-    if !(f..f + SPAN).contains(&s) {
-        bail!("icon state copy: loop at +{:#x} is not in DMGraphic::operator=", s - core.base);
-    }
-    if !core.is_at(core.rel32(s + CALL + 1)?, CTOR)? {
-        bail!("frame constructor: not as expected");
-    }
-    if !core.is_at(core.rel8(s + SAME_AT)?, SAME)? {
-        bail!("icon state copy: equal-holder path not as expected");
-    }
+    ensure!(
+        (f..f + SPAN).contains(&s),
+        "icon state copy: loop at +{:#x} is not in DMGraphic::operator=",
+        s - core.base
+    );
+    core.follow_call(s + CALL, CTOR, "frame constructor")?;
+    core.require(core.rel8(s + SAME_AT)?, SAME, "icon state copy: equal-holder path")?;
     core.call(s + CALL, 5, share as unsafe extern "C" fn())?;
-    Ok(format!("at +{:#x}", s + CALL - core.base))
+    Ok(core.report(&[s + CALL]))
 }

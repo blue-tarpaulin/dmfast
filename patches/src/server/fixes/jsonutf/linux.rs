@@ -10,5 +10,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
         core.find_unique("84 DB 0F 89 ?? ?? ?? ?? 83 EC 08 8D 44 24 24 50 52 E8", "AddJsonEncodedUtf8 UTF-8 branch")?;
     // jns copy -> jmp copy
     core.jump(at + 2, 6, core.rel32(at + 4)?)?;
-    Ok(format!("at +{:#x}", at - core.base))
+    Ok(core.report(&[at]))
 }

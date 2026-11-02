@@ -7,7 +7,7 @@
 
 use crate::base::feature::{Feature, Hosts, Tier, install};
 use crate::base::image::Image;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -33,13 +33,17 @@ fn last_operator(core: &Image, names: usize, plus: usize, goto: usize) -> Result
         let p = core.ptr_at(names + id * 4)?;
         if p == 0 { Ok(None) } else { core.c_str(p).map(Some) }
     };
-    if name(plus)? != Some(&b"+"[..]) || name(goto)? != Some(&b"goto"[..]) {
-        bail!("name table: + is not id {plus:#x} or goto is not id {goto:#x}");
-    }
+    ensure!(
+        name(plus)? == Some(&b"+"[..]) && name(goto)? == Some(&b"goto"[..]),
+        "name table: + is not id {plus:#x} or goto is not id {goto:#x}"
+    );
     for (i, op) in OPERATORS.iter().enumerate() {
-        if name(goto + 1 + i)? != Some(*op) {
-            bail!("name table id {:#x} is not {}", goto + 1 + i, String::from_utf8_lossy(op));
-        }
+        ensure!(
+            name(goto + 1 + i)? == Some(*op),
+            "name table id {:#x} is not {}",
+            goto + 1 + i,
+            String::from_utf8_lossy(op)
+        );
     }
     Ok(goto + OPERATORS.len())
 }

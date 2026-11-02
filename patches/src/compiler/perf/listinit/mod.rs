@@ -13,12 +13,11 @@
 //! and empty initializers go to the original. `DMFAST_VERIFY=1` checks every intern vs the original (`verify.rs`).
 
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
-use rustc_hash::FxHashMap;
-
-use crate::base::code::{Foreign, MallocFn, ReallocFn, live_u32};
+use crate::base::code::{Foreign, MallocFn, ReallocFn, live_u32, write};
+use crate::base::driver::Counter;
 use crate::base::feature::{Feature, Hosts, install};
+use crate::base::hash::{self, Map};
 use crate::base::sync::lock;
 
 #[cfg(target_os = "linux")]
@@ -53,7 +52,7 @@ struct Found {
 struct State {
     found: Found,
     /// Each interned list's key and id.
-    index: FxHashMap<Box<[u64]>, u32>,
+    index: Map<Box<[u64]>, u32>,
     /// The key being looked up, reused so a hit doesn't allocate.
     scratch: Vec<u64>,
     /// The table's count when the last intern returned.
@@ -64,9 +63,9 @@ struct State {
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
-static HITS: AtomicU32 = AtomicU32::new(0);
-static INSERTS: AtomicU32 = AtomicU32::new(0);
-static RESETS: AtomicU32 = AtomicU32::new(0);
+static HITS: Counter = Counter::new();
+static INSERTS: Counter = Counter::new();
+static RESETS: Counter = Counter::new();
 
 /// The pair count of `list`.
 unsafe fn len(list: usize) -> usize {
@@ -85,10 +84,6 @@ unsafe fn key(list: usize, out: &mut Vec<u64>) {
     }
 }
 
-unsafe fn put(addr: usize, v: u32) {
-    unsafe { (addr as *mut u32).write(v) }
-}
-
 /// Append a copy of `list` as stock does, but with spare capacity. Returns its id.
 unsafe fn append(st: &mut State, list: usize) -> u32 {
     unsafe {
@@ -100,27 +95,26 @@ unsafe fn append(st: &mut State, list: usize) -> u32 {
             let grown = if array == st.array { st.capacity * 2 } else { 0 };
             let capacity = count.max(grown).max(64);
             let a = found.realloc.get()(array as usize as *mut _, capacity as usize * 4) as u32;
-            put(found.array, a);
+            write(found.array, a);
             st.array = a;
             st.capacity = capacity;
         }
-        put(found.count, count);
+        write(found.count, count);
         let n = len(list);
         let entry = found.malloc.get()(8) as usize;
         let pairs = found.malloc.get()(n * 8) as usize;
         if n > 0 {
             std::ptr::copy_nonoverlapping(live_u32(list) as *const u8, pairs as *mut u8, n * 8);
         }
-        put(entry, pairs as u32);
-        put(entry + 4, live_u32(list + 4));
-        put(st.array as usize + 4 * id as usize, entry as u32);
+        write(entry, pairs as u32);
+        write(entry + 4, live_u32(list + 4));
+        write(st.array as usize + 4 * id as usize, entry as u32);
         id
     }
 }
 
 fn init(found: Found) {
-    *lock(&STATE) =
-        Some(State { found, index: FxHashMap::default(), scratch: Vec::new(), count: 0, array: 0, capacity: 0 });
+    *lock(&STATE) = Some(State { found, index: hash::map(), scratch: Vec::new(), count: 0, array: 0, capacity: 0 });
 }
 
 /// The original intern, after which the table is the original's: its array is reallocated to exactly its count.
@@ -146,7 +140,7 @@ extern "C" fn intern(list: usize) -> u32 {
         // A reset (the compiler rebuilt) emptied the table.
         if live_u32(st.found.count) < st.count {
             st.index.clear();
-            RESETS.fetch_add(1, Relaxed);
+            RESETS.bump();
         }
         let id = if list == 0 || len(list) == 0 {
             // The original appends these without a lookup.
@@ -174,9 +168,9 @@ unsafe fn lookup_or_append(st: &mut State, list: usize) -> u32 {
             },
         };
         if hit.is_some() {
-            HITS.fetch_add(1, Relaxed);
+            HITS.bump();
         } else {
-            INSERTS.fetch_add(1, Relaxed);
+            INSERTS.bump();
         }
         if hit != Some(id) {
             st.index.insert(scratch.as_slice().into(), id);
@@ -189,10 +183,10 @@ unsafe fn lookup_or_append(st: &mut State, list: usize) -> u32 {
 fn print_stats() {
     eprintln!(
         "dmfast: list initializer intern hits={} inserts={} resets={} verify={} mismatches={}",
-        HITS.load(Relaxed),
-        INSERTS.load(Relaxed),
-        RESETS.load(Relaxed),
+        HITS,
+        INSERTS,
+        RESETS,
         crate::base::driver::verify(),
-        verify::MISMATCHES.load(Relaxed)
+        verify::MISMATCHES
     );
 }

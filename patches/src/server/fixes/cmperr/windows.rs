@@ -3,7 +3,7 @@
 use super::HANDLERS;
 use crate::base::code::Stub;
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// `push right value ; push right type ; push op text ; push left value ; push left type ;
 /// push "type mismatch: cannot compare" ; call format`
@@ -18,20 +18,17 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let error = core.find_unique(ERROR, "cannot compare error block")?;
     let sites = core.find_all(HANDLER)?;
-    if sites.len() < HANDLERS {
-        bail!("comparison handlers: expected at least {HANDLERS}, found {}", sites.len());
-    }
+    ensure!(sites.len() >= HANDLERS, "comparison handlers: expected at least {HANDLERS}, found {}", sites.len());
     let first = sites.as_slice()[0];
     let skip = core.rel32(first + 4)?;
     for &s in sites.iter() {
-        if core.rel32(s + 4)? != skip {
-            bail!("comparison handlers do not share one skip tail");
-        }
+        ensure!(core.rel32(s + 4)? == skip, "comparison handlers do not share one skip tail");
     }
     let fetch = core.array::<12>(first + FETCH)?;
-    if fetch[0] != 0xA1 || fetch[5..8] != [0x0F, 0xB7, 0x48] || fetch[9..11] != [0x8B, 0x50] {
-        bail!("comparison handler: left operand fetch not as expected");
-    }
+    ensure!(
+        fetch[0] == 0xA1 && fetch[5..8] == [0x0F, 0xB7, 0x48] && fetch[9..11] == [0x8B, 0x50],
+        "comparison handler: left operand fetch not as expected"
+    );
     let stub = Stub::new()
         .bytes(&fetch) // the fetch
         .jmp(error) // jmp error

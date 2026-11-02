@@ -1,15 +1,14 @@
 //! `varlist`, Windows: byondcore's var list merge (cdecl) and the var list pass that calls it are hooked at entry.
 
-use std::collections::HashMap;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
 use super::verify;
 use crate::base::code::Foreign;
-use crate::base::driver;
+use crate::base::driver::{self, Counter};
 use crate::base::feature::Ctx;
+use crate::base::hash::{self, Map};
 use crate::base::sync::lock;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// BYOND's list.
 #[repr(C)]
@@ -34,9 +33,9 @@ static ORIGINAL: Foreign<Merge> = Foreign::new();
 static LOOKUP: Foreign<unsafe extern "C" fn(u32) -> *mut List> = Foreign::new();
 static PASS: Foreign<unsafe extern "C" fn()> = Foreign::new();
 /// The non-empty lists the merge returned during this pass, by address.
-static RETURNED: Mutex<Option<HashMap<usize, Returned>>> = Mutex::new(None);
-static CALLS: AtomicU32 = AtomicU32::new(0);
-static SHORTCUTS: AtomicU32 = AtomicU32::new(0);
+static RETURNED: Mutex<Map<usize, Returned>> = Mutex::new(hash::map());
+static CALLS: Counter = Counter::new();
+static SHORTCUTS: Counter = Counter::new();
 
 /// The merge (`own`, `parent`): push ebp ; mov ebp,esp ; mov eax,[ebp+8] ; sub esp,14h ; test eax,eax ; je +5 ;
 /// movzx edx,word [eax] ; jmp +2 ; xor edx,edx ; push ebx ; push esi ; mov esi,[ebp+0Ch] ; mov [ebp-0Ch],edx ;
@@ -80,7 +79,7 @@ unsafe fn known(own: *const List, parent: *const List) -> Option<u32> {
     if own.is_some_and(|o| o.count != 0) {
         return None;
     }
-    let r = *lock(&RETURNED).as_ref()?.get(&(parent as usize))?;
+    let r = *lock(&RETURNED).get(&(parent as usize))?;
     (lookup(r.id).cast_const() == parent && p.data as usize == r.data && p.count == r.count).then_some(r.id)
 }
 
@@ -90,18 +89,18 @@ fn remember(id: u32) {
     let Some(l) = (unsafe { lookup(id).as_ref() }) else { return };
     if l.count != 0 {
         let r = Returned { id, data: l.data as usize, count: l.count };
-        lock(&RETURNED).get_or_insert_default().insert(l as *const List as usize, r);
+        lock(&RETURNED).insert(l as *const List as usize, r);
     }
 }
 
 /// # Safety
 /// `own` and `parent` are null or live lists (BYOND passes them).
 unsafe extern "C" fn merge(own: *const List, parent: *const List) -> u32 {
-    CALLS.fetch_add(1, Relaxed);
+    CALLS.bump();
     // SAFETY: null or live lists (caller).
     let shortcut = unsafe { known(own, parent) };
     if let Some(id) = shortcut {
-        SHORTCUTS.fetch_add(1, Relaxed);
+        SHORTCUTS.bump();
         if !driver::verify() {
             // SAFETY: `parent` is live (`known`): the reference the merge's intern would have taken.
             unsafe { (*parent.cast_mut()).refcount += 1 };
@@ -119,36 +118,30 @@ unsafe extern "C" fn merge(own: *const List, parent: *const List) -> u32 {
 
 /// A var list pass is starting: lists from an earlier load may have been freed.
 unsafe extern "C" fn start_pass() {
-    *lock(&RETURNED) = None;
+    lock(&RETURNED).clear();
     // SAFETY: BYOND's pass, which this replaces.
     unsafe { PASS.get()() }
 }
 
 pub(super) fn print_stats() {
-    let (calls, shortcuts) = (CALLS.load(Relaxed), SHORTCUTS.load(Relaxed));
     if driver::verify() {
-        let mismatches = verify::MISMATCHES.load(Relaxed);
-        eprintln!("dmfast: var list merge: {calls} calls, {shortcuts} shortcut, verify mismatches={mismatches}");
+        eprintln!(
+            "dmfast: var list merge: {CALLS} calls, {SHORTCUTS} shortcut, verify mismatches={}",
+            verify::MISMATCHES
+        );
     } else {
-        eprintln!("dmfast: var list merge: {calls} calls, {shortcuts} shortcut");
+        eprintln!("dmfast: var list merge: {CALLS} calls, {SHORTCUTS} shortcut");
     }
 }
 
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(MERGE, "var list merge")?;
-    if !core.is_at(f + TAIL, TAIL_CODE)? {
-        bail!("var list merge: tail not as expected");
-    }
-    let lookup_fn = core.rel32(f + TAIL + LOOKUP_CALL + 1)?;
-    if !core.is_at(lookup_fn, LOOKUP_CODE)? {
-        bail!("var list merge: list lookup not as expected");
-    }
+    core.require(f + TAIL, TAIL_CODE, "var list merge: tail")?;
+    let lookup_fn = core.follow_call(f + TAIL + LOOKUP_CALL, LOOKUP_CODE, "var list merge: list lookup")?;
     let pass = core.find_unique(PASS_CODE, "var list pass")?;
-    let per_type = core.rel32(pass + PER_TYPE_CALL + 1)?;
-    if !core.is_at(per_type + MERGE_CALL, "E8")? || core.rel32(per_type + MERGE_CALL + 1)? != f {
-        bail!("var list pass: does not call the merge");
-    }
+    let per_type = core.call_target(pass + PER_TYPE_CALL)?;
+    ensure!(core.call_target(per_type + MERGE_CALL)? == f, "var list pass: does not call the merge");
     LOOKUP.set(lookup_fn);
     ORIGINAL.set(core.hook(f, ENTRY, merge as Merge)?);
     PASS.set(core.hook(pass, PASS_ENTRY, start_pass as unsafe extern "C" fn())?);

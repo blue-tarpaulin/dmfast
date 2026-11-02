@@ -6,7 +6,7 @@ use std::ffi::c_void;
 use super::{CURRENT, FOUND, Found, Getc, POS, TEXT, Ungetc, drop_space};
 use crate::base::code::Foreign;
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, bail, ensure};
 
 unsafe extern "C" {
     fn getc(f: *mut c_void) -> i32;
@@ -98,14 +98,13 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let g = core.find_unique(READER, "text stream reader")?;
     let ctor = core.find_unique(CTOR, "text stream constructor")?;
-    if core.ptr_at(core.ptr_at(ctor + VTABLE)? + 4 * SLOT)? != g {
-        bail!("text stream constructor: not the reader's class");
-    }
+    ensure!(
+        core.ptr_at(core.ptr_at(ctor + VTABLE)? + 4 * SLOT)? == g,
+        "text stream constructor: not the reader's class"
+    );
     let base = core.find_unique_in(ctor - 0x60, 0x60, BASE, "text stream constructor: base vtable")?;
     let file_reader = core.ptr_at(core.ptr_at(base + 5)? + 4 * SLOT)?;
-    if !core.is_at(file_reader, FILE_READER)? {
-        bail!("file stream reader: unexpected code");
-    }
+    core.require(file_reader, FILE_READER, "file stream reader")?;
     let mut saved = Vec::new();
     for pattern in PUSHES {
         for s in core.find_all(pattern)? {
@@ -131,5 +130,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     core.untouched(&[(g, ENTRY)])?;
     core.jump(g, ENTRY, reader as unsafe extern "C" fn())?;
     FOUND.commit(cx, found);
-    Ok(format!("at +{:#x}", g - core.base))
+    Ok(core.report(&[g]))
 }

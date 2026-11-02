@@ -1,7 +1,7 @@
 //! `profcpu`, Linux: the one `clock()` call, in `TimeLib::CpuClock`, calls [`thread_clock`] instead.
 
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, bail, ensure};
 
 type ClockFn = unsafe extern "C" fn() -> libc::clock_t;
 
@@ -32,9 +32,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let sites = core.import_calls("clock", libc_clock as ClockFn)?;
     let [site] = sites[..] else { bail!("clock(): expected 1 call, found {}", sites.len()) };
     let cpu_clock = core.export(c"_ZN7TimeLib8CpuClockEv")?;
-    if site != cpu_clock + CALL || !core.is_at(cpu_clock, CPU_CLOCK)? {
-        bail!("TimeLib::CpuClock: not as expected");
-    }
+    ensure!(site == cpu_clock + CALL && core.is_at(cpu_clock, CPU_CLOCK)?, "TimeLib::CpuClock: not as expected");
     core.call(site, 5, thread_clock as ClockFn)?;
-    Ok(format!("at +{:#x}", site - core.base))
+    Ok(core.report(&[site]))
 }

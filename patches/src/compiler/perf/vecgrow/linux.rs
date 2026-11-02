@@ -3,7 +3,7 @@
 use std::arch::naked_asm;
 
 use crate::base::Result;
-use crate::base::code::Foreign;
+use crate::base::code::Addr;
 use crate::base::feature::Ctx;
 
 /// The append: `push ebx ; sub esp,8 ; mov ebx,[esp+10h] ; mov edx,[ebx+8] ; mov eax,[ebx] ; cmp edx,[ebx+4] ;
@@ -17,7 +17,7 @@ const GROW: usize = 0x28;
 const GROW_LEN: usize = 9;
 
 /// The `shl edx,2` after the grow step.
-static BACK: Foreign<unsafe extern "C" fn()> = Foreign::new();
+static BACK: Addr = Addr::new();
 
 /// The grow step with the new capacity `2 * size + 4`.
 ///
@@ -40,5 +40,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     core.untouched(&[(f + GROW, GROW_LEN)])?;
     BACK.set(f + GROW + GROW_LEN);
     core.jump(f + GROW, GROW_LEN, grow as unsafe extern "C" fn())?;
-    Ok(format!("at +{:#x}", f - core.base))
+    Ok(core.report(&[f]))
 }

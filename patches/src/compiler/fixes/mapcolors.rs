@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 
 use super::replace_source;
 use crate::base::feature::{Ctx, Feature, Hosts, Tier, install};
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 pub static MAPCOLORS: Feature = Feature::fix(
     Hosts::COMPILER,
@@ -28,9 +28,7 @@ static FIXED: OnceLock<Vec<u8>> = OnceLock::new();
 fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let slot = replace_source(core, MARK, "icon DM source", &FIXED, |text| {
-        if text.matches(OLD).count() != 1 {
-            bail!("icon DM source: MapColors not as expected");
-        }
+        ensure!(text.matches(OLD).count() == 1, "icon DM source: MapColors not as expected");
         Ok(text.replacen(OLD, &format!("{NEW}{OLD}"), 1))
     })?;
     Ok(format!("table entry at +{:#x}", slot - core.base))

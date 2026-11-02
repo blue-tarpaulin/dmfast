@@ -1,15 +1,14 @@
 //! `listinit`, Linux: libbyond's list initializer intern jumps to the replacement; [`original`] runs the stock one.
 
 use std::arch::naked_asm;
-use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 use super::{Found, init, intern};
-use crate::base::code::{Foreign, MallocFn, ReallocFn};
+use crate::base::code::{Addr, Foreign, MallocFn, ReallocFn};
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// The stock intern after its first 7 bytes.
-static ORIG_CONT: AtomicUsize = AtomicUsize::new(0);
+static ORIG_CONT: Addr = Addr::new();
 
 /// The stock intern: its first 7 bytes (displaced by the jump), then the rest.
 ///
@@ -39,15 +38,11 @@ pub fn install(cx: &Ctx) -> Result<String> {
     )?;
     let array = core.ptr_at(f + 9)?;
     let count = core.ptr_at(f + 15)?;
-    if array != count + 4 {
-        bail!("list initializer intern: entry array not right after the count");
-    }
+    ensure!(array == count + 4, "list initializer intern: entry array not right after the count");
     // The append must store the new count: mov [count],eax
     let store = [&[0xA3][..], &(count as u32).to_le_bytes()].concat();
-    if core.find_bytes_in(f, 0x180, &store)?.is_empty() {
-        bail!("list initializer intern: count store not found");
-    }
-    ORIG_CONT.store(f + 7, Relaxed);
+    ensure!(!core.find_bytes_in(f, 0x180, &store)?.is_empty(), "list initializer intern: count store not found");
+    ORIG_CONT.set(f + 7);
     init(Found {
         array,
         count,
@@ -56,5 +51,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
         original: Foreign::at(original as unsafe extern "C" fn(usize) -> u32),
     });
     core.jump(f, 7, intern as extern "C" fn(usize) -> u32)?;
-    Ok(format!("at +{:#x}", f - core.base))
+    Ok(core.report(&[f]))
 }

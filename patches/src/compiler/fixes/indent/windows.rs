@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering::Relaxed};
 
 use super::{BUF, CAP, check};
 use crate::base::Result;
-use crate::base::code::Foreign;
+use crate::base::code::Addr;
 use crate::base::feature::Ctx;
 
 /// The counting loop: call getc ; mov eax,[esi+18h] ; cmp eax,20h ; je ; cmp eax,9 ; jne exit ; inc edi ; jmp loop,
@@ -24,15 +24,15 @@ const ACCEPT: &str = "0F B7 46 38 66 85 C0 74 09 66 83 7E 2C 00 8B D0 75 12 0F B
 /// Its first two instructions (replaced: movzx eax,word [esi+38h] ; test ax,ax), the message push, and the error call.
 const ACCEPT_LEN: usize = 7;
 const MESSAGE_PUSH: usize = 0x38;
-const REPORT_CALL: usize = 0x3E;
+const REPORT_CALL: usize = 0x3D;
 
 /// The leading whitespace count of the line, saved at the loop's exit.
 static COUNT: AtomicU32 = AtomicU32::new(0);
-static LOOP_HEAD: Foreign<unsafe extern "C" fn()> = Foreign::new();
-static AFTER_LOOP: Foreign<unsafe extern "C" fn()> = Foreign::new();
+static LOOP_HEAD: Addr = Addr::new();
+static AFTER_LOOP: Addr = Addr::new();
 static MESSAGE: AtomicUsize = AtomicUsize::new(0);
-static REPORT: Foreign<unsafe extern "C" fn()> = Foreign::new();
-static BACK: Foreign<unsafe extern "C" fn()> = Foreign::new();
+static REPORT: Addr = Addr::new();
+static BACK: Addr = Addr::new();
 
 /// The counting loop's replaced tail (eax = the character, edi = the count), recording the character in [`BUF`] and
 /// the count in [`COUNT`] at the exit.
@@ -107,9 +107,9 @@ pub fn install(cx: &Ctx) -> Result<String> {
     LOOP_HEAD.set(l);
     AFTER_LOOP.set(l + EXIT);
     MESSAGE.store(message, Relaxed);
-    REPORT.set(core.rel32(c + REPORT_CALL)?);
+    REPORT.set(core.call_target(c + REPORT_CALL)?);
     BACK.set(c + ACCEPT_LEN);
     core.jump(l + TAIL, TAIL_LEN, count_loop as unsafe extern "C" fn())?;
     core.jump(c, ACCEPT_LEN, check_line as unsafe extern "C" fn())?;
-    Ok(format!("at +{:#x}, +{:#x}", l - core.base, c - core.base))
+    Ok(core.report(&[l, c]))
 }

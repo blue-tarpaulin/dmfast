@@ -11,6 +11,6 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let f = core.export(c"?AddUrlEncoded@StringEditor@@QAEXPBD@Z")?;
     // cmp bl,0Ah ; jne generic ; push 6 ; mov ecx,esi ; call IncBufLen
     let at = core.find_unique_in(f, SPAN, "80 FB 0A 75 ?? 6A 06 8B CE E8", "URL encoder newline test")?;
-    core.write_code(at + 3, &[0xEB])?;
-    Ok(format!("at +{:#x}", at - core.base))
+    core.always_jump(at + 3)?;
+    Ok(core.report(&[at]))
 }

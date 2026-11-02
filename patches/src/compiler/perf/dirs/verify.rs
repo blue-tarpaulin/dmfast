@@ -1,12 +1,11 @@
 //! `DMFAST_VERIFY=1`: each cache hit re-reads its directory and compares.
 
 use std::ffi::{CStr, c_char};
-use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
 use super::linux::{Entry, Stat, change_now, read_listing, stat};
-use crate::base::driver::verify;
+use crate::base::driver::{Counter, verify};
 
-pub(super) static MISMATCHES: AtomicU32 = AtomicU32::new(0);
+pub(super) static MISMATCHES: Counter = Counter::new();
 
 /// With verify on, re-read `path` (the cached directory) and count a mismatch if its entries differ while its stamp
 /// is still `st`'s. A directory the compiler changed after the stamp check isn't stale: the listing was current then.
@@ -19,7 +18,7 @@ pub(super) fn hit(path: *const c_char, listing: &[Entry], st: Option<Stat>) {
             && stat(path).map(|s| s.stamp) == st.map(|s| s.stamp)
     };
     if !change_now() || stale() {
-        MISMATCHES.fetch_add(1, Relaxed);
+        MISMATCHES.bump();
     }
 }
 

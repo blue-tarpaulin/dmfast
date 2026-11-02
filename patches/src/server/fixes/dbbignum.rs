@@ -32,5 +32,5 @@ fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let at = core.find_unique(TEST, "SQL number literal")?;
     core.write_code(at + 3, &MASKS)?;
-    Ok(format!("at +{:#x}", at - core.base))
+    Ok(core.report(&[at]))
 }

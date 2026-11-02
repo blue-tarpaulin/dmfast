@@ -2,8 +2,9 @@
 //! share the source frame's holder.
 
 use super::SPAN;
+use crate::base::code::Stub;
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// The frame loop: esi = new frame (`push 20h ; call new`) ; edi = source frame ; ebx = new holder (`push 20h ;
 /// call new ; call holder ctor ; mov [ebx+1Ch],1`) ; `mov [esi],ebx ; call init`, then the assignment: copy
@@ -37,23 +38,24 @@ const INIT: &str = "55 8B EC 51 0F B7 05 ?? ?? ?? ?? 53 0F B7 1D ?? ?? ?? ?? 56 
                     C6 47 10 00 5F 5E 5B 8B E5 5D C3";
 
 /// The rewritten range, keeping the code's registers and locals: edi = source frame, ebx and [ebp-1Ch] = the frame's
-/// holder, [ebp-4] = 1 (unwind state), then a short jump to the assignment and int3 padding.
-fn share() -> Vec<u8> {
-    let mut v = Vec::new();
-    v.extend([0x8B, 0x45, 0x08]); // mov eax,[ebp+8]
-    v.extend([0x8B, 0x00]); // mov eax,[eax]
-    v.extend([0x8B, 0x3C, 0xB8]); // mov edi,[eax+edi*4]
-    v.extend([0x8B, 0x1F]); // mov ebx,[edi]
-    v.extend([0xFF, 0x43, 0x1C]); // inc dword [ebx+1Ch]
-    v.extend([0x89, 0x5D, 0xE4]); // mov [ebp-1Ch],ebx
-    v.extend([0x89, 0x1E]); // mov [esi],ebx
-    v.extend([0xC6, 0x45, 0xFC, 0x01]); // mov byte [ebp-4],1
-    v.extend([0xC7, 0x46, 0x08, 0x00, 0x00, 0x00, 0x00]); // mov dword [esi+8],0
-    v.extend([0xC7, 0x46, 0x04, 0xFF, 0xFF, 0xFF, 0xFF]); // mov dword [esi+4],-1
-    v.extend([0xC6, 0x46, 0x10, 0x00]); // mov byte [esi+10h],0
-    v.extend([0xEB, (TO - FROM - v.len() - 2) as u8]); // jmp assignment
-    v.resize(TO - FROM, 0xCC);
-    v
+/// holder, [ebp-4] = 1 (unwind state), then a short jump to the assignment over NOP padding.
+fn share() -> Stub {
+    let mut s = Stub::new();
+    let assignment = s.label();
+    s.bytes(&[0x8B, 0x45, 0x08]) // mov eax,[ebp+8]
+        .bytes(&[0x8B, 0x00]) // mov eax,[eax]
+        .bytes(&[0x8B, 0x3C, 0xB8]) // mov edi,[eax+edi*4]
+        .bytes(&[0x8B, 0x1F]) // mov ebx,[edi]
+        .bytes(&[0xFF, 0x43, 0x1C]) // inc dword [ebx+1Ch]
+        .bytes(&[0x89, 0x5D, 0xE4]) // mov [ebp-1Ch],ebx
+        .bytes(&[0x89, 0x1E]) // mov [esi],ebx
+        .bytes(&[0xC6, 0x45, 0xFC, 0x01]) // mov byte [ebp-4],1
+        .bytes(&[0xC7, 0x46, 0x08, 0x00, 0x00, 0x00, 0x00]) // mov dword [esi+8],0
+        .bytes(&[0xC7, 0x46, 0x04, 0xFF, 0xFF, 0xFF, 0xFF]) // mov dword [esi+4],-1
+        .bytes(&[0xC6, 0x46, 0x10, 0x00]) // mov byte [esi+10h],0
+        .jmp8(assignment); // jmp assignment
+    s.bytes(&vec![0x90; TO - FROM - s.len()]).bind(assignment);
+    s
 }
 
 pub fn install(cx: &Ctx) -> Result<String> {
@@ -61,19 +63,15 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let s = core.find_unique(LOOP, "icon state copy")?;
     // It must be the loop of `DMGraphic::operator=` itself, not a lookalike elsewhere.
     let f = core.export(c"??4DMGraphic@@QAEAAU0@ABU0@@Z")?;
-    if !(f..f + SPAN).contains(&s) {
-        bail!("icon state copy: loop at +{:#x} is not in DMGraphic::operator=", s - core.base);
-    }
-    if !core.is_at(core.rel32(s + HOLDER_CALL + 1)?, HOLDER)? {
-        bail!("pixel holder ctor: not as expected");
-    }
-    if !core.is_at(core.rel32(s + INIT_CALL + 1)?, INIT)? {
-        bail!("frame init: not as expected");
-    }
-    if core.rel8(s + SAME_AT)? != s + SAME {
-        bail!("icon state copy: equal-holder branch not as expected");
-    }
+    ensure!(
+        (f..f + SPAN).contains(&s),
+        "icon state copy: loop at +{:#x} is not in DMGraphic::operator=",
+        s - core.base
+    );
+    core.follow_call(s + HOLDER_CALL, HOLDER, "pixel holder ctor")?;
+    core.follow_call(s + INIT_CALL, INIT, "frame init")?;
+    ensure!(core.rel8(s + SAME_AT)? == s + SAME, "icon state copy: equal-holder branch not as expected");
     core.untouched(&[(s + FROM, TO - FROM)])?;
-    core.write_code(s + FROM, &share())?;
-    Ok(format!("at +{:#x}", s - core.base))
+    core.write_stub(s + FROM, TO - FROM, &share())?;
+    Ok(core.report(&[s]))
 }

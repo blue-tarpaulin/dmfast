@@ -5,7 +5,7 @@ use std::arch::naked_asm;
 
 use super::{NULL, NUMBER};
 use crate::base::Result;
-use crate::base::code::{Foreign, hx};
+use crate::base::code::{Addr, hx};
 use crate::base::feature::Ctx;
 
 /// The null case: `push ecx ; mov dword [esp],0 ; jmp finish`, then the next case's start.
@@ -24,8 +24,8 @@ const RIGHT_TYPE: i32 = -0x220;
 const RIGHT_VALUE: i32 = -0x250;
 
 /// The "Division by zero" error and the null case's original continuation.
-static ERROR: Foreign<unsafe extern "C" fn()> = Foreign::new();
-static FINISH: Foreign<unsafe extern "C" fn()> = Foreign::new();
+static ERROR: Addr = Addr::new();
+static FINISH: Addr = Addr::new();
 static ZERO: f32 = 0.0;
 
 /// The null case: a number right operand goes through the number case's zero check, null is a division by zero,
@@ -77,5 +77,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     ERROR.set(core.rel32(num + ERROR_AT + 2)?);
     FINISH.set(core.rel32(null + FINISH_AT + 1)?);
     core.write_code(table, &(null_div as unsafe extern "C" fn() as usize as u32).to_le_bytes())?;
-    Ok(format!("at +{:#x}", table - core.base))
+    Ok(core.report(&[table]))
 }

@@ -4,12 +4,12 @@ use std::arch::naked_asm;
 
 use super::{lookup, record};
 use crate::base::Result;
-use crate::base::code::Foreign;
+use crate::base::code::Addr;
 use crate::base::feature::Ctx;
 
 /// BYOND's lookup-or-insert (its moved entry, then the rest): thiscall, ecx = tree, holder and `*inserted` on the
 /// stack.
-static ORIGINAL: Foreign<unsafe extern "thiscall" fn(usize, usize, *mut u8) -> usize> = Foreign::new();
+static ORIGINAL: Addr = Addr::new();
 
 /// The lookup-or-insert: push ebp ; mov ebp,esp ; sub esp,0Ch ; push ebx ; mov eax,ecx ; xor ebx,ebx ; push esi ;
 /// push edi ; mov [ebp-4],eax ; mov edi,[eax]
@@ -62,5 +62,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(TREE, "proto tree")?;
     ORIGINAL.set(core.hook(f, ENTRY, tree_stub as unsafe extern "C" fn())?);
-    Ok(format!("at +{:#x}", f - core.base))
+    Ok(core.report(&[f]))
 }

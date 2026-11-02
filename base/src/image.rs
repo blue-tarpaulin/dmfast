@@ -11,10 +11,10 @@
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
-use crate::code::{CodeAddr, branch, trampoline};
+use crate::code::{CodeAddr, Cond, Stub, branch, trampoline};
 use crate::ledger::{self, rely};
 use crate::scan::{self, Hay};
-use crate::{Result, bail};
+use crate::{Result, bail, ensure};
 
 /// Install is over ([`close`]).
 static CLOSED: AtomicBool = AtomicBool::new(false);
@@ -95,6 +95,11 @@ impl Image {
     /// The dword at `addr` as it is now, with earlier features' hooks, not relied on.
     pub fn live_u32(&self, addr: usize) -> Result<u32> {
         Ok(u32::from_le_bytes(*self.live_bytes(addr, 4)?.first_chunk().ok_or("short read")?))
+    }
+
+    /// The pointer at `addr` as it is now (an import slot's value, perhaps another feature's hook), not relied on.
+    pub fn live_ptr(&self, addr: usize) -> Result<usize> {
+        self.live_u32(addr).map(|v| v as usize)
     }
 
     /// `addr..addr+len` as it is now, with earlier features' hooks, not relied on: headers, tables, hooks.
@@ -181,6 +186,50 @@ impl Image {
         Ok((field + 1).wrapping_add(b as i8 as isize as usize))
     }
 
+    /// Target of the `call rel32` at `at`; `Err` if `at` isn't one (`E8`).
+    pub fn call_target(&self, at: usize) -> Result<usize> {
+        ensure!(self.u8_at(at)? == 0xE8, "{at:#x}: not a call");
+        self.rel32(at + 1)
+    }
+
+    /// The jump at `at`: `jmp` (`EB`, `E9`) or `j<cc>` (`7x`, `0F 8x`); `Err` if `at` isn't one.
+    pub fn branch_at(&self, at: usize) -> Result<Branch> {
+        let op = self.u8_at(at)?;
+        let (cond, target, next) = match op {
+            0xEB => (None, self.rel8(at + 1)?, at + 2),
+            0xE9 => (None, self.rel32(at + 1)?, at + 5),
+            0x70..=0x7F => (Some(Cond::from_cc(op)), self.rel8(at + 1)?, at + 2),
+            0x0F => {
+                let op2 = self.u8_at(at + 1)?;
+                ensure!(op2 & 0xF0 == 0x80, "{at:#x}: not a jump");
+                (Some(Cond::from_cc(op2)), self.rel32(at + 2)?, at + 6)
+            }
+            _ => bail!("{at:#x}: not a jump"),
+        };
+        Ok(Branch { target, next, cond })
+    }
+
+    /// The `j<cond>` at `at` ([`Image::branch_at`]); `Err` if it's another instruction or condition.
+    pub fn jcc_at(&self, at: usize, cond: Cond) -> Result<Branch> {
+        let b = self.branch_at(at)?;
+        ensure!(b.cond == Some(cond), "{at:#x}: not a {cond:?} jump");
+        Ok(b)
+    }
+
+    /// `Ok` if the IDA pattern matches at `addr` (relied on), else `Err("{what}: not as expected")`. For exact bytes
+    /// with your own message (a string, a prologue), [`Image::expect`].
+    pub fn require(&self, addr: usize, ida: &str, what: &str) -> Result<()> {
+        ensure!(self.is_at(addr, ida)?, "{what}: not as expected");
+        Ok(())
+    }
+
+    /// The function the `call` at `at` calls, which must match `ida` ([`Image::call_target`], [`Image::require`]).
+    pub fn follow_call(&self, at: usize, ida: &str, what: &str) -> Result<usize> {
+        let f = self.call_target(at)?;
+        self.require(f, ida, what)?;
+        Ok(f)
+    }
+
     /// (address, size) of the executable sections or segments.
     pub fn code_ranges(&self) -> Vec<(usize, usize)> {
         self.parts.iter().filter(|p| p.2).map(|&(a, n, _)| (a, n)).collect()
@@ -251,6 +300,17 @@ impl Image {
         let pat = scan::parse(ida)?;
         let hits = scan::find_pattern(&self.hays(Some(true))?, &pat);
         let at = hits.into_iter().filter(|&a| keep(a)).collect::<Hits>().unique(what)?;
+        self.rely(at, pat.len())?;
+        Ok(at)
+    }
+
+    /// The first match of [`Image::probe_all`] that `keep` accepts, relied on as in [`Image::probe_unique`] (`Err`
+    /// naming `what` if none).
+    pub fn probe_first(&self, ida: &str, what: &str, keep: impl Fn(usize) -> bool) -> Result<usize> {
+        let pat = scan::parse(ida)?;
+        let Some(at) = scan::find_pattern(&self.hays(Some(true))?, &pat).into_iter().find(|&a| keep(a)) else {
+            bail!("{what}: not found");
+        };
         self.rely(at, pat.len())?;
         Ok(at)
     }
@@ -344,6 +404,30 @@ impl Image {
         self.write_code(field, &(target.code_addr().wrapping_sub(field + 4) as u32).to_le_bytes())
     }
 
+    /// The conditional jump at `at` always jumps: `7x` becomes `EB`, `0F 8x` becomes `90 E9` (the same target). `Err`
+    /// if `at` isn't a conditional jump.
+    pub fn always_jump(&self, at: usize) -> Result<()> {
+        let b = self.branch_at(at)?;
+        ensure!(b.cond.is_some(), "{at:#x}: not a conditional jump");
+        self.write_code(at, if b.next - at == 2 { &[0xEB] } else { &[0x90, 0xE9] })
+    }
+
+    /// The conditional jump at `at` never jumps: it becomes NOPs. `Err` if `at` isn't a conditional jump.
+    pub fn never_jump(&self, at: usize) -> Result<()> {
+        let b = self.branch_at(at)?;
+        ensure!(b.cond.is_some(), "{at:#x}: not a conditional jump");
+        self.write_code(at, &vec![0x90; b.next - at])
+    }
+
+    /// [`Image::write_code`] of `stub` resolved to run at `site` ([`Stub::at`]), NOP-padded to `len`; `Err` if it's
+    /// longer. When it replaces more than one instruction, check [`Image::untouched`] first.
+    pub fn write_stub(&self, site: usize, len: usize, stub: &Stub) -> Result<()> {
+        let mut code = stub.at(site)?;
+        ensure!(code.len() <= len, "stub at {site:#x}: {} bytes, room for {len}", code.len());
+        code.resize(len, 0x90);
+        self.write_code(site, &code)
+    }
+
     /// Hook the function at `f` at its entry: its first `len` (>= 5) bytes, whole position-independent instructions,
     /// become `jmp hook`, after [`Image::untouched`] checks that nothing else lands inside them. Returns the original
     /// function: a copy of those bytes, then a jump to the rest ([`trampoline`]). The hook is entered with the
@@ -374,6 +458,12 @@ impl Image {
     /// [`Image::write_data`] over another feature's write, as [`Image::wrap_code`].
     pub fn wrap_data(&self, addr: usize, data: &[u8]) -> Result<()> {
         self.record(false, addr, data, true)
+    }
+
+    /// `"at +0x1a2b, +0x3c4d"`: `sites` as offsets from the image's base, for an install's report line.
+    pub fn report(&self, sites: &[usize]) -> String {
+        let offsets: Vec<String> = sites.iter().map(|&s| format!("+{:#x}", s - self.base)).collect();
+        format!("at {}", offsets.join(", "))
     }
 
     /// A write inside one executable (`exec`) or non-executable part.
@@ -436,6 +526,11 @@ impl Hits {
         self.0.first().copied()
     }
 
+    /// The first match; `Err("{what}: not found")` if none.
+    pub fn first_or(&self, what: &str) -> Result<usize> {
+        self.first().ok_or_else(|| format!("{what}: not found").into())
+    }
+
     pub fn iter(&self) -> std::slice::Iter<'_, usize> {
         self.0.iter()
     }
@@ -443,6 +538,15 @@ impl Hits {
     pub fn as_slice(&self) -> &[usize] {
         &self.0
     }
+}
+
+/// A jump read from code ([`Image::branch_at`]): where it goes, the instruction after it, and its condition (`None`:
+/// a `jmp`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Branch {
+    pub target: usize,
+    pub next: usize,
+    pub cond: Option<Cond>,
 }
 
 impl IntoIterator for Hits {

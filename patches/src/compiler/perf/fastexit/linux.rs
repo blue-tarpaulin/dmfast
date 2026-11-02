@@ -3,13 +3,14 @@
 use std::arch::naked_asm;
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
+use crate::base::Result;
+use crate::base::code::Addr;
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
 
 /// Return address of main's call to the compiler destructor.
 static MAIN_RET: AtomicUsize = AtomicUsize::new(0);
 /// `DungBuilder::~DungBuilder`, where the compiler destructor ends.
-static BUILDER_DTOR: AtomicUsize = AtomicUsize::new(0);
+static BUILDER_DTOR: Addr = Addr::new();
 
 /// Runs instead of `DungBuilder::~DungBuilder` when main destroys the compiler after the summary.
 /// The rest of main's teardown writes no files (the `.rsc` is only unlocked and closed): flush stdio, stats, exit.
@@ -64,17 +65,15 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let mut rest = m + 0x25;
     exe.expect(rest, &[0x83, 0xC4, 0x10], "main: unexpected code after the compiler destructor")?;
     rest += 3;
-    match exe.u8_at(rest)? {
-        0xE9 => rest = exe.rel32(rest + 1)?,
-        0xEB => rest = exe.rel8(rest + 1)?,
-        _ => {}
+    if let Ok(b) = exe.branch_at(rest)
+        && b.cond.is_none()
+    {
+        rest = b.target;
     }
     let epilogue =
         "83 EC 0C FF B5 ?? ?? ?? ?? E8 ?? ?? ?? ?? 58 FF B5 ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 C4 10 8D 65 F0 89 D8";
-    if !exe.is_at(rest, epilogue)? {
-        bail!("main does not return the exit code from ebx");
-    }
-    let dtor = exe.rel32(m + 5)?;
+    exe.require(rest, epilogue, "main's return of the exit code from ebx")?;
+    let dtor = exe.call_target(m + 4)?;
     // The destructor's tail, ending in the jmp. A common tail: matches outside the destructor are other functions'
     let mut jmps = Vec::new();
     for tail in ["89 75 08 8D 65 F8 5B 5E 5D E9", "89 74 24 20 83 C4 14 5B 5E E9"] {
@@ -87,7 +86,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     // The deleting destructor's copy (same tail) can follow within the window: take the first.
     let jmp = jmps.into_iter().min().ok_or("compiler destructor tail not found")?;
     MAIN_RET.store(m + 9, Relaxed);
-    BUILDER_DTOR.store(exe.rel32(jmp + 1)?, Relaxed);
+    BUILDER_DTOR.set(exe.branch_at(jmp)?.target);
     exe.jump(jmp, 5, dtor_tail as unsafe extern "C" fn())?;
     Ok("after summary".into())
 }

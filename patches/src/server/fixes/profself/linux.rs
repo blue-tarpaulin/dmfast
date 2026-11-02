@@ -4,7 +4,7 @@
 use super::{MESSAGE, is_message, move_test};
 use crate::base::code::{hx, trampoline};
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 /// The recursion test: sub word [counter],1 ; mov eax,[flags] ; jne ok ; test al,2 ; je error ;
 /// ok: mov esi,[current frame] ; test eax,10000h ; jne block ; join: mov eax,[ebp+x]
@@ -56,38 +56,30 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let error = core.rel32(at + ERROR_JE)?;
     let block = core.rel32(at + BLOCK_JNE)?;
     let join = at + JOIN;
-    let Some(tail) = core.find_in(error, 0x80, ERROR_TAIL)?.first() else {
-        bail!("recursion test: the error path doesn't raise \"{}\"", String::from_utf8_lossy(MESSAGE));
-    };
-    if !is_message(core, core.ptr_at(tail + 4)?)? {
-        bail!("recursion test: the error path doesn't raise \"{}\"", String::from_utf8_lossy(MESSAGE));
-    }
-    if !core.is_at(block, BLOCK)? {
-        bail!("profiler entry block: not as expected");
-    }
-    if !EXITS.iter().all(|&rel| core.rel32(block + rel).is_ok_and(|t| t == join)) {
-        bail!("profiler entry block: does not return to the join");
-    }
+    let raises = format!("recursion test: the error path raising \"{}\"", String::from_utf8_lossy(MESSAGE));
+    let tail = core.find_in(error, 0x80, ERROR_TAIL)?.first_or(&raises)?;
+    ensure!(
+        is_message(core, core.ptr_at(tail + 4)?)?,
+        "recursion test: the error path doesn't raise \"{}\"",
+        String::from_utf8_lossy(MESSAGE)
+    );
+    core.require(block, BLOCK, "profiler entry block")?;
+    ensure!(
+        EXITS.iter().all(|&rel| core.rel32(block + rel).is_ok_and(|t| t == join)),
+        "profiler entry block: does not return to the join"
+    );
     let clock = core.rel32(block + CLOCK)?;
     let modrm = core.u8_at(block + SELF_MODRM)?;
-    if modrm & 0xC7 != 0x86 {
-        bail!("profiler entry block: self-time clock store not as expected");
-    }
+    ensure!(modrm & 0xC7 == 0x86, "profiler entry block: self-time clock store not as expected");
     let self_clock = core.u32_at(block + SELF_DISP)?;
 
     let setup = core.find_unique(SETUP, "frame setup profiler clocks")?;
-    if core.rel32(setup + SETUP_CLOCK)? != clock {
-        bail!("frame setup: not the profiler's clock");
-    }
+    ensure!(core.rel32(setup + SETUP_CLOCK)? == clock, "frame setup: not the profiler's clock");
     // Reached by `test byte [flags+2],1 (profiling) ; jne setup`: the first such test is relied on, the flag's other
     // tests are candidates.
     let flags = core.u32_at(at + FLAGS)?;
     let test = format!("F6 05 {} 01 0F 85", hx(flags as usize + 2));
-    let reaches = |t: &usize| core.rel32(t + 9).is_ok_and(|s| s == setup);
-    let Some(t) = core.probe_all(&test)?.iter().copied().find(reaches) else {
-        bail!("frame setup: not reached by the profiling test");
-    };
-    core.rely(t, test.split_whitespace().count())?;
+    core.probe_first(&test, "frame setup's profiling test", |t| core.rel32(t + 9).is_ok_and(|s| s == setup))?;
 
     // Frame setup also starts the self-time clock: movq [ebx+total],xmm0 (moved) ; movq [ebx+self],xmm0 ; jmp done
     let store = setup + STORE;

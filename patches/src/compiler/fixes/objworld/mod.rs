@@ -8,7 +8,7 @@
 use crate::base::Result;
 use crate::base::code::{Cond, Stub};
 use crate::base::feature::{Feature, Hosts, Tier, install};
-use crate::base::image::Image;
+use crate::base::image::{Branch, Image};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -31,12 +31,12 @@ const EDX: u8 = 2;
 const EDI: u8 = 7;
 
 /// A `cmp dword [node],13h` at `at`, replaced up to `back`: `copy` bytes after it (they don't touch the flags) go
-/// into the stub as they are, then the replaced conditional jump, if any (its condition and target).
+/// into the stub as they are, then the replaced conditional jump, if any ([`Image::jcc_at`]).
 struct Site {
     at: usize,
     node: u8,
     copy: usize,
-    jcc: Option<(Cond, usize)>,
+    jcc: Option<Branch>,
     back: usize,
 }
 
@@ -50,19 +50,22 @@ fn parent_offset(core: &Image, builder: &str, parent: usize, recurse: usize) -> 
 /// Point `site` at a stub: `cmp dword [node],13h`, then "and the node's parent is the root" (ZF set for a world node,
 /// or a node with no parent, as stock), the copied bytes, the conditional jump, and a jump back. ecx is kept.
 fn redirect(core: &Image, site: Site, parent: u8) -> Result<()> {
-    let Site { at, node, copy, jcc: cond, back } = site;
+    let Site { at, node, copy, jcc, back } = site;
     let copied = core.bytes(at + 3, copy)?.to_vec();
     let mut s = Stub::new();
+    let (done, pop) = (s.label(), s.label());
     s.bytes(&[0x83, 0x38 | node, 0x13]) // cmp dword [node],13h
-        .bytes(&[0x75, 0x0D]) // jne done
+        .jcc8(Cond::NotEqual, done) // jne done
         .bytes(&[0x51]) // push ecx
         .bytes(&[0x8B, 0x48 | node, parent]) // mov ecx,[node+parent]
         .bytes(&[0x85, 0xC9]) // test ecx,ecx
-        .bytes(&[0x74, 0x04]) // je pop
+        .jcc8(Cond::Equal, pop) // je pop
         .bytes(&[0x83, 0x79, parent, 0x00]) // cmp dword [ecx+parent],0
+        .bind(pop)
         .bytes(&[0x59]) // pop: pop ecx
+        .bind(done)
         .bytes(&copied); // done:
-    if let Some((cc, target)) = cond {
+    if let Some(Branch { cond: Some(cc), target, .. }) = jcc {
         s.jcc(cc, target);
     }
     let stub = s.jmp(back).exec()?;

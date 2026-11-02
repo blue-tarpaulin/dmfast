@@ -9,7 +9,7 @@
 
 use std::ffi::{CStr, c_void};
 
-use crate::base::code::{Foreign, live_u32};
+use crate::base::code::{self, Foreign, live_u32};
 use crate::base::feature::{Feature, Hosts, Tier, install};
 use crate::base::sync::Installed;
 
@@ -65,7 +65,7 @@ unsafe fn peek(f: &Found, parent: usize) -> i32 {
         let reader = live_u32(live_u32(parent) as usize + 4 * f.slot) as usize;
         if reader == f.text_reader {
             let text = live_u32(parent + TEXT) as usize;
-            return if text == 0 { -1 } else { i32::from(*((text + live_u32(parent + POS) as usize) as *const u8)) };
+            return if text == 0 { -1 } else { i32::from(code::read::<u8>(text + live_u32(parent + POS) as usize)) };
         }
         if reader != f.file_reader {
             return -1;
@@ -87,7 +87,7 @@ unsafe extern "C" fn drop_space(stream: usize) -> u32 {
     let f = FOUND.get();
     // SAFETY: a live text stream (caller), its parent, and its NUL-terminated text.
     unsafe {
-        if *((stream + f.kind) as *const u8) == 0 {
+        if code::read::<u8>(stream + f.kind) == 0 {
             return 0;
         }
         let parent = live_u32(stream + f.parent) as usize;

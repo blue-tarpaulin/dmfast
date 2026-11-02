@@ -5,9 +5,9 @@ use std::arch::naked_asm;
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 use super::{BUF, CAP, check};
-use crate::base::code::{Foreign, Stub};
+use crate::base::Result;
+use crate::base::code::{Addr, Cond, Stub};
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
 
 /// The count's increments: mov eax,[ebx+24h] ; add ebp,1 ; test eax,eax (replaced), then the first character's test
 /// or the loop's.
@@ -22,11 +22,11 @@ const ACCEPT_LEN: usize = 8;
 /// The error report: sub esp,8 ; push message ; push ebx ; call report ; mov edx,[ebx+18h] ; add esp,10h ; cmp edx,-1
 const REPORT: &str = "83 EC 08 68 ?? ?? ?? ?? 53 E8 ?? ?? ?? ?? 8B 53 18 83 C4 10 83 FA FF";
 const MESSAGE_PUSH: usize = 4;
-const REPORT_CALL: usize = 10;
+const REPORT_CALL: usize = 9;
 
 static MESSAGE: AtomicUsize = AtomicUsize::new(0);
-static REPORT_FN: Foreign<unsafe extern "C" fn()> = Foreign::new();
-static BACK: Foreign<unsafe extern "C" fn()> = Foreign::new();
+static REPORT_FN: Addr = Addr::new();
+static BACK: Addr = Addr::new();
 
 /// Where a line is accepted as code (ebx = the lexer, ebp = the count): raise the error if [`check`] rejects the line,
 /// then the replaced instructions. The calls are 16-byte aligned whatever the entry alignment.
@@ -73,24 +73,26 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let a = core.find_unique(FIRST, "indentation count (first)")?;
     let b = core.find_unique(NEXT, "indentation count (loop)")?;
     let c = core.find_unique(ACCEPT, "indentation check")? + ACCEPT_AT;
-    let Some(e) = core.find_all(REPORT)?.first() else { bail!("indentation error report not found") };
+    let e = core.find_all(REPORT)?.first_or("indentation error report")?;
     let message = core.ptr_at(e + MESSAGE_PUSH)?;
     core.expect(message, b"inconsistent indentation\0", "unexpected indentation message")?;
     core.untouched(&[(a, COUNT_LEN), (b, COUNT_LEN), (c, ACCEPT_LEN)])?;
     // Each increment: cmp ebp,CAP ; jae tail ; mov [ebp+BUF],dl ; tail: the replaced instructions ; jmp back
     for site in [a, b] {
-        let stub = Stub::new()
-            .bytes(&[0x83, 0xFD, CAP as u8]) // cmp ebp,CAP
-            .bytes(&[0x73, 0x06]) // jae tail
-            .bytes(&[&[0x88, 0x95][..], &(BUF.as_ptr() as usize as u32).to_le_bytes()].concat()) // mov [ebp+BUF],dl
+        let mut s = Stub::new();
+        let tail = s.label();
+        s.bytes(&[0x83, 0xFD, CAP as u8]) // cmp ebp,CAP
+            .jcc8(Cond::AboveOrEqual, tail) // jae tail
+            .bytes_u32(&[0x88, 0x95], BUF.as_ptr() as usize as u32, &[]) // mov [ebp+BUF],dl
+            .bind(tail)
             .bytes(core.bytes(site, COUNT_LEN)?) // tail: mov eax,[ebx+24h] ; add ebp,1 ; test eax,eax
-            .jmp(site + COUNT_LEN)
-            .exec()?;
+            .jmp(site + COUNT_LEN);
+        let stub = s.exec()?;
         core.jump(site, COUNT_LEN, stub)?;
     }
     MESSAGE.store(message, Relaxed);
-    REPORT_FN.set(core.rel32(e + REPORT_CALL)?);
+    REPORT_FN.set(core.call_target(e + REPORT_CALL)?);
     BACK.set(c + ACCEPT_LEN);
     core.jump(c, ACCEPT_LEN, check_line as unsafe extern "C" fn())?;
-    Ok(format!("at +{:#x}, +{:#x}, +{:#x}", a - core.base, b - core.base, c - core.base))
+    Ok(core.report(&[a, b, c]))
 }

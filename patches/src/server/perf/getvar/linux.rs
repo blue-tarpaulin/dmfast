@@ -4,7 +4,7 @@
 use std::arch::naked_asm;
 
 use crate::base::Result;
-use crate::base::code::{Foreign, branch};
+use crate::base::code::{Addr, Stub};
 use crate::base::feature::Ctx;
 
 const GETVAR: &str = "55 89 E5 57 56 53 83 EC 5C F3 0F 7E 4D 0C 8B 75 08 8B 5D 14 66 0F 6F C1 66 0F 7E CA 66 0F 73 D0 20 \
@@ -38,7 +38,7 @@ const VALUE: usize = 0x5C;
 const COPY: usize = 0x08;
 
 /// The var read's call after the replaced instructions.
-static BACK: Foreign<unsafe extern "C" fn()> = Foreign::new();
+static BACK: Addr = Addr::new();
 
 /// The var read's `movq xmm0,[esp+5Ch] ; mov ebx,[esp+58h] ; movaps [esp+8],xmm0 ; push [esp+0Ch] ; push [esp+0Ch]`
 /// with dword and word loads (SSE2 has no dword insert): xmm0 = Value (lo, hi, 0, 0), ebx = out, the 16-byte copy at
@@ -79,15 +79,11 @@ pub fn install(cx: &Ctx) -> Result<String> {
         core.rely(p, push.len())?;
     }
 
-    // jmp var_read, then int3 up to the call.
-    let mut r = branch(0xE9, read + READ_AT, var_read as unsafe extern "C" fn(), 5);
-    r.resize(READ_BACK - READ_AT, 0xCC);
-    let sites = [(getvar + 9, &GETVAR_NEW[..]), (read + READ_AT, &r[..])];
-    let ranges = sites.map(|(at, code)| (at, code.len()));
-    core.untouched(&ranges)?;
+    let sites = [(getvar + 9, GETVAR_NEW.len()), (read + READ_AT, READ_BACK - READ_AT)];
+    core.untouched(&sites)?;
     BACK.set(read + READ_BACK);
-    for (at, code) in sites {
-        core.write_code(at, code)?;
-    }
+    core.write_code(getvar + 9, &GETVAR_NEW)?;
+    // jmp var_read, then NOPs up to the call.
+    core.write_stub(read + READ_AT, READ_BACK - READ_AT, Stub::new().jmp(var_read as unsafe extern "C" fn()))?;
     Ok(format!("GetVariable +{:#x}, user var read +{:#x}", getvar - core.base, read - core.base))
 }

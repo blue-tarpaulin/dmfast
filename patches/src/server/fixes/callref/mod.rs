@@ -5,7 +5,7 @@
 //! the fix releases the args and nulls their stack slots.
 
 use crate::base::Result;
-use crate::base::code::{CodeAddr, Stub, live_u32};
+use crate::base::code::{self, CodeAddr, Stub, live_u32};
 use crate::base::feature::{Feature, Hosts, Tier, install};
 use crate::base::image::Image;
 
@@ -32,7 +32,7 @@ type Slot = [u32; 2];
 /// `state` is the interpreter state and `base` and `pos` its fields' offsets.
 unsafe fn args(state: usize, base: usize, pos: usize, count: u32) -> impl Iterator<Item = *mut Slot> {
     // SAFETY: the state's fields (caller).
-    let (stack, callee) = unsafe { (live_u32(state + base) as usize, ((state + pos) as *const u16).read_unaligned()) };
+    let (stack, callee) = unsafe { (live_u32(state + base) as usize, code::read::<u16>(state + pos)) };
     let first = stack + 8 * usize::from(callee) + 8;
     (0..count as usize).map(move |i| (first + 8 * i) as *mut Slot)
 }

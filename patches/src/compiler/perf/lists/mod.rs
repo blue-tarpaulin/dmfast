@@ -11,12 +11,11 @@
 //! +10h/+14h tree links (0).
 
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
-use rustc_hash::{FxBuildHasher, FxHashMap};
-
-use crate::base::code::{Foreign, MallocFn, ReallocFn, live_u32};
+use crate::base::code::{Foreign, MallocFn, ReallocFn, live_u32, write};
+use crate::base::driver::Counter;
 use crate::base::feature::{Feature, Hosts, install};
+use crate::base::hash::{self, Map};
 use crate::base::sync::{Installed, lock};
 
 #[cfg(target_os = "linux")]
@@ -41,10 +40,10 @@ struct Found {
 
 static FOUND: Installed<Found> = Installed::new();
 /// Contents to id.
-static INDEX: Mutex<FxHashMap<Box<[u32]>, u32>> = Mutex::new(FxHashMap::with_hasher(FxBuildHasher));
-static HITS: AtomicU32 = AtomicU32::new(0);
-static INSERTS: AtomicU32 = AtomicU32::new(0);
-static STALE: AtomicU32 = AtomicU32::new(0);
+static INDEX: Mutex<Map<Box<[u32]>, u32>> = Mutex::new(hash::map());
+static HITS: Counter = Counter::new();
+static INSERTS: Counter = Counter::new();
+static STALE: Counter = Counter::new();
 
 /// The id BYOND never hands out; also what the insert returns when the array can't grow.
 const RESERVED: u32 = 0xFFFF;
@@ -62,13 +61,6 @@ unsafe fn contents<'a>(list: usize) -> &'a [u32] {
         }
         std::slice::from_raw_parts(live_u32(list) as *const u32, len)
     }
-}
-
-/// # Safety
-/// `addr` is a writable dword.
-unsafe fn put(addr: usize, v: u32) {
-    // SAFETY: writable (caller).
-    unsafe { (addr as *mut u32).write(v) }
 }
 
 /// Whether `id` still names an entry with contents `key`.
@@ -98,34 +90,34 @@ unsafe fn insert(f: &Found, key: &[u32]) -> u32 {
         if !key.is_empty() {
             std::ptr::copy_nonoverlapping(key.as_ptr(), data as *mut u32, key.len());
         }
-        put(e, data as u32);
-        put(e + 4, key.len() as u32);
-        put(e + 8, key.len() as u32);
-        put(e + 0x10, 0);
-        put(e + 0x14, 0);
+        write(e, data as u32);
+        write(e + 4, key.len() as u32);
+        write(e + 8, key.len() as u32);
+        write(e + 0x10, 0u32);
+        write(e + 0x14, 0u32);
         let mut count = live_u32(f.count);
         loop {
-            put(e + 0xC, count);
+            write(e + 0xC, count);
             let mut cap = live_u32(f.capacity);
             if cap <= count {
                 cap += (count >> 4) + 0x10;
-                put(f.capacity, cap);
+                write(f.capacity, cap);
                 let a = f.realloc.get()(live_u32(f.array) as usize as *mut _, cap as usize * 4) as usize;
-                put(f.array, a as u32);
+                write(f.array, a as u32);
                 if a == 0 {
                     return RESERVED;
                 }
             }
-            put(live_u32(f.array) as usize + 4 * count as usize, e as u32);
+            write(live_u32(f.array) as usize + 4 * count as usize, e as u32);
             count += 1;
             if count != RESERVED {
                 break;
             }
             // Id 0xFFFF is reserved: BYOND clears slot 0xFFFE again and stores the entry once more.
-            put(f.count, count);
-            put(live_u32(f.array) as usize + 4 * (RESERVED - 1) as usize, 0);
+            write(f.count, count);
+            write(live_u32(f.array) as usize + 4 * (RESERVED - 1) as usize, 0u32);
         }
-        put(f.count, count);
+        write(f.count, count);
         count
     }
 }
@@ -142,12 +134,12 @@ unsafe extern "C" fn intern(list: usize) -> u32 {
         let key = contents(list);
         if let Some(&id) = index.get(key) {
             if valid(f, key, id) {
-                HITS.fetch_add(1, Relaxed);
+                HITS.bump();
                 return id;
             }
-            STALE.fetch_add(1, Relaxed);
+            STALE.bump();
         }
-        INSERTS.fetch_add(1, Relaxed);
+        INSERTS.bump();
         let id = insert(f, key);
         if id != RESERVED {
             index.insert(key.into(), id);
@@ -157,11 +149,5 @@ unsafe extern "C" fn intern(list: usize) -> u32 {
 }
 
 fn print_stats() {
-    eprintln!(
-        "dmfast: list intern hits={} inserts={} stale={} entries={}",
-        HITS.load(Relaxed),
-        INSERTS.load(Relaxed),
-        STALE.load(Relaxed),
-        lock(&INDEX).len()
-    );
+    eprintln!("dmfast: list intern hits={} inserts={} stale={} entries={}", HITS, INSERTS, STALE, lock(&INDEX).len());
 }

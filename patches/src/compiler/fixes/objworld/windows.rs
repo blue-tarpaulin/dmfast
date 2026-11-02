@@ -29,10 +29,10 @@ pub fn install(cx: &Ctx) -> Result<String> {
     // jne skip, re-encoded.
     redirect(
         core,
-        Site { at: p, node: EAX, copy: 0, jcc: Some((Cond::NotEqual, core.rel8(p + 4)?)), back: p + 5 },
+        Site { at: p, node: EAX, copy: 0, jcc: Some(core.jcc_at(p + 3, Cond::NotEqual)?), back: p + 5 },
         parent,
     )?;
     // mov ecx,[ebp-9Ch] copied; the jne after it stays.
     redirect(core, Site { at: q, node: EAX, copy: 6, jcc: None, back: q + 9 }, parent)?;
-    Ok(format!("at +{:#x}, +{:#x}", p - core.base, q - core.base))
+    Ok(core.report(&[p, q]))
 }

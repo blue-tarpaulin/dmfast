@@ -20,7 +20,7 @@ type SigG = unsafe extern "C" fn(*mut u8, *const u8, i32, f64) -> i32;
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let call = core.find_unique(HANDLER, "num2text two-argument %g call")? + CALL;
-    SPRINTF.set(core.rel32(call + 1)?);
+    SPRINTF.set(core.call_target(call)?);
     core.call(call, 5, sig_g as SigG)?;
-    Ok(format!("at +{:#x}", call - core.base))
+    Ok(core.report(&[call]))
 }

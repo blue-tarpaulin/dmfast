@@ -6,7 +6,7 @@ use super::{Key, next_is_null};
 use crate::base::code::Foreign;
 use crate::base::feature::Ctx;
 use crate::base::sync::Installed;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 type Insert = unsafe extern "thiscall" fn(usize, *const Key) -> *mut c_void;
 type Method = unsafe extern "thiscall" fn(*mut Key);
@@ -80,24 +80,20 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let branch_a = core.find_unique(BRANCH, "rsc id 0xFFFF branch")?;
     let b = core.find_unique(VARIANT, "rsc id variant insert")?;
     let branch_b = core.find_unique(VARIANT_BRANCH, "rsc id variant 0xFFFF branch")?;
-    let insert_fn = core.rel32(a + CALL + 1)?;
-    if core.rel32(b + CALL + 1)? != insert_fn {
-        bail!("the two get-or-add functions insert with different routines");
-    }
+    let insert_fn = core.call_target(a + CALL)?;
+    ensure!(core.call_target(b + CALL)? == insert_fn, "the two get-or-add functions insert with different routines");
     let inserts = INSERTS.map(|o| branch_a + o).into_iter().chain(VARIANT_INSERTS.map(|o| branch_b + o));
     for field in inserts {
-        if core.rel32(field)? != insert_fn {
-            bail!("a 0xFFFF branch inserts with another routine");
-        }
+        ensure!(core.rel32(field)? == insert_fn, "a 0xFFFF branch inserts with another routine");
     }
     let (ctor, vtable, dtor) =
         (core.rel32(branch_a + CTOR)?, core.u32_at(branch_a + VTABLE)?, core.rel32(branch_a + DTOR)?);
-    if core.rel32(branch_b + CTOR)? != ctor
-        || core.u32_at(branch_b + VTABLE)? != vtable
-        || core.rel32(branch_b + DTOR)? != dtor
-    {
-        bail!("the two 0xFFFF branches build different sentinel keys");
-    }
+    ensure!(
+        core.rel32(branch_b + CTOR)? == ctor
+            && core.u32_at(branch_b + VTABLE)? == vtable
+            && core.rel32(branch_b + DTOR)? == dtor,
+        "the two 0xFFFF branches build different sentinel keys"
+    );
     let count = core.u8_at(core.find_unique(ALLOC, "rsc set entry count")? + COUNT)?;
     let count = usize::from(count);
     let found =

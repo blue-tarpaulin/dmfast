@@ -44,5 +44,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     core.untouched(&[(t, TRUE_NEW.len()), (f, FALSE_NEW.len())])?;
     core.write_code(t, &TRUE_NEW)?;
     core.write_code(f, &FALSE_NEW)?;
-    Ok(format!("at +{:#x}, +{:#x}", t - core.base, f - core.base))
+    Ok(core.report(&[t, f]))
 }

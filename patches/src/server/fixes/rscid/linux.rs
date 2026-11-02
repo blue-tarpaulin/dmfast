@@ -6,7 +6,7 @@ use super::{Key, next_is_null};
 use crate::base::code::Foreign;
 use crate::base::feature::Ctx;
 use crate::base::sync::Installed;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 type Insert = unsafe extern "C" fn(usize, *const Key) -> *mut c_void;
 type Method = unsafe extern "C" fn(*mut Key);
@@ -69,11 +69,9 @@ unsafe extern "C" fn insert(set: usize, key: *const Key) -> *mut c_void {
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let s = core.find_unique(GET_OR_ADD, "rsc id get-or-add insert")?;
-    let insert_fn = core.rel32(s + CALL + 1)?;
+    let insert_fn = core.call_target(s + CALL)?;
     for field in INSERTS {
-        if core.rel32(s + field)? != insert_fn {
-            bail!("the 0xFFFF branch inserts with another routine");
-        }
+        ensure!(core.rel32(s + field)? == insert_fn, "the 0xFFFF branch inserts with another routine");
     }
     let count = core.u8_at(core.find_unique(ALLOC, "rsc set entry count")? + COUNT)?;
     FOUND.commit(

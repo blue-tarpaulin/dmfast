@@ -18,5 +18,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let names = core.ptr_at(core.find_unique("8B 32 8B DA 8B 88 ?? ?? ?? ?? 89 4D F0 85 F6", "name table")? + 6)? - 4;
     let last = last_operator(core, names, plus, goto)?;
     core.write_code(at + 12, &(last as u32).to_le_bytes())?;
-    Ok(format!("at +{:#x}", at - core.base))
+    Ok(core.report(&[at]))
 }

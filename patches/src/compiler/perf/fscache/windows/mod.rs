@@ -6,7 +6,6 @@ use std::ffi::c_void;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering::Relaxed};
 
-use rustc_hash::{FxHashMap, FxHashSet};
 use windows_sys::Win32::Foundation::{GetLastError, HANDLE, INVALID_HANDLE_VALUE, SetLastError};
 use windows_sys::Win32::Globalization::{CP_ACP, MultiByteToWideChar};
 use windows_sys::Win32::Storage::FileSystem::{GetFullPathNameW, WIN32_FIND_DATAW};
@@ -14,7 +13,9 @@ use windows_sys::Win32::System::Environment::GetCurrentDirectoryW;
 use windows_sys::Win32::System::Memory::{MEM_RESERVE, PAGE_NOACCESS, VirtualAlloc};
 
 use crate::base::code::Foreign;
+use crate::base::driver::Counter;
 use crate::base::feature::Ctx;
+use crate::base::hash::{self, Map, Set};
 use crate::base::image::Image;
 use crate::base::sync::{Owned, lock};
 use crate::base::windows::ucrt::ucrt_export;
@@ -38,8 +39,8 @@ static OFF: AtomicBool = AtomicBool::new(false);
 /// Bumped by every modification; the owner thread clears its maps when it changes.
 static GENERATION: AtomicU32 = AtomicU32::new(0);
 /// Normalized paths this process modified, plus their ancestors.
-static VOLATILE: Mutex<Option<FxHashSet<Box<[u16]>>>> = Mutex::new(None);
-static MODIFICATIONS: AtomicU32 = AtomicU32::new(0);
+static VOLATILE: Mutex<Set<Box<[u16]>>> = Mutex::new(hash::set());
+static MODIFICATIONS: Counter = Counter::new();
 /// Bumped by `_wchdir`: the owner thread re-reads the current directory.
 static CWD_GEN: AtomicU32 = AtomicU32::new(0);
 static FAKE_BASE: AtomicUsize = AtomicUsize::new(0);
@@ -77,7 +78,7 @@ struct Readers {
     stat: Counters,
 }
 
-type Cache<V> = FxHashMap<Box<[u16]>, V>;
+type Cache<V> = Map<Box<[u16]>, V>;
 
 #[derive(Default)]
 struct State {
@@ -163,13 +164,15 @@ fn parent(p: &[u16]) -> Option<&[u16]> {
 
 /// Was `n` (normalized) modified by this process, or is it an ancestor of something that was?
 fn is_volatile(n: &[u16]) -> bool {
-    lock(&VOLATILE).as_ref().is_some_and(|set| set.contains(n))
+    lock(&VOLATILE).contains(n)
 }
 
 /// May `key` be cached? No if it (or, for wildcards, its directory) was modified by this process.
 fn cacheable(key: &[u16]) -> bool {
-    let guard = lock(&VOLATILE);
-    let Some(set) = guard.as_ref() else { return true };
+    let set = lock(&VOLATILE);
+    if set.is_empty() {
+        return true;
+    }
     let n = normalize(key);
     if set.contains(&n) {
         return false;
@@ -181,8 +184,7 @@ fn cacheable(key: &[u16]) -> bool {
 /// Record a modification of `path` (wide, no NUL).
 fn touched(path: &[u16]) {
     let n = normalize(path);
-    let mut guard = lock(&VOLATILE);
-    let set = guard.get_or_insert_with(FxHashSet::default);
+    let mut set = lock(&VOLATILE);
     let mut p: &[u16] = &n;
     loop {
         set.insert(p.into());
@@ -191,8 +193,8 @@ fn touched(path: &[u16]) {
             _ => break,
         }
     }
-    drop(guard);
-    MODIFICATIONS.fetch_add(1, Relaxed);
+    drop(set);
+    MODIFICATIONS.bump();
     GENERATION.fetch_add(1, Relaxed);
 }
 
@@ -370,11 +372,6 @@ fn reserve(len: usize) -> Result<usize> {
     if p == 0 { Err("VirtualAlloc failed".into()) } else { Ok(p) }
 }
 
-/// The dword in an import slot as it is now.
-fn slot_value(image: &Image, slot: usize) -> Result<usize> {
-    Ok(image.live_u32(slot)? as usize)
-}
-
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // Independent parts (FindFirstFileW's fake handles only our FindClose takes). Readers are cached only if every
@@ -433,13 +430,13 @@ pub fn install(cx: &Ctx) -> Result<String> {
     STATE.set(State { cwd_gen: u32::MAX, ..Default::default() })?;
     for (m, slot) in modifier_slots {
         let image = module(m.module, cx, &others)?;
-        (m.set_original)(slot_value(image, slot)?);
+        (m.set_original)(image.live_ptr(slot)?);
         image.write_data(slot, &m.hook.to_le_bytes())?;
     }
     // The parts' slots are written as the feature's own: all of them or none.
     for part in readers {
         for (&(_, set_original, ours), slot) in part {
-            set_original(slot_value(core, slot)?);
+            set_original(core.live_ptr(slot)?);
             core.write_data(slot, &ours.to_le_bytes())?;
         }
     }
@@ -463,7 +460,7 @@ pub fn print_stats() {
             l.lists,
             crate::base::driver::verify(),
             l.mismatches,
-            MODIFICATIONS.load(Relaxed),
+            MODIFICATIONS,
             OFF.load(Relaxed)
         );
     }

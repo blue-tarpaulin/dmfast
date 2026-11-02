@@ -12,7 +12,7 @@ use libc::{__errno_location, DIR, EOVERFLOW, RTLD_NEXT, dirent, dirent64, dlsym,
 use crate::base::code::Foreign;
 use crate::base::feature::Ctx;
 use crate::base::linux::symbol;
-use crate::base::{Result, bail};
+use crate::base::{Result, ensure};
 
 static ON: AtomicBool = AtomicBool::new(false);
 
@@ -145,20 +145,14 @@ pub fn install(cx: &Ctx) -> Result<String> {
         (c"fstat", fstat as FstatFn as usize),
         (c"readdir", readdir as ReaddirFn as usize),
     ] {
-        if symbol(name) != ours {
-            bail!("{} does not resolve to libdmfast.so (not preloaded?)", name.to_string_lossy());
-        }
+        ensure!(symbol(name) == ours, "{} does not resolve to libdmfast.so (not preloaded?)", name.to_string_lossy());
     }
     for name in [c"stat64", c"fstat64", c"readdir64"] {
-        if symbol(name) == 0 {
-            bail!("no {}", name.to_string_lossy());
-        }
+        ensure!(symbol(name) != 0, "no {}", name.to_string_lossy());
     }
     // `__xstat`/`lstat` imports aren't covered. readdir's call sites aren't checked: `dirs` rewrites them to calls
     // through the lookup checked above.
-    if cx.core().import_calls("stat", stat as StatFn)?.is_empty() {
-        bail!("libbyond does not import stat");
-    }
+    ensure!(!cx.core().import_calls("stat", stat as StatFn)?.is_empty(), "libbyond does not import stat");
     ON.store(true, Relaxed);
     Ok("64-bit inode numbers in stat, fstat and readdir".into())
 }
