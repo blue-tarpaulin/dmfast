@@ -5,6 +5,7 @@
 //! .post++ .post-- .reference .dereference .index`) pass. The fix raises the bound to the id of `.index`, read from
 //! BYOND's name table. `/obj/:` and `/obj/;` are not reached through an id and are unchanged.
 
+use super::{name_of, name_table};
 use crate::base::feature::{Feature, Hosts, Tier, install};
 use crate::base::image::Image;
 use crate::base::{Result, ensure};
@@ -26,13 +27,10 @@ pub static TYPEPATH: Feature = Feature::fix(
 const OPERATORS: [&[u8]; 11] =
     [b"-", b"?", b"~", b"!", b"++", b"--", b".post++", b".post--", b".reference", b".dereference", b".index"];
 
-/// The id of the last operator name (`.index`) in BYOND's name table at `names`; `plus` and `goto` are the check's
-/// ids.
-fn last_operator(core: &Image, names: usize, plus: usize, goto: usize) -> Result<usize> {
-    let name = |id: usize| -> Result<Option<&[u8]>> {
-        let p = core.ptr_at(names + id * 4)?;
-        if p == 0 { Ok(None) } else { core.c_str(p).map(Some) }
-    };
+/// The id of the last operator name (`.index`) in BYOND's name table; `plus` and `goto` are the check's ids.
+fn last_operator(core: &Image, plus: usize, goto: usize) -> Result<usize> {
+    let names = name_table(core)?;
+    let name = |id: usize| name_of(core, names, id);
     ensure!(
         name(plus)? == Some(&b"+"[..]) && name(goto)? == Some(&b"goto"[..]),
         "name table: + is not id {plus:#x} or goto is not id {goto:#x}"

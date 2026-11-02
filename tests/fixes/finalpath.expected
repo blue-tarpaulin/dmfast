@@ -1,0 +1,15 @@
+/a: 2 -
+/b: 3 -
+/c: 4 -
+/d: 5 -
+/e: - 6
+/f: - 7
+dm finalpath-override: finalpath-override.dme:5:error: bar: override not allowed
+dm finalpath-override: finalpath-override.dme:4:error: bar: final definition
+dm finalpath-override: finalpath-override.dme:6:error: bar: override not allowed
+dm finalpath-override: finalpath-override.dme:9:error: bar: override not allowed
+dm finalpath-override: finalpath-override.dme:8:error: bar: final definition
+dm finalpath-override: finalpath-override.dme:16:error: bar: override not allowed
+dm finalpath-override: finalpath-override.dme:14:error: bar: final definition
+dm finalpath-override: finalpath-override.dme:20:error: x: override not allowed
+dm finalpath-override: finalpath-override.dme:19:error: x: final definition

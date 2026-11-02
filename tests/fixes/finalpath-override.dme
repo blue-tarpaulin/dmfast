@@ -1,0 +1,20 @@
+// finalpath: the final procs and var of finalpath.dme, each overridden in a subtype (and the final override also
+// later on its own type). Each must be BYOND's "override not allowed" error.
+/a/proc/bar()
+/a/final/bar()
+/a/sub/bar()
+/a/bar()
+
+/c/final/proc/bar()
+/c/sub/bar()
+
+/d/proc/bar()
+/d
+	final
+		bar()
+	sub
+		bar()
+
+/e
+	final/var/x = 6
+/e/sub/x = 7

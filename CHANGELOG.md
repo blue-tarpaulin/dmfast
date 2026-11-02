@@ -9,6 +9,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **Changed:** the list initialization patch key `pairs` is now `listinit`.
 - **Changed:** `jsonutf` is now in the `extended` tier since its output can differ from stock.
 - **New fix:** `filtername` (extended): adding a named filter to `filters` replaces the filter of that name instead of keeping both.
+- **New fix:** `finalpath` (breaking): `final` before a proc or var in a type's path (`/foo/final/bar()`) is the `final` modifier instead of a type `/foo/final`.
 
 ## 7.0.0
 

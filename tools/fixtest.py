@@ -3,7 +3,8 @@
 
 usage: fixtest.py [-s <stock bin dir>] <dmfast bin dir> [key...]
 
-tests/fixes/<key>.dme must print <key>.expected with DMFAST_FIXES=<key> and =breaking, and not on stock.
+tests/fixes/<key>.dme must print <key>.expected with DMFAST_FIXES=<key> and =breaking, and not on stock. Each
+tests/fixes/<key>-<name>.dme beside it is only compiled; its errors and warnings follow, as "dm <key>-<name>: ...".
 tests/fixes/keep/*.dme must print the same on stock, safe and extended. A fix that didn't install is n/a.
 Stock defaults to the _orig binaries beside dmfast. Exits non-zero on a failure.
 """
@@ -53,6 +54,11 @@ def world(dm, dd, fixes, tests, key, work):
             out.append(f"dd: exit {rc}")
     else:
         out.append("dm: no .dmb")
+    # Compile-only worlds (a fix's compile errors beside a world that runs).
+    for extra in sorted(t.glob(f"{key}-*.dme")):
+        _, extra_out = byond.run([dm, extra.name], t, env, 120)
+        out += [f"dm {extra.stem}: " + l for l in extra_out.splitlines()
+                if not l.startswith("dmfast") and re.search(r"(error|warning):", l)]
     # dmfast's own bug reports (e.g. an install-time API used after install) fail the test.
     out += [l for l in byond.dmfast_lines(dm_out + dd_out) if l.startswith("dmfast: bug:")]
     text = "".join(l + "\n" for l in out)
@@ -71,7 +77,7 @@ def check(fast, stock=None, keys=()):
     "fixes: " line. Returns (failed, summary)."""
     fdm, fdd, sdm, sdd = byond.bins(fast, stock)
     keep = not keys or "keep" in keys
-    keys = [k for k in keys if k != "keep"] or ([] if keys else sorted(f.stem for f in TESTS.glob("*.dme")))
+    keys = [k for k in keys if k != "keep"] or ([] if keys else sorted(f.stem for f in TESTS.glob("*.dme") if "-" not in f.stem))
     results, counts = [], {"pass": 0, "fail": 0, "na": 0}
 
     def result(name, kind, label):
