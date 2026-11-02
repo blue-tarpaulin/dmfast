@@ -1,5 +1,6 @@
 //! DreamDaemon bug fixes: opt-in, listed in BUGFIXES.md, each with a test world in `tests/fixes/<key>.dme`.
 
+pub mod callref;
 pub mod cmperr;
 pub mod dbbignum;
 pub mod dbclose;
