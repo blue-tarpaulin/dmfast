@@ -1,6 +1,7 @@
 //! DreamDaemon speed patches: game behaviour is identical to stock.
 
 pub mod argload;
+pub mod dmicmp;
 pub mod getvar;
 pub mod iconcopy;
 pub mod truth;
