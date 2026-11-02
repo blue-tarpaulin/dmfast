@@ -42,7 +42,7 @@ pub static SERVER_PERF: &[&Feature] = &[
     &private::server::perf::strtable::STRTABLE,
     &public::server::perf::varlist::VARLIST,
     &public::server::perf::dmicmp::DMICMP,
-    &private::server::perf::iconstates::ICONSTATES,
+    &public::server::perf::iconstates::ICONSTATES,
     &public::server::perf::iconcopy::ICONCOPY,
     &public::server::perf::argload::ARGLOAD,
     &private::server::perf::seenclear::SEENCLEAR,
@@ -51,7 +51,7 @@ pub static SERVER_PERF: &[&Feature] = &[
     &public::server::perf::getvar::GETVAR,
     &public::server::perf::turfvar::TURFVAR,
     &private::server::perf::turfpf::TURFPF,
-    &private::server::perf::locidx::LOCIDX,
+    &public::server::perf::locidx::LOCIDX,
     &public::server::perf::truth::TRUTH,
 ];
 
