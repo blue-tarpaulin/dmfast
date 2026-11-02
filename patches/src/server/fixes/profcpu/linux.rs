@@ -29,7 +29,7 @@ const CALL: usize = 14;
 
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
-    let sites = core.import_calls("clock", libc_clock as ClockFn as usize)?;
+    let sites = core.import_calls("clock", libc_clock as ClockFn)?;
     let [site] = sites[..] else { bail!("clock(): expected 1 call, found {}", sites.len()) };
     let cpu_clock = core.export(c"_ZN7TimeLib8CpuClockEv")?;
     if site != cpu_clock + CALL || !core.is_at(cpu_clock, CPU_CLOCK)? {

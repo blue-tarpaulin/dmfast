@@ -64,8 +64,8 @@ unsafe extern "C" fn release(count: u32) {
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let at = core.find_unique(OPCODE, "call() opcode")?;
-    let [pos] = core.array(at + POS)?;
-    let [base] = core.array(at + BASE)?;
+    let pos = core.u8_at(at + POS)?;
+    let base = core.u8_at(at + BASE)?;
     let found = Found {
         assign: Foreign::at(core.rel32(at + ASSIGN_CALL)?),
         context: core.ptr_at(at + CONTEXT)?,

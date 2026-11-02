@@ -4,7 +4,7 @@
 //! `load` the left operand is fetched, its type tested, and the handler's error block follows.
 
 use super::HANDLERS;
-use crate::base::code::{branch, exec_code};
+use crate::base::code::Stub;
 use crate::base::feature::Ctx;
 use crate::base::{Result, bail};
 
@@ -22,15 +22,13 @@ const FETCH_LEN: usize = 17;
 /// The error block, at [`ERROR_AT`] from `load`.
 const ERROR: &str = "83 EC 08 FF B5 ?? ?? ?? ?? FF B5 ?? ?? ?? ?? 68 ?? ?? ?? ?? FF 73 04 FF 33 68 ?? ?? ?? ?? E8";
 const ERROR_AT: usize = 0x24;
-/// One stub: the fetch, then `jmp error`.
-const STUB: usize = FETCH_LEN + 5;
 
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // (head, load)
     let mut sites = Vec::new();
     for h in core.probe_all(HEAD)? {
-        let load = h + 4 + usize::from(core.array::<1>(h + 3)?[0]);
+        let load = h + 4 + usize::from(core.u8_at(h + 3)?);
         if load > h + 0x40 || !core.is_at(load, LOAD)? || !core.is_at(load + ERROR_AT, ERROR)? {
             continue;
         }
@@ -41,16 +39,17 @@ pub fn install(cx: &Ctx) -> Result<String> {
         bail!("comparison handlers: expected at least {HANDLERS}, found {}", sites.len());
     }
     let fetches = sites.iter().map(|&(_, load)| core.bytes(load, FETCH_LEN)).collect::<Result<Vec<_>>>()?;
-    let stubs = exec_code(STUB * sites.len(), |s| {
-        let mut v = Vec::new();
-        for (&(_, load), fetch) in sites.iter().zip(&fetches) {
-            v.extend(*fetch);
-            v.extend(branch(0xE9, s + v.len(), load + ERROR_AT, 5)); // jmp error
-        }
-        v
-    })?;
-    for (i, &(h, _)) in sites.iter().enumerate() {
-        core.write_code(h + SKIP, &((stubs + STUB * i).wrapping_sub(h + SKIP + 4) as u32).to_le_bytes())?;
+    // One stub per site: the fetch, then `jmp error`.
+    let mut stub = Stub::new();
+    let mut offsets = Vec::new();
+    for (&(_, load), fetch) in sites.iter().zip(&fetches) {
+        offsets.push(stub.len());
+        stub.bytes(fetch) // the fetch
+            .jmp(load + ERROR_AT); // jmp error
+    }
+    let stubs = stub.exec()?;
+    for (&(h, _), offset) in sites.iter().zip(offsets) {
+        core.retarget(h + SKIP, stubs + offset)?;
     }
     Ok(format!("{} handlers", sites.len()))
 }

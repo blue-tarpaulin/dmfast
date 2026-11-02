@@ -1,5 +1,5 @@
 //! Writing to a loaded object, code and data ([`crate::ledger`] does [`crate::image::Image`]'s recorded writes with
-//! [`poke_code`] / [`poke_data`]), and the executable memory behind [`crate::code::exec_code`].
+//! [`poke_code`] / [`poke_data`]), and the executable memory behind [`crate::code::Stub`].
 
 use std::ffi::c_void;
 

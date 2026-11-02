@@ -6,7 +6,7 @@
 //! `jmp`, and a stub at the block's join repeats it. Frame setup starts the self-time clock with the total-time one.
 
 use crate::base::Result;
-use crate::base::code::{branch, exec_code};
+use crate::base::code::Stub;
 use crate::base::feature::{Feature, Hosts, Tier, install};
 use crate::base::image::Image;
 
@@ -38,21 +38,15 @@ fn is_message(core: &Image, addr: usize) -> Result<bool> {
 /// repeats the test (the word counter at `counter`, world flags bit 1 at `flags`: `loop_checks` off) and jumps to
 /// `error` when it fails, and the test's short `jne` at `jne` becomes a `jmp`.
 fn move_test(core: &Image, jne: usize, join: usize, counter: u32, flags: u32, error: usize) -> Result<()> {
-    let displaced = core.bytes(join, JOIN_LEN)?.to_vec();
-    let stub = exec_code(29 + JOIN_LEN, |s| {
-        let mut v = vec![0x66, 0x83, 0x3D]; // cmp word [counter],0
-        v.extend(counter.to_le_bytes());
-        v.push(0x00);
-        v.extend([0x75, 0x0E]); // jne cont
-        v.extend([0xF6, 0x05]); // test byte [flags],2
-        v.extend(flags.to_le_bytes());
-        v.push(0x02);
-        v.extend([0x75, 0x05]); // jne cont
-        v.extend(branch(0xE9, s + v.len(), error, 5)); // jmp error
-        v.extend(&displaced); // cont: the join's first instruction
-        v.extend(branch(0xE9, s + v.len(), join + JOIN_LEN, 5)); // jmp back
-        v
-    })?;
+    let stub = Stub::new()
+        .bytes(&[&[0x66, 0x83, 0x3D][..], &counter.to_le_bytes(), &[0x00]].concat()) // cmp word [counter],0
+        .bytes(&[0x75, 0x0E]) // jne cont
+        .bytes(&[&[0xF6, 0x05][..], &flags.to_le_bytes(), &[0x02]].concat()) // test byte [flags],2
+        .bytes(&[0x75, 0x05]) // jne cont
+        .jmp(error) // jmp error
+        .bytes(core.bytes(join, JOIN_LEN)?) // cont: the join's first instruction
+        .jmp(join + JOIN_LEN) // jmp back
+        .exec()?;
     // The join first: until the test's jne becomes a jmp, the stub's test never fires.
     core.jump(join, JOIN_LEN, stub)?;
     core.write_code(jne, &[0xEB])

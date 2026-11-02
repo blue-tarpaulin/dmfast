@@ -24,7 +24,7 @@ impl Image {
 }
 
 /// ucrtbase.dll's export `name`, for calls on byondcore's streams, errno or heap blocks (dmfast's own CRT is not
-/// ucrtbase).
+/// ucrtbase). Use this, not `cx.module("ucrtbase.dll")`, which copies its code to read it as shipped.
 pub fn ucrt_export(name: &str) -> Result<usize> {
     let (start, end) = module_range("ucrtbase.dll").ok_or("ucrtbase.dll not loaded")?;
     let c: Vec<u8> = name.bytes().chain([0]).collect();

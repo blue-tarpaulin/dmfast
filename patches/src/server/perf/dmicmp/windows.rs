@@ -5,11 +5,12 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 
 use super::verify;
-use crate::base::code::{Foreign, hx, trampoline};
+use crate::base::code::{Foreign, hx};
 use crate::base::driver;
 use crate::base::feature::Ctx;
 use crate::base::sync::Installed;
-use crate::base::windows::mem::module_range;
+use crate::base::windows::module_range;
+use crate::base::windows::ucrt::ucrt_export;
 use crate::base::{Result, bail};
 
 type Compare = unsafe extern "C" fn(*const u8, *const u8) -> i32;
@@ -161,16 +162,14 @@ pub fn install(cx: &Ctx) -> Result<String> {
     if !ucrt.contains(&toupper) || !ucrt.contains(&isalnum) {
         bail!("toupper/isalnum are not ucrtbase's");
     }
-    let pctype = cx.module("ucrtbase.dll")?.export(c"__pctype_func").map_err(|_| "no __pctype_func")?;
-    core.untouched(&[(f, ENTRY)])?;
+    let pctype = ucrt_export("__pctype_func")?;
     let found = Found {
-        original: Foreign::at(trampoline(core.bytes(f, ENTRY)?, f + ENTRY)?),
+        original: Foreign::at(core.hook(f, ENTRY, compare as Compare)?),
         toupper: Foreign::at(toupper),
         isalnum: Foreign::at(isalnum),
         pctype: Foreign::at(pctype),
         ucrt,
     };
-    core.jump(f, ENTRY, compare as Compare)?;
     FOUND.commit(cx, found);
     Ok(format!("at +{:#x}", f - core.base))
 }

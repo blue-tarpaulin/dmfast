@@ -1,7 +1,7 @@
 //! `contline`, Linux: the skip loop's `isspace` test becomes "a space and not a newline".
 
 use crate::base::Result;
-use crate::base::code::{branch, exec_code, jcc};
+use crate::base::code::{Cond, Stub};
 use crate::base::feature::Ctx;
 
 pub fn install(cx: &Ctx) -> Result<String> {
@@ -14,13 +14,14 @@ pub fn install(cx: &Ctx) -> Result<String> {
         "backslash newline skip",
     )?;
     let at = p + 25;
-    let stub = exec_code(21, |s| {
-        let mut v = vec![0x83, 0xC4, 0x10, 0x85, 0xC0, 0x74, 0x09]; // add esp,10h ; test eax,eax ; je done
-        v.extend([0x83, 0xFF, 0x0A]); // cmp edi,0Ah
-        v.extend(jcc(0x85, s + v.len(), p)); // jne loop
-        v.extend(branch(0xE9, s + v.len(), p + 32, 5)); // done: jmp after the loop
-        v
-    })?;
+    let stub = Stub::new()
+        .bytes(&[0x83, 0xC4, 0x10]) // add esp,10h
+        .bytes(&[0x85, 0xC0]) // test eax,eax
+        .bytes(&[0x74, 0x09]) // je done
+        .bytes(&[0x83, 0xFF, 0x0A]) // cmp edi,0Ah
+        .jcc(Cond::NotEqual, p) // jne loop
+        .jmp(p + 32) // done: jmp after the loop
+        .exec()?;
     core.jump(at, 7, stub)?;
-    Ok(format!("at {:#x}", at - core.base))
+    Ok(format!("at +{:#x}", at - core.base))
 }

@@ -5,7 +5,7 @@ use std::arch::naked_asm;
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 use super::{BUF, CAP, check};
-use crate::base::code::{Foreign, trampoline};
+use crate::base::code::{Foreign, Stub};
 use crate::base::feature::Ctx;
 use crate::base::{Result, bail};
 
@@ -79,12 +79,14 @@ pub fn install(cx: &Ctx) -> Result<String> {
     core.untouched(&[(a, COUNT_LEN), (b, COUNT_LEN), (c, ACCEPT_LEN)])?;
     // Each increment: cmp ebp,CAP ; jae tail ; mov [ebp+BUF],dl ; tail: the replaced instructions ; jmp back
     for site in [a, b] {
-        let mut v = vec![0x83, 0xFD, CAP as u8]; // cmp ebp,CAP
-        v.extend([0x73, 0x06]); // jae tail
-        v.extend([0x88, 0x95]); // mov [ebp+BUF],dl
-        v.extend((BUF.as_ptr() as usize as u32).to_le_bytes());
-        v.extend(core.bytes(site, COUNT_LEN)?); // tail: mov eax,[ebx+24h] ; add ebp,1 ; test eax,eax
-        core.jump(site, COUNT_LEN, trampoline(&v, site + COUNT_LEN)?)?;
+        let stub = Stub::new()
+            .bytes(&[0x83, 0xFD, CAP as u8]) // cmp ebp,CAP
+            .bytes(&[0x73, 0x06]) // jae tail
+            .bytes(&[&[0x88, 0x95][..], &(BUF.as_ptr() as usize as u32).to_le_bytes()].concat()) // mov [ebp+BUF],dl
+            .bytes(core.bytes(site, COUNT_LEN)?) // tail: mov eax,[ebx+24h] ; add ebp,1 ; test eax,eax
+            .jmp(site + COUNT_LEN)
+            .exec()?;
+        core.jump(site, COUNT_LEN, stub)?;
     }
     MESSAGE.store(message, Relaxed);
     REPORT_FN.set(core.rel32(e + REPORT_CALL)?);

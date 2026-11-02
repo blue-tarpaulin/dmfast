@@ -44,8 +44,8 @@ pub fn install(cx: &Ctx) -> Result<String> {
         count: core.ptr_at(append + 2)?,
         capacity,
         new: Foreign::at(core.rel32(call + 6)?),
-        malloc: Foreign::at(malloc as MallocFn as usize),
-        realloc: Foreign::at(realloc as ReallocFn as usize),
+        malloc: Foreign::at(malloc as MallocFn),
+        realloc: Foreign::at(realloc as ReallocFn),
     };
     core.untouched(&[(f, ENTRY)])?;
     core.jump(f, ENTRY, intern as unsafe extern "C" fn(usize) -> u32)?;

@@ -5,6 +5,7 @@ use std::ffi::{CStr, CString, c_int, c_void};
 
 use libc::{PF_X, PT_DYNAMIC, PT_LOAD, RTLD_LAZY, RTLD_NOLOAD, dl_iterate_phdr, dl_phdr_info, dlclose, dlopen, dlsym};
 
+use crate::code::CodeAddr;
 use crate::image::{Image, le32};
 use crate::{Result, bail};
 
@@ -59,7 +60,8 @@ impl Image {
     }
 
     /// Every `call`/`jmp rel32` site to import `name` (via `R_386_PC32`), each checked to target `target`.
-    pub fn import_calls(&self, name: &str, target: usize) -> Result<Vec<usize>> {
+    pub fn import_calls(&self, name: &str, target: impl CodeAddr) -> Result<Vec<usize>> {
+        let target = target.code_addr();
         const R_386_PC32: u32 = 2;
         let (strtab, symtab, rel) = self.dyn_tables()?;
         let mut sites = Vec::new();
@@ -72,7 +74,7 @@ impl Image {
                 continue;
             }
             let site = self.base + off as usize - 1;
-            let [op] = self.array(site)?;
+            let op = self.u8_at(site)?;
             if !matches!(op, 0xE8 | 0xE9) || self.rel32(site + 1)? != target {
                 bail!("{name} site +{:#x}: not a call/jmp to it", site - self.base);
             }

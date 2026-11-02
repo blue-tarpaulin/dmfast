@@ -47,8 +47,8 @@ pub fn install(cx: &Ctx) -> Result<String> {
     // mov ax,[esi+0Ch] ; add esp,18h ; mov [esi+14h],ax  ->  push esi ; call store_offset ; add esp,1Ch ; nop x2.
     // Render returns nothing, so eax, ecx, and edx are free.
     let mut code = vec![0x56];
-    code.extend(branch(0xE8, store + 1, super::store_offset as *const () as usize, 5));
+    code.extend(branch(0xE8, store + 1, super::store_offset as *const (), 5));
     code.extend([0x83, 0xC4, 0x1C, 0x90, 0x90]);
     core.write_code(store, &code)?;
-    Ok(format!("render at {:#x}", render - core.base))
+    Ok(format!("render at +{:#x}", render - core.base))
 }

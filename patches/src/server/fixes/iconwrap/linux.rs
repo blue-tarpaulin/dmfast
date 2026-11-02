@@ -50,7 +50,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     // esp is 16-byte aligned after the original add, so the call is too; the epilogue's lea esp,[ebp-0Ch] drops the
     // argument. Render returns nothing, so eax, ecx, and edx are free.
     let mut code = vec![0x83, 0xC4, 0x14, 0x53];
-    code.extend(branch(0xE8, store + 4, super::store_offset as *const () as usize, 6));
+    code.extend(branch(0xE8, store + 4, super::store_offset as *const (), 6));
     core.write_code(store, &code)?;
     Ok(format!("render at +{:#x}", render - core.base))
 }

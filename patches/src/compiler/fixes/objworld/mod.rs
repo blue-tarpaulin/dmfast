@@ -6,7 +6,7 @@
 //! The parent field's offset is read from the type path builder.
 
 use crate::base::Result;
-use crate::base::code::{branch, exec_code, jcc};
+use crate::base::code::{Cond, Stub};
 use crate::base::feature::{Feature, Hosts, Tier, install};
 use crate::base::image::Image;
 
@@ -31,12 +31,12 @@ const EDX: u8 = 2;
 const EDI: u8 = 7;
 
 /// A `cmp dword [node],13h` at `at`, replaced up to `back`: `copy` bytes after it (they don't touch the flags) go
-/// into the stub as they are, then the replaced conditional jump, if any (`0F op` and its target).
+/// into the stub as they are, then the replaced conditional jump, if any (its condition and target).
 struct Site {
     at: usize,
     node: u8,
     copy: usize,
-    jcc: Option<(u8, usize)>,
+    jcc: Option<(Cond, usize)>,
     back: usize,
 }
 
@@ -44,8 +44,7 @@ struct Site {
 /// calls itself, with the offset at `parent`.
 fn parent_offset(core: &Image, builder: &str, parent: usize, recurse: usize) -> Result<u8> {
     let f = core.probe_unique(builder, "type path builder", |f| core.rel32(f + recurse).is_ok_and(|t| t == f))?;
-    let [offset] = core.array(f + parent)?;
-    Ok(offset)
+    core.u8_at(f + parent)
 }
 
 /// Point `site` at a stub: `cmp dword [node],13h`, then "and the node's parent is the root" (ZF set for a world node,
@@ -53,23 +52,20 @@ fn parent_offset(core: &Image, builder: &str, parent: usize, recurse: usize) -> 
 fn redirect(core: &Image, site: Site, parent: u8) -> Result<()> {
     let Site { at, node, copy, jcc: cond, back } = site;
     let copied = core.bytes(at + 3, copy)?.to_vec();
-    let len = 18 + copy + if cond.is_some() { 6 } else { 0 } + 5;
-    let stub = exec_code(len, |s| {
-        let mut v = vec![0x83, 0x38 | node, 0x13]; // cmp dword [node],13h
-        v.extend([0x75, 0x0D]); // jne done
-        v.push(0x51); // push ecx
-        v.extend([0x8B, 0x48 | node, parent]); // mov ecx,[node+parent]
-        v.extend([0x85, 0xC9]); // test ecx,ecx
-        v.extend([0x74, 0x04]); // je pop
-        v.extend([0x83, 0x79, parent, 0x00]); // cmp dword [ecx+parent],0
-        v.push(0x59); // pop: pop ecx
-        v.extend(&copied); // done:
-        if let Some((op, target)) = cond {
-            v.extend(jcc(op, s + v.len(), target));
-        }
-        v.extend(branch(0xE9, s + v.len(), back, 5));
-        v
-    })?;
+    let mut s = Stub::new();
+    s.bytes(&[0x83, 0x38 | node, 0x13]) // cmp dword [node],13h
+        .bytes(&[0x75, 0x0D]) // jne done
+        .bytes(&[0x51]) // push ecx
+        .bytes(&[0x8B, 0x48 | node, parent]) // mov ecx,[node+parent]
+        .bytes(&[0x85, 0xC9]) // test ecx,ecx
+        .bytes(&[0x74, 0x04]) // je pop
+        .bytes(&[0x83, 0x79, parent, 0x00]) // cmp dword [ecx+parent],0
+        .bytes(&[0x59]) // pop: pop ecx
+        .bytes(&copied); // done:
+    if let Some((cc, target)) = cond {
+        s.jcc(cc, target);
+    }
+    let stub = s.jmp(back).exec()?;
     core.untouched(&[(at, back - at)])?;
     core.jump(at, back - at, stub)
 }

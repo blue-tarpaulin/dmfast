@@ -75,7 +75,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
             bail!("the 0xFFFF branch inserts with another routine");
         }
     }
-    let [count] = core.array(core.find_unique(ALLOC, "rsc set entry count")? + COUNT)?;
+    let count = core.u8_at(core.find_unique(ALLOC, "rsc set entry count")? + COUNT)?;
     FOUND.commit(
         cx,
         Found {

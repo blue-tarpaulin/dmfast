@@ -3,7 +3,7 @@
 use std::arch::naked_asm;
 
 use super::cache::{Found, Kind, STATE, State, Value, flush, read};
-use crate::base::code::{Foreign, hx, trampoline};
+use crate::base::code::{Foreign, hx};
 use crate::base::feature::Ctx;
 use crate::base::image::Image;
 use crate::base::{Result, bail};
@@ -158,10 +158,10 @@ fn after_jcc(core: &Image, a: usize, short: u8) -> Result<usize> {
 /// at `f`, its `max`, `map`, and `cases` operands at the `ops` offsets.
 fn case(core: &Image, f: usize, ops: [usize; 3], tag: u8) -> Result<usize> {
     let i = tag as usize - 1;
-    if i > core.array::<1>(f + ops[0])?[0] as usize {
+    if i > core.u8_at(f + ops[0])? as usize {
         bail!("no case for value tag {tag:#x}");
     }
-    let [slot] = core.array(core.ptr_at(f + ops[1])? + i)?;
+    let slot = core.u8_at(core.ptr_at(f + ops[1])? + i)?;
     core.ptr_at(core.ptr_at(f + ops[2])? + 4 * slot as usize)
 }
 
@@ -181,7 +181,7 @@ fn own_case(core: &Image, a: usize) -> Result<(usize, usize, usize)> {
     if !core.is_at(a, "83 C0 ?? 5E 5D C3")? {
         bail!("own var list case: not as expected");
     }
-    Ok((count, table, core.array::<1>(a + 2)?[0] as usize))
+    Ok((count, table, core.u8_at(a + 2)? as usize))
 }
 
 /// A type-field case: the object from a table getter (from `[ebp+0Ch]`, or for datums and areas through
@@ -190,7 +190,7 @@ fn type_case(core: &Image, a: usize, tag: u8, id_of: usize) -> Result<(usize, us
     let (getter, a) = if core.is_at(a, "FF 75 0C E8 ?? ?? ?? ?? 83 C4 04 85 C0")? {
         (core.rel32(a + 4)?, a + 13)
     } else if core.is_at(a, "6A ?? FF 75 0C 51 E8 ?? ?? ?? ?? 50 E8 ?? ?? ?? ?? 83 C4 10 85 C0")?
-        && core.array::<1>(a + 1)? == [tag]
+        && core.u8_at(a + 1)? == tag
         && core.rel32(a + 7)? == id_of
     {
         (core.rel32(a + 13)?, a + 22)
@@ -203,7 +203,7 @@ fn type_case(core: &Image, a: usize, tag: u8, id_of: usize) -> Result<(usize, us
     }
     let key = match core.array::<2>(a + 2)? {
         [0xFF, 0x30] => 0,
-        [0xFF, 0x70] => core.array::<1>(a + 4)?[0] as usize,
+        [0xFF, 0x70] => core.u8_at(a + 4)? as usize,
         [0xFF, 0xB0] => core.ptr_at(a + 4)?,
         _ => bail!("type field case: not as expected"),
     };
@@ -258,9 +258,8 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let load =
         core.probe_unique(LOAD_FN, ".dmb load", |l| core.find_in(l, LOAD_SPAN, &store).is_ok_and(|h| !h.is_empty()))?;
 
-    core.untouched(&[(f, ENTRY), (load, LOAD_ENTRY)])?;
-    ORIGINAL.set(trampoline(core.bytes(f, ENTRY)?, f + ENTRY)?);
-    LOAD.set(trampoline(core.bytes(load, LOAD_ENTRY)?, load + LOAD_ENTRY)?);
+    LOAD.set(core.hook(load, LOAD_ENTRY, load_stub as unsafe extern "C" fn())?);
+    ORIGINAL.set(core.hook(f, ENTRY, read_stub as unsafe extern "C" fn())?);
     STATE.set(State::new(Found {
         kinds,
         protos,
@@ -274,7 +273,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
             find_decl: Foreign::at(decl),
         },
     }))?;
-    core.jump(load, LOAD_ENTRY, load_stub as unsafe extern "C" fn())?;
-    core.jump(f, ENTRY, read_stub as unsafe extern "C" fn())?;
     Ok(format!("at +{:#x}, load at +{:#x}", f - core.base, load - core.base))
 }

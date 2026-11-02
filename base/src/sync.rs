@@ -8,8 +8,9 @@ use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 use crate::Result;
 use crate::feature::Ctx;
 
-/// Set during install, then handed to the first thread that asks (the compiler thread) and no other; hooks run
-/// the original code on every other thread.
+/// Mutable state set during install, then handed to the first thread that runs a hook using it (the compiler's or
+/// the server's main thread) and no other; hooks run BYOND's code on every other thread. For read-only state any
+/// thread may read, use [`Installed`].
 pub struct Owned<T> {
     owner: AtomicUsize,
     value: UnsafeCell<Option<T>>,
@@ -60,8 +61,8 @@ impl<T> Owned<T> {
     }
 }
 
-/// What a feature finds while it installs, for its hooks: kept only if the install commits, which is before any hook
-/// can run.
+/// What a feature finds while it installs, for its hooks: read-only and shared by every thread, kept only if the
+/// install commits, which is before any hook can run. For state a hook changes, use [`Owned`] or a `Mutex`.
 pub struct Installed<T>(OnceLock<T>);
 
 impl<T> Default for Installed<T> {

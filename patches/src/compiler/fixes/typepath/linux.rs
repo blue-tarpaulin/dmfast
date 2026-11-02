@@ -38,7 +38,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
         (at, at + 7, at + 13)
     };
     let plus = (core.u32_at(lea)? as i32).wrapping_neg() as usize;
-    let [b] = core.array::<1>(cmp)?;
+    let b = core.u8_at(cmp)?;
     let bound = last_operator(core, names(core)?, plus, plus + b as usize)? - plus;
     // cmp edx,imm8 is sign-extended.
     if bound > 0x7F {

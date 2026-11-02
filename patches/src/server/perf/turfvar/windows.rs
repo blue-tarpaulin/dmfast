@@ -29,5 +29,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let at = core.find_unique(FIND, "turf var find-or-create")? + 0x27;
     core.untouched(&[(at, NEW.len())])?;
     core.write_code(at, &NEW)?;
-    Ok(format!("at {:#x}", at - core.base))
+    Ok(format!("at +{:#x}", at - core.base))
 }

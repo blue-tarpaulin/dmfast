@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
 use super::verify;
-use crate::base::code::{Foreign, trampoline};
+use crate::base::code::Foreign;
 use crate::base::driver;
 use crate::base::feature::Ctx;
 use crate::base::sync::lock;
@@ -149,11 +149,8 @@ pub fn install(cx: &Ctx) -> Result<String> {
     if !core.is_at(per_type + MERGE_CALL, "E8")? || core.rel32(per_type + MERGE_CALL + 1)? != f {
         bail!("var list pass: does not call the merge");
     }
-    core.untouched(&[(f, ENTRY), (pass, PASS_ENTRY)])?;
     LOOKUP.set(lookup_fn);
-    ORIGINAL.set(trampoline(core.bytes(f, ENTRY)?, f + ENTRY)?);
-    PASS.set(trampoline(core.bytes(pass, PASS_ENTRY)?, pass + PASS_ENTRY)?);
-    core.jump(f, ENTRY, merge as Merge)?;
-    core.jump(pass, PASS_ENTRY, start_pass as unsafe extern "C" fn())?;
+    ORIGINAL.set(core.hook(f, ENTRY, merge as Merge)?);
+    PASS.set(core.hook(pass, PASS_ENTRY, start_pass as unsafe extern "C" fn())?);
     Ok(format!("at +{:#x}, pass at +{:#x}", f - core.base, pass - core.base))
 }

@@ -2,7 +2,7 @@
 //! The name assignment moves to `Open()`'s tail, after the close.
 
 use super::{ARRAY, CAPACITY};
-use crate::base::code::{branch, exec_code};
+use crate::base::code::Stub;
 use crate::base::feature::Ctx;
 use crate::base::{Result, bail};
 
@@ -36,21 +36,22 @@ pub fn install(cx: &Ctx) -> Result<String> {
     if core.rel32(open + 0x53)? != assign {
         bail!("database open: name not set with DMString::operator=");
     }
-    let clear = exec_code(19, |s| {
-        let mut v = vec![0xC7, 0x43, ARRAY, 0, 0, 0, 0]; // mov dword [ebx+18h],0
-        v.extend([0xC7, 0x43, CAPACITY, 0, 0, 0, 0]); // mov dword [ebx+20h],0
-        v.extend(branch(0xE9, s + v.len(), free, 5)); // jmp free
-        v
-    })?;
+    let clear = Stub::new()
+        .bytes(&[0xC7, 0x43, ARRAY, 0, 0, 0, 0]) // mov dword [ebx+18h],0
+        .bytes(&[0xC7, 0x43, CAPACITY, 0, 0, 0, 0]) // mov dword [ebx+20h],0
+        .jmp(free) // jmp free
+        .exec()?;
     // Open's tail, now after the close.
-    let tail = exec_code(26, |s| {
-        let mut v = vec![0x83, 0xEC, 0x08, 0x56, 0x53]; // sub esp,8 ; push esi ; push ebx
-        v.extend(branch(0xE8, s + v.len(), assign, 5)); // call DMString::operator=
-        v.extend([0x83, 0xC4, 0x10]); // add esp,10h
-        v.extend([0x89, 0x74, 0x24, 0x14, 0x89, 0x5C, 0x24, 0x10]); // mov [esp+14h],esi ; mov [esp+10h],ebx
-        v.extend(branch(0xE9, s + v.len(), open + 0x62, 5)); // jmp back
-        v
-    })?;
+    let tail = Stub::new()
+        .bytes(&[0x83, 0xEC, 0x08]) // sub esp,8
+        .bytes(&[0x56]) // push esi
+        .bytes(&[0x53]) // push ebx
+        .call(assign) // call DMString::operator=
+        .bytes(&[0x83, 0xC4, 0x10]) // add esp,10h
+        .bytes(&[0x89, 0x74, 0x24, 0x14]) // mov [esp+14h],esi
+        .bytes(&[0x89, 0x5C, 0x24, 0x10]) // mov [esp+10h],ebx
+        .jmp(open + 0x62) // jmp back
+        .exec()?;
     for s in sites {
         core.call(s, 5, clear)?;
     }

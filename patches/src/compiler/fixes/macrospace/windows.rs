@@ -91,9 +91,9 @@ pub fn install(cx: &Ctx) -> Result<String> {
         bail!("macro text push: not the text stream reader's class");
     }
     let save = core.find_unique_in(push, 0x100, SAVE, "macro text push: current character save")?;
-    let [parent] = core.array(push + PARENT)?;
-    let [kind] = core.array(push + KIND)?;
-    let [saved] = core.array(save + SAVED)?;
+    let parent = core.u8_at(push + PARENT)?;
+    let kind = core.u8_at(push + KIND)?;
+    let saved = core.u8_at(save + SAVED)?;
     let found = Found {
         parent: usize::from(parent),
         kind: usize::from(kind),

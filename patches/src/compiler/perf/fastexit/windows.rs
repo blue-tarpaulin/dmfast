@@ -69,15 +69,15 @@ pub fn install(cx: &Ctx) -> Result<String> {
     if core.find_bytes_in(release, 0x100, &(locks as u32).to_le_bytes())?.len() < 2 {
         bail!("resource lock list not where expected");
     }
-    let data_file = usize::from(core.bytes(release + 57, 1)?[0]);
+    let data_file = usize::from(core.u8_at(release + 57)?);
     let m = exe.find_unique("8D 8D ?? ?? FF FF E8 ?? ?? ?? ?? 8D 4D ?? FF D3 8D 4D ?? FF D3", "builder teardown")?;
-    let epilogue = if exe.bytes(m + 21, 1)? == [0xE9] { exe.rel32(m + 22)? } else { m + 21 };
+    let epilogue = if exe.u8_at(m + 21)? == 0xE9 { exe.rel32(m + 22)? } else { m + 21 };
     // lea ecx,[ebp-a] ; call ; lea ecx,[ebp-b] ; call ; mov eax,[ebp-r] ; mov ecx,[ebp-0Ch]
     let tail = "8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 45 ?? 8B 4D F4";
     if !exe.is_at(epilogue, tail)? {
         bail!("unexpected epilogue after the builder teardown");
     }
-    let ret = exe.bytes(epilogue + 24, 1)?[0];
+    let ret = exe.u8_at(epilogue + 24)?;
     let status = Status::find(exe, exe.rel32(m + 7)?)?;
     exe.write_code(m, &[0xFF, 0x75, ret])?; // push dword [ebp-r]
     exe.call(m + 3, 5, fast_exit as *const ())?;
@@ -112,12 +112,12 @@ impl Status {
         if exe.ptr_at(printer + 0x37)? != lock_slot {
             bail!("status printer: unexpected lock");
         }
-        let console = usize::from(exe.bytes(printer + 0x47, 1)?[0]);
+        let console = usize::from(exe.u8_at(printer + 0x47)?);
         // Past the console check, the printer draws only while `cmp byte [esi+showing],0` is nonzero (twice in 516).
         let mut flags = exe
             .find_in(printer + 0x4B, 0x200 - 0x4B, "80 7E ?? 00")?
             .into_iter()
-            .map(|at| Ok(exe.bytes(at + 2, 1)?[0]))
+            .map(|at| exe.u8_at(at + 2))
             .collect::<Result<Vec<u8>>>()?;
         flags.dedup();
         let [showing] = flags[..] else { bail!("status printer: expected one \"showing\" flag, found {flags:?}") };

@@ -3,9 +3,9 @@
 
 use std::arch::naked_asm;
 
+use crate::base::Result;
 use crate::base::code::{Foreign, branch};
 use crate::base::feature::Ctx;
-use crate::base::{Result, bail};
 
 const GETVAR: &str = "55 89 E5 57 56 53 83 EC 5C F3 0F 7E 4D 0C 8B 75 08 8B 5D 14 66 0F 6F C1 66 0F 7E CA 66 0F 73 D0 20 \
                       0F B6 C2 66 0F 7E 45 A8 3C ?? 77 ?? 66 0F 7E C7 FF 24 85";
@@ -80,18 +80,11 @@ pub fn install(cx: &Ctx) -> Result<String> {
     }
 
     // jmp var_read, then int3 up to the call.
-    let mut r = branch(0xE9, read + READ_AT, var_read as unsafe extern "C" fn() as usize, 5);
+    let mut r = branch(0xE9, read + READ_AT, var_read as unsafe extern "C" fn(), 5);
     r.resize(READ_BACK - READ_AT, 0xCC);
     let sites = [(getvar + 9, &GETVAR_NEW[..]), (read + READ_AT, &r[..])];
     let ranges = sites.map(|(at, code)| (at, code.len()));
     core.untouched(&ranges)?;
-    // Nor may a relocated word (a jump table entry, a function pointer) point inside one (all read, none relied on).
-    for s in core.reloc_sites() {
-        let v = u32::from_le_bytes(*core.haystack(s, 4)?.first_chunk().ok_or("short read")?) as usize;
-        if ranges.iter().any(|&(at, len)| (at + 1..at + len).contains(&v)) {
-            bail!("an address inside a rewritten range, at {s:#x}");
-        }
-    }
     BACK.set(read + READ_BACK);
     for (at, code) in sites {
         core.write_code(at, code)?;

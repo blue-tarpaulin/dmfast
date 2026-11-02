@@ -69,7 +69,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
         bail!("profiler entry block: does not return to the join");
     }
     let clock = core.rel32(block + CLOCK)?;
-    let [modrm] = core.array(block + SELF_MODRM)?;
+    let modrm = core.u8_at(block + SELF_MODRM)?;
     if modrm & 0xC7 != 0x86 {
         bail!("profiler entry block: self-time clock store not as expected");
     }

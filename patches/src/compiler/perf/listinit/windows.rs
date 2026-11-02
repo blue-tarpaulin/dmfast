@@ -2,7 +2,7 @@
 //! one.
 
 use super::{Found, init, intern};
-use crate::base::code::{Foreign, trampoline};
+use crate::base::code::Foreign;
 use crate::base::feature::Ctx;
 use crate::base::{Result, bail};
 
@@ -20,7 +20,8 @@ pub fn install(cx: &Ctx) -> Result<String> {
     if !core.mentions(f, 0x180, array)? {
         bail!("list initializer intern: entry array not where expected");
     }
-    let original = trampoline(core.bytes(f, 6)?, f + 6)?;
+    // The 6 bytes: push ebp ; mov ebp,esp ; sub esp,8.
+    let original = core.hook(f, 6, intern as extern "C" fn(usize) -> u32)?;
     let (malloc, realloc) = core.crt_alloc()?;
     init(Found {
         array,
@@ -29,6 +30,5 @@ pub fn install(cx: &Ctx) -> Result<String> {
         realloc: Foreign::at(realloc),
         original: Foreign::at(original),
     });
-    core.jump(f, 5, intern as extern "C" fn(usize) -> u32)?;
-    Ok(format!("at {:#x}", f - core.base))
+    Ok(format!("at +{:#x}", f - core.base))
 }

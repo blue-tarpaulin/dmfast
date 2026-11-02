@@ -1,5 +1,5 @@
 //! Writing code: in-place patches and branches ([`crate::ledger`] does [`crate::image::Image`]'s recorded writes
-//! with [`poke_code`]), and the executable memory behind [`crate::code::exec_code`].
+//! with [`poke_code`]), and the executable memory behind [`crate::code::Stub`].
 
 use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
 use windows_sys::Win32::System::Memory::{
@@ -8,12 +8,13 @@ use windows_sys::Win32::System::Memory::{
 };
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
+use crate::code::CodeAddr;
 use crate::image::Image;
 use crate::{Result, bail};
 
 impl Image {
     /// Turn `call dword ptr [slot]` (FF 15 imm32) at `site` into `call target ; nop`.
-    pub fn call_iat_to(&self, site: usize, slot: usize, target: usize) -> Result<()> {
+    pub fn call_iat_to(&self, site: usize, slot: usize, target: impl CodeAddr) -> Result<()> {
         if self.array(site)? != [0xFF, 0x15] || self.ptr_at(site + 2)? != slot {
             bail!("expected call [iat] at {site:#x}");
         }

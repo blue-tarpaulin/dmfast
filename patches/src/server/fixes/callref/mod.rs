@@ -5,7 +5,7 @@
 //! the fix releases the args and nulls their stack slots.
 
 use crate::base::Result;
-use crate::base::code::{CodeAddr, live_u32, trampoline};
+use crate::base::code::{CodeAddr, Stub, live_u32};
 use crate::base::feature::{Feature, Hosts, Tier, install};
 use crate::base::image::Image;
 
@@ -38,13 +38,14 @@ unsafe fn args(state: usize, base: usize, pos: usize, count: u32) -> impl Iterat
 }
 
 /// Make the failure report at `site` call `release` first: `push` puts its arguments on the stack (`pushed` bytes,
-/// popped after the call), then the report's first `len` bytes (position-independent) run as before.
+/// popped after the call), then the report's first `len` bytes (position-independent) run as before and jump back.
 fn release_first(core: &Image, site: usize, len: usize, push: &[u8], pushed: u8, release: impl CodeAddr) -> Result<()> {
-    let mut v = push.to_vec();
-    v.push(0xB8); // mov eax,release
-    v.extend((release.code_addr() as u32).to_le_bytes());
-    v.extend([0xFF, 0xD0]); // call eax
-    v.extend([0x83, 0xC4, pushed]); // add esp,pushed
-    v.extend(core.bytes(site, len)?);
-    core.jump(site, len, trampoline(&v, site + len)?)
+    let stub = Stub::new()
+        .bytes(push) // push the arguments
+        .call(release) // call release
+        .bytes(&[0x83, 0xC4, pushed]) // add esp,pushed
+        .bytes(core.bytes(site, len)?) // the report's first bytes
+        .jmp(site + len) // jmp back
+        .exec()?;
+    core.jump(site, len, stub)
 }

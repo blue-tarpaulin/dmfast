@@ -139,13 +139,18 @@ impl Image {
     }
 
     /// Address of the export `name` (byondcore.dll exports C++ methods under decorated names, steadier than
-    /// signatures).
+    /// signatures); `Err` for a forwarded export, which lives in another module.
     pub fn export(&self, name: &CStr) -> Result<usize> {
         self.open()?;
         // SAFETY: `base` is a loaded module's handle (`Image::pe`); `name` is NUL-terminated.
-        unsafe { GetProcAddress(self.base as _, name.as_ptr().cast()) }
-            .map(|f| f as usize)
-            .ok_or_else(|| format!("no export {}", name.to_string_lossy()).into())
+        let Some(f) = (unsafe { GetProcAddress(self.base as _, name.as_ptr().cast()) }) else {
+            bail!("no export {}", name.to_string_lossy());
+        };
+        let f = f as usize;
+        if !self.is_mapped(f, 1) {
+            bail!("export {} is outside the module", name.to_string_lossy());
+        }
+        Ok(f)
     }
 }
 

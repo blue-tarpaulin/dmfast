@@ -1,16 +1,17 @@
 //! [`Image`]: a loaded module (the core library, the program) as install code sees it, from
 //! [`Ctx`](crate::feature::Ctx). Its readers and searches are bounds-checked (`Err` outside its mapped ranges), read
-//! code as shipped while features install (`crate::snapshot`) and record what they return as relied on
-//! ([`crate::ledger`]); [`Image::haystack`] and the probes (`probe_*`) don't, and [`Image::rely`] relies on a range
-//! explicitly. Its writers only record the installing feature's writes (`Err` outside an install); the ledger does
-//! them. Searches return [`Hits`] (`Err` after install, or outside the image for an address range).
+//! code as shipped while features install (`crate::snapshot`; data as it is now) and record what they return as
+//! relied on ([`crate::ledger`]); [`Image::haystack`], `live_*`, [`Image::c_str`], and the probes (`probe_*`) don't,
+//! and [`Image::rely`] relies on a range explicitly. Its writers only record the installing feature's writes (`Err`
+//! outside an install); the ledger does them. Searches return [`Hits`] (`Err` after install, or outside the image for
+//! an address range).
 //!
 //! Images exist only during install; one used later reads and writes nothing and is reported as a bug.
 
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
-use crate::code::{CodeAddr, branch};
+use crate::code::{CodeAddr, branch, trampoline};
 use crate::ledger::{self, rely};
 use crate::scan::{self, Hay};
 use crate::{Result, bail};
@@ -103,7 +104,7 @@ impl Image {
         Ok(unsafe { std::slice::from_raw_parts(addr as *const u8, len) })
     }
 
-    /// The NUL-terminated string at `addr`, without the NUL, as it is now.
+    /// The NUL-terminated string at `addr`, without the NUL, as it is now, not relied on.
     pub fn c_str(&self, addr: usize) -> Result<&[u8]> {
         let &(start, len) = self
             .mapped
@@ -115,7 +116,8 @@ impl Image {
         Ok(&rest[..end])
     }
 
-    /// `addr..addr+len` as shipped, not relied on: something to search through.
+    /// `addr..addr+len` as shipped (data: as it is now), not relied on: something to search through, or to read
+    /// without relying on it.
     pub fn haystack(&self, addr: usize, len: usize) -> Result<&[u8]> {
         self.check(addr, len)?;
         match crate::snapshot::at(addr, len) {
@@ -125,7 +127,7 @@ impl Image {
         }
     }
 
-    /// `addr..addr+len` as shipped, relied on.
+    /// `addr..addr+len` as shipped (data: as it is now), relied on.
     pub fn bytes(&self, addr: usize, len: usize) -> Result<&[u8]> {
         let b = self.haystack(addr, len)?;
         rely(addr, len);
@@ -135,6 +137,11 @@ impl Image {
     /// The `N` bytes at `addr` as shipped, relied on.
     pub fn array<const N: usize>(&self, addr: usize) -> Result<[u8; N]> {
         self.bytes(addr, N)?.first_chunk().copied().ok_or_else(|| "short read".into())
+    }
+
+    /// The byte at `addr` as shipped, relied on.
+    pub fn u8_at(&self, addr: usize) -> Result<u8> {
+        self.array(addr).map(|[b]| b)
     }
 
     /// The dword at `addr` as shipped, relied on.
@@ -179,13 +186,22 @@ impl Image {
         self.parts.iter().filter(|p| p.2).map(|&(a, n, _)| (a, n)).collect()
     }
 
-    /// Fails if a relocation, or a direct branch (`E8`, `E9`, or `0F 8x`) from elsewhere in the code, lands inside one
-    /// of `ranges` (`(at, len)`), code about to be rewritten in place. A branch to a range's start is fine, and so is
-    /// one from inside a range, which is rewritten too.
+    /// Fails if something else may branch into one of `ranges` (`(at, len)`), code about to be rewritten in place: a
+    /// direct branch (`E8`, `E9`, or `0F 8x` rel32) from elsewhere in the code, a relocation inside a range, or a
+    /// relocated word (a jump table entry, a function pointer) pointing inside one. A branch or pointer to a range's
+    /// start is fine, and so is a branch from inside a range, which is rewritten too. Short branches (`EB`, `7x`) and
+    /// computed jumps aren't seen: check the code around a range when they could reach it.
     pub fn untouched(&self, ranges: &[(usize, usize)]) -> Result<()> {
-        let hits = |lo: usize, hi: usize| ranges.iter().any(|&(at, len)| hi > at && lo < at + len);
-        if let Some(r) = self.reloc_sites().into_iter().find(|&r| hits(r, r + 4)) {
-            bail!("relocation at {r:#x} in rewritten code");
+        // Overlaps `lo..hi`; `inside(to, to)`: strictly inside a range.
+        let inside = |lo: usize, hi: usize| ranges.iter().any(|&(at, len)| hi > at && lo < at + len);
+        for r in self.reloc_sites() {
+            if inside(r, r + 4) {
+                bail!("relocation at {r:#x} in rewritten code");
+            }
+            let to = u32::from_le_bytes(*self.haystack(r, 4)?.first_chunk().ok_or("short read")?) as usize;
+            if inside(to, to) {
+                bail!("relocated pointer at {r:#x} into rewritten code at {to:#x}");
+            }
         }
         for (start, n) in self.code_ranges() {
             let bytes = self.haystack(start, n)?;
@@ -198,8 +214,7 @@ impl Image {
                 let from = start + i;
                 let rel = i32::from_le_bytes([bytes[i + op], bytes[i + op + 1], bytes[i + op + 2], bytes[i + op + 3]]);
                 let to = (from + op + 4).wrapping_add(rel as isize as usize);
-                // `hits(to, to)`: strictly inside a range.
-                if hits(to, to) && !hits(from, from + 1) {
+                if inside(to, to) && !inside(from, from + 1) {
                     bail!("branch at {from:#x} into rewritten code at {to:#x}");
                 }
             }
@@ -230,8 +245,8 @@ impl Image {
         Ok(Hits(scan::find_pattern(&self.hays(Some(true))?, &scan::parse(ida)?)))
     }
 
-    /// The only match of [`Image::probe_all`] that `keep` accepts, relied on (`Err` naming `what` otherwise). The
-    /// matches it rejects stay candidates, relied on by nothing.
+    /// The only match of [`Image::probe_all`] that `keep` accepts, relied on (`Err` naming `what` otherwise). The other
+    /// matches aren't relied on, only what `keep` reads in them (it reads as usual: `rel32`, `u32_at`, ... rely).
     pub fn probe_unique(&self, ida: &str, what: &str, keep: impl Fn(usize) -> bool) -> Result<usize> {
         let pat = scan::parse(ida)?;
         let hits = scan::find_pattern(&self.hays(Some(true))?, &pat);
@@ -306,14 +321,42 @@ impl Image {
         self.record(true, addr, data, false)
     }
 
-    /// [`Image::write_code`] of `jmp target` at `site`, NOP-padded to `len` (>= 5).
+    /// [`Image::write_code`] of `jmp target` at `site`, NOP-padded to `len` (>= 5). When `len` covers more than the
+    /// one instruction it replaces, check [`Image::untouched`] first.
     pub fn jump(&self, site: usize, len: usize, target: impl CodeAddr) -> Result<()> {
-        self.write_code(site, &branch(0xE9, site, target.code_addr(), len))
+        if len < 5 {
+            bail!("jump at {site:#x}: needs 5 bytes, got {len}");
+        }
+        self.write_code(site, &branch(0xE9, site, target, len))
     }
 
-    /// [`Image::write_code`] of `call target` at `site`, NOP-padded to `len` (>= 5).
+    /// [`Image::write_code`] of `call target` at `site`, NOP-padded to `len` (>= 5), as [`Image::jump`].
     pub fn call(&self, site: usize, len: usize, target: impl CodeAddr) -> Result<()> {
-        self.write_code(site, &branch(0xE8, site, target.code_addr(), len))
+        if len < 5 {
+            bail!("call at {site:#x}: needs 5 bytes, got {len}");
+        }
+        self.write_code(site, &branch(0xE8, site, target, len))
+    }
+
+    /// [`Image::write_code`] of the rel32 field at `field` (a `call`, `jmp`, or `jcc` that ends right after it), so
+    /// the branch goes to `target` instead: the write counterpart of [`Image::rel32`].
+    pub fn retarget(&self, field: usize, target: impl CodeAddr) -> Result<()> {
+        self.write_code(field, &(target.code_addr().wrapping_sub(field + 4) as u32).to_le_bytes())
+    }
+
+    /// Hook the function at `f` at its entry: its first `len` (>= 5) bytes, whole position-independent instructions,
+    /// become `jmp hook`, after [`Image::untouched`] checks that nothing else lands inside them. Returns the original
+    /// function: a copy of those bytes, then a jump to the rest ([`trampoline`]). The hook is entered with the
+    /// caller's registers and stack, so it has the original's signature and convention (`extern "C"`, `"thiscall"`,
+    /// or a naked function), and calls the original the same way (`Foreign::at(original)`).
+    pub fn hook(&self, f: usize, len: usize, hook: impl CodeAddr) -> Result<usize> {
+        if len < 5 {
+            bail!("hook at {f:#x}: needs 5 bytes, got {len}");
+        }
+        self.untouched(&[(f, len)])?;
+        let original = trampoline(self.bytes(f, len)?, f + len)?;
+        self.jump(f, len, hook)?;
+        Ok(original)
     }
 
     /// [`Image::write_code`] over another feature's hook that the new code calls through (it is in this one's
@@ -399,10 +442,6 @@ impl Hits {
 
     pub fn as_slice(&self) -> &[usize] {
         &self.0
-    }
-
-    pub fn into_vec(self) -> Vec<usize> {
-        self.0
     }
 }
 

@@ -42,6 +42,10 @@ py tools/release.py --distro Debian
 
 Output: `dist/dmfast-install.exe` - works on both operating systems.
 
+## Writing a patch
+
+What the shared `base` crate offers a patch, by task: [WRITING-PATCHES.md](WRITING-PATCHES.md).
+
 ## Release
 
 Rename `## Unreleased` in [CHANGELOG.md](CHANGELOG.md) to the version (e.g. `## 4.4.0`), commit, then push a `v*` tag (e.g. `v4.4.0`). The release notes include that section.
