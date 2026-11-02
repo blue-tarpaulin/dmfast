@@ -57,9 +57,9 @@ pub static SERVER_PERF: &[&Feature] = &[
 
 /// Compiler bug fixes: opt-in, listed in BUGFIXES.md, each with a test world in `tests/fixes/<key>.dme`.
 pub static COMPILER_FIXES: &[&Feature] = &[
-    &private::compiler::fixes::indent::INDENT,
+    &public::compiler::fixes::indent::INDENT,
     &public::compiler::fixes::contline::CONTLINE,
-    &private::compiler::fixes::macrospace::MACROSPACE,
+    &public::compiler::fixes::macrospace::MACROSPACE,
     &public::compiler::fixes::typepath::TYPEPATH,
     &public::compiler::fixes::objworld::OBJWORLD,
     &private::compiler::fixes::procargs::PROCARGS,

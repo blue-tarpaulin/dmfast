@@ -6,6 +6,8 @@ use crate::base::image::Image;
 use crate::base::{Result, bail};
 
 pub mod contline;
+pub mod indent;
+pub mod macrospace;
 pub mod mapcolors;
 pub mod objworld;
 pub mod regexstart;
