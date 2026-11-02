@@ -83,9 +83,9 @@ pub static SERVER_FIXES: &[&Feature] = &[
     &private::server::fixes::tick::TICKINIT,
     &private::server::fixes::tick::TICK0,
     &public::server::fixes::callref::CALLREF,
-    &private::server::fixes::hubsock::HUBSOCK,
+    &public::server::fixes::hubsock::HUBSOCK,
     &public::server::fixes::rscid::RSCID,
-    &private::server::fixes::profself::PROFSELF,
+    &public::server::fixes::profself::PROFSELF,
     &public::server::fixes::iconwrap::ICONWRAP,
     &public::server::fixes::profcpu::PROFCPU,
 ];
