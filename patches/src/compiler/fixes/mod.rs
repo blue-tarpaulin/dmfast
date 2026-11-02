@@ -7,8 +7,10 @@ use crate::base::{Result, bail};
 
 pub mod contline;
 pub mod mapcolors;
+pub mod objworld;
 pub mod regexstart;
 pub mod typepath;
+pub mod varlimit;
 
 /// Replaces the built-in DM source chunk containing `mark` (one of a table of NUL-terminated chunks the compiler
 /// parses first) with `edit` of its text, kept in `fixed` for the life of the process. Returns the table entry.

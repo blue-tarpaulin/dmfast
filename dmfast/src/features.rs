@@ -61,11 +61,11 @@ pub static COMPILER_FIXES: &[&Feature] = &[
     &public::compiler::fixes::contline::CONTLINE,
     &private::compiler::fixes::macrospace::MACROSPACE,
     &public::compiler::fixes::typepath::TYPEPATH,
-    &private::compiler::fixes::objworld::OBJWORLD,
+    &public::compiler::fixes::objworld::OBJWORLD,
     &private::compiler::fixes::procargs::PROCARGS,
     &public::compiler::fixes::mapcolors::MAPCOLORS,
     &public::compiler::fixes::regexstart::REGEXSTART,
-    &private::compiler::fixes::varlimit::VARLIMIT,
+    &public::compiler::fixes::varlimit::VARLIMIT,
 ];
 
 /// DreamDaemon bug fixes: opt-in, listed in BUGFIXES.md, each with a test world in `tests/fixes/<key>.dme`.
