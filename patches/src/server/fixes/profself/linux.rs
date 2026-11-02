@@ -79,10 +79,15 @@ pub fn install(cx: &Ctx) -> Result<String> {
     if core.rel32(setup + SETUP_CLOCK)? != clock {
         bail!("frame setup: not the profiler's clock");
     }
-    // Reached by `test byte [flags+2],1 (profiling) ; jne setup`. The flag's other tests are candidates.
+    // Reached by `test byte [flags+2],1 (profiling) ; jne setup`: the first such test is relied on, the flag's other
+    // tests are candidates.
     let flags = core.u32_at(at + FLAGS)?;
     let test = format!("F6 05 {} 01 0F 85", hx(flags as usize + 2));
-    core.probe_unique(&test, "frame setup profiling test", |t| core.rel32(t + 9).is_ok_and(|s| s == setup))?;
+    let reaches = |t: &usize| core.rel32(t + 9).is_ok_and(|s| s == setup);
+    let Some(t) = core.probe_all(&test)?.iter().copied().find(reaches) else {
+        bail!("frame setup: not reached by the profiling test");
+    };
+    core.rely(t, test.split_whitespace().count())?;
 
     // Frame setup also starts the self-time clock: movq [ebx+total],xmm0 (moved) ; movq [ebx+self],xmm0 ; jmp done
     let store = setup + STORE;

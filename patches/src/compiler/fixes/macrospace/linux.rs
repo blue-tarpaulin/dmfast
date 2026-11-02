@@ -3,7 +3,7 @@
 use std::arch::naked_asm;
 use std::ffi::c_void;
 
-use super::{FOUND, Found, Getc, Ungetc, drop_space};
+use super::{CURRENT, FOUND, Found, Getc, POS, TEXT, Ungetc, drop_space};
 use crate::base::code::Foreign;
 use crate::base::feature::Ctx;
 use crate::base::{Result, bail};
@@ -48,17 +48,17 @@ const SLOT: usize = 2;
 unsafe extern "C" fn reader() {
     naked_asm!(
         "mov eax, dword ptr [esp + 4]",
-        "mov edx, dword ptr [eax + 0x3C]",
-        "mov ecx, dword ptr [eax + 0x34]",
+        "mov edx, dword ptr [eax + {pos}]",
+        "mov ecx, dword ptr [eax + {text}]",
         "movzx ecx, byte ptr [ecx + edx]",
         "cmp ecx, 0x20",
         "je 3f",
         "2:",
-        "mov dword ptr [eax + 0x40], ecx",
+        "mov dword ptr [eax + {current}], ecx",
         "test ecx, ecx",
         "je 4f",
         "add edx, 1",
-        "mov dword ptr [eax + 0x3C], edx",
+        "mov dword ptr [eax + {pos}], edx",
         "mov eax, ecx",
         "ret",
         "4:",
@@ -79,15 +79,18 @@ unsafe extern "C" fn reader() {
         "pop eax",
         "test ecx, ecx",
         "jne 5f",
-        "mov edx, dword ptr [eax + 0x3C]",
+        "mov edx, dword ptr [eax + {pos}]",
         "mov ecx, 0x20",
         "jmp 2b",
         // Dropped: the end of the text.
         "5:",
-        "mov dword ptr [eax + 0x40], 0",
+        "mov dword ptr [eax + {current}], 0",
         "mov eax, -1",
         "ret",
         drop_space = sym drop_space,
+        text = const TEXT,
+        pos = const POS,
+        current = const CURRENT,
     )
 }
 

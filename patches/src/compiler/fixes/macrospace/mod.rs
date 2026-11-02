@@ -26,9 +26,10 @@ pub static MACROSPACE: Feature = Feature::fix(
     install!(windows: windows::install, linux: linux::install),
 );
 
-/// A text stream's text (NUL-terminated) and position in it.
+/// A text stream's text (NUL-terminated), position in it, and current character (the reader's result).
 const TEXT: usize = 0x34;
 const POS: usize = 0x3C;
+const CURRENT: usize = 0x40;
 /// What a stream's FILE is at, for a file stream.
 const FILE: usize = 8;
 
