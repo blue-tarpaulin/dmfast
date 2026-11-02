@@ -1,6 +1,6 @@
 //! `contline`, Windows: a stub after the skip loop's `isspace` test ends the loop at a newline.
 
-use crate::base::code::{branch, exec_code};
+use crate::base::code::{branch, exec_code, jcc};
 use crate::base::feature::Ctx;
 use crate::base::{Result, bail};
 
@@ -23,8 +23,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let stub = exec_code(17, |s| {
         let mut v = vec![0x74, 0x0A]; // je done
         v.extend([0x83, 0x7F, 0x18, 0x0A]); // cmp dword [edi+18h],0Ah
-        v.extend([0x0F, 0x85]); // jne loop
-        v.extend((loop_top.wrapping_sub(s + v.len() + 4) as u32).to_le_bytes());
+        v.extend(jcc(0x85, s + v.len(), loop_top)); // jne loop
         v.extend(branch(0xE9, s + v.len(), top, 5)); // done: jmp top
         v
     })?;
