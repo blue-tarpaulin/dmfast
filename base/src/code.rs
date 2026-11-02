@@ -139,6 +139,12 @@ pub fn branch(op: u8, at: usize, target: usize, len: usize) -> Vec<u8> {
     v
 }
 
+/// `0F <op>` + rel32 from `at` to `target`: a near conditional jump (`op` `84` is `je`, `85` is `jne`, and so on).
+pub fn jcc(op: u8, at: usize, target: usize) -> [u8; 6] {
+    let [a, b, c, d] = (target.wrapping_sub(at + 6) as u32).to_le_bytes();
+    [0x0F, op, a, b, c, d]
+}
+
 /// `code` followed by NOPs up to `N` bytes, at compile time: new code for an in-place rewrite of an `N`-byte range.
 pub const fn pad<const N: usize>(code: &[u8]) -> [u8; N] {
     let mut out = [0x90; N];

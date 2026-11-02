@@ -3,7 +3,7 @@
 //! to "Division by zero".
 
 use super::{NULL, NUMBER};
-use crate::base::code::{branch, exec_code};
+use crate::base::code::{branch, exec_code, jcc};
 use crate::base::feature::Ctx;
 use crate::base::{Result, bail};
 
@@ -45,13 +45,11 @@ pub fn install(cx: &Ctx) -> Result<String> {
         v.extend([0x80, 0xBD]);
         v.extend(right_type);
         v.push(NUMBER); // cmp byte [ebp+right type],2Ah
-        v.extend([0x0F, 0x84]);
-        v.extend((num.wrapping_sub(s + v.len() + 4) as u32).to_le_bytes()); // je number case
+        v.extend(jcc(0x84, s + v.len(), num)); // je number case
         v.extend([0x80, 0xBD]);
         v.extend(right_type);
         v.push(NULL); // cmp byte [ebp+right type],0
-        v.extend([0x0F, 0x84]);
-        v.extend((error.wrapping_sub(s + v.len() + 4) as u32).to_le_bytes()); // je error
+        v.extend(jcc(0x84, s + v.len(), error)); // je error
         v.extend(branch(0xE9, s + v.len(), loop_head, 5)); // jmp loop (stock)
         v
     })?;

@@ -1,7 +1,7 @@
 //! `contline`, Linux: the skip loop's `isspace` test becomes "a space and not a newline".
 
 use crate::base::Result;
-use crate::base::code::{branch, exec_code};
+use crate::base::code::{branch, exec_code, jcc};
 use crate::base::feature::Ctx;
 
 pub fn install(cx: &Ctx) -> Result<String> {
@@ -16,8 +16,8 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let at = p + 25;
     let stub = exec_code(21, |s| {
         let mut v = vec![0x83, 0xC4, 0x10, 0x85, 0xC0, 0x74, 0x09]; // add esp,10h ; test eax,eax ; je done
-        v.extend([0x83, 0xFF, 0x0A, 0x0F, 0x85]); // cmp edi,0Ah ; jne loop
-        v.extend((p.wrapping_sub(s + v.len() + 4) as u32).to_le_bytes());
+        v.extend([0x83, 0xFF, 0x0A]); // cmp edi,0Ah
+        v.extend(jcc(0x85, s + v.len(), p)); // jne loop
         v.extend(branch(0xE9, s + v.len(), p + 32, 5)); // done: jmp after the loop
         v
     })?;
