@@ -1,0 +1,97 @@
+// Adding a filter named like one already in an atom's filters replaces it (forum report 2992239); stock keeps both.
+/proc/f(name, size)
+	if(name)
+		return filter(type = "outline", size = size, name = name)
+	return filter(type = "outline", size = size)
+
+/proc/show(label, atom/a)
+	var/list/out = list()
+	for(var/list/x in json_decode(json_encode(a.filters)))
+		out += "[x["name"] || "-"]/[x["size"]]"
+	world.log << "[label]: [jointext(out, " ")]"
+
+// filters.Add() is "undefined proc" before 516.1652; += adds the same way there.
+/proc/add(atom/a, f1, f2)
+	if(world.byond_build < 1652)
+		a.filters += f1
+		if(f2)
+			a.filters += f2
+	else if(f2)
+		a.filters.Add(f1, f2)
+	else
+		a.filters.Add(f1)
+
+/world/New()
+	var/mob/m = new
+	m.filters += f("a", 1)
+	m.filters += f("a", 2)
+	show("+=", m)
+
+	m = new
+	add(m, f("a", 1))
+	add(m, f("a", 2))
+	show("Add", m)
+
+	m = new
+	add(m, f("a", 1), f("a", 2))
+	show("Add two", m)
+
+	m = new
+	m.filters += list(f("a", 1), f("b", 3), f("a", 2))
+	show("+= list", m)
+
+	m = new
+	m.filters = list(f("a", 1), f("b", 3), f("a", 2))
+	show("= list", m)
+
+	m = new
+	m.filters = f("a", 1)
+	m.filters += f("a", 2)
+	show("= filter, +=", m)
+
+	m = new
+	m.filters += f("a", 1)
+	m.filters += f("b", 3)
+	m.filters += f("a", 2)
+	show("moves to the end", m)
+
+	m = new
+	m.filters += f("a", 1)
+	m.filters += f("b", 3)
+	m.filters += f("c", 4)
+	m.filters[3] = f("a", 2)
+	show("\[3] =", m)
+
+	m = new
+	m.filters += f("a", 1)
+	m.filters += f("b", 3)
+	m.filters[1] = f("b", 2)
+	show("\[1] =", m)
+
+	m = new
+	m.filters += f("a", 1)
+	m.filters[1] = f("a", 2)
+	show("\[1] = same name", m)
+
+	m = new
+	m.filters += f("a", 1)
+	m.filters += m.filters[1]
+	show("re-add", m)
+
+	m = new
+	m.filters += f(null, 1)
+	m.filters += f(null, 2)
+	m.filters += f(null, 1)
+	show("unnamed", m)
+
+	m = new
+	m.filters += f("a", 1)
+	m.filters += f("b", 2)
+	m.filters += f(null, 3)
+	show("different names", m)
+
+	var/obj/o = new
+	o.filters += f("a", 1)
+	o.filters += f("a", 2)
+	show("obj", o)
+	shutdown()

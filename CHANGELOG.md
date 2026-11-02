@@ -8,6 +8,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New patch:** `varread` (DreamDaemon, Windows): faster reads of user-defined vars by name. ~1% less CPU usage in-round.
 - **Changed:** the list initialization patch key `pairs` is now `listinit`.
 - **Changed:** `jsonutf` is now in the `extended` tier since its output can differ from stock.
+- **New fix:** `filtername` (extended): adding a named filter to `filters` replaces the filter of that name instead of keeping both.
 
 ## 7.0.0
 
