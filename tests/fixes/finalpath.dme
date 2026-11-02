@@ -1,0 +1,35 @@
+// Forum report 2992317: `final` before a proc or var in a type's path is the final modifier, not a type `/x/final`.
+// Each spelling below must leave typesof() without a `final` type and the proc or var on the type itself;
+// finalpath-override.dme overrides each one, which must be an error.
+/a/proc/bar()
+	return 1
+/a/final/bar()
+	return 2
+
+/b/proc/final/bar()
+	return 3
+
+/c/final/proc/bar()
+	return 4
+
+/d/proc/bar()
+/d
+	final
+		bar()
+			return 5
+
+/e
+	final/var/x = 6
+
+/f/var/final/x = 7
+
+/proc/value(datum/o, name)
+	if(hascall(o, name))
+		return call(o, name)()
+	return (name in o.vars) ? o.vars[name] : "-"
+
+/world/New()
+	for(var/T in list(/a, /b, /c, /d, /e, /f))
+		var/list/types = typesof(T)
+		world.log << "[types.Join(" ")]: [value(new T, "bar")] [value(new T, "x")]"
+	shutdown()

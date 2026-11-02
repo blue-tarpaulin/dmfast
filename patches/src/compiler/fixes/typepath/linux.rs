@@ -2,21 +2,7 @@
 
 use super::last_operator;
 use crate::base::feature::Ctx;
-use crate::base::image::Image;
 use crate::base::{Result, ensure};
-
-/// The name table, from its interning loop: push [ebx*4+names+4] ; add ebx,1 ; push esi ; call intern ;
-/// add esp,10h ; cmp ebx,count ; jne ; cmp [esi+88h],count (two inlined copies, one table).
-fn names(core: &Image) -> Result<usize> {
-    let hits = core.find_all(
-        "FF 34 9D ?? ?? ?? ?? 83 C3 01 56 E8 ?? ?? ?? ?? 83 C4 10 81 FB ?? ?? ?? ?? 75 E2 81 BE 88 00 00 00",
-    )?;
-    let table = core.ptr_at(hits.first_or("name table")? + 3)?;
-    for &h in hits.iter() {
-        ensure!(core.ptr_at(h + 3)? == table, "name table: the interning loops read different tables");
-    }
-    Ok(table - 4)
-}
 
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
@@ -36,7 +22,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     };
     let plus = (core.u32_at(lea)? as i32).wrapping_neg() as usize;
     let b = core.u8_at(cmp)?;
-    let bound = last_operator(core, names(core)?, plus, plus + b as usize)? - plus;
+    let bound = last_operator(core, plus, plus + b as usize)? - plus;
     // cmp edx,imm8 is sign-extended.
     ensure!(bound <= 0x7F, "id bound {bound:#x} does not fit the check");
     core.write_code(cmp, &[bound as u8])?;

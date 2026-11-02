@@ -66,6 +66,7 @@ pub static COMPILER_FIXES: &[&Feature] = &[
     &public::compiler::fixes::mapcolors::MAPCOLORS,
     &public::compiler::fixes::regexstart::REGEXSTART,
     &public::compiler::fixes::varlimit::VARLIMIT,
+    &public::compiler::fixes::finalpath::FINALPATH,
 ];
 
 /// DreamDaemon bug fixes: opt-in, listed in BUGFIXES.md, each with a test world in `tests/fixes/<key>.dme`.
