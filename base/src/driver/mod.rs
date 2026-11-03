@@ -17,8 +17,8 @@ use crate::deps::Dep;
 use crate::feature::{Ctx, Feature, Host, Kind, State, Status};
 use crate::image::Image;
 pub(crate) use report::mimalloc;
-use report::summary;
 pub use report::{Counter, print_stats, stats, verify};
+use report::{read_verify, summary};
 use select::{check_keys, disabled, selection, wanted};
 
 /// What the driver installs and how it reports it, handed in from the loader entry.
@@ -97,6 +97,7 @@ pub(crate) unsafe fn install(config: &'static Config, host: Host) {
 /// Install time: no other thread runs BYOND's code; deps checked.
 unsafe fn run(config: &'static Config, host: Host, ctx: Ctx) {
     let _ = INSTALLED.set((config, host));
+    read_verify();
     crate::snapshot::take(ctx.core());
     if let Ok(exe) = ctx.exe() {
         crate::snapshot::take(exe);

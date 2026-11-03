@@ -22,14 +22,14 @@ pub static COMPILER_PERF: &[&Feature] = &[
     &public::compiler::perf::leafskip::LEAFSKIP,
     &public::compiler::perf::vecgrow::VECGROW,
     &public::compiler::perf::fscache::FSCACHE,
-    &private::compiler::perf::resources::RESOURCES,
+    &public::compiler::perf::resources::RESOURCES,
     &public::compiler::perf::dmbbuf::DMBBUF,
     &private::compiler::perf::slots::SLOTS,
-    &private::compiler::perf::intern::REBUILD,
+    &public::compiler::perf::intern::REBUILD,
     &public::compiler::perf::lists::LISTS,
     &public::compiler::perf::listinit::LISTINIT,
     &public::compiler::perf::protos::PROTOS,
-    &private::compiler::perf::intern::INTERNIDX,
+    &public::compiler::perf::intern::INTERNIDX,
 ];
 
 /// DreamDaemon speed patches: game behaviour is identical to stock.

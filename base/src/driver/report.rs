@@ -3,7 +3,7 @@
 
 use std::fmt;
 use std::sync::LazyLock;
-use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
 
 use crate::driver::select::has_selection;
 use crate::driver::{Config, INSTALLED};
@@ -15,10 +15,17 @@ pub fn stats() -> bool {
     *ON
 }
 
-/// `DMFAST_VERIFY` is set (read once).
+static VERIFY: AtomicBool = AtomicBool::new(false);
+
+/// `DMFAST_VERIFY` is set. One plain load, so hooks may test it on every call.
+#[inline(always)]
 pub fn verify() -> bool {
-    static ON: LazyLock<bool> = LazyLock::new(|| std::env::var_os("DMFAST_VERIFY").is_some());
-    *ON
+    VERIFY.load(Relaxed)
+}
+
+/// Read `DMFAST_VERIFY`, before any feature installs.
+pub(crate) fn read_verify() {
+    VERIFY.store(std::env::var_os("DMFAST_VERIFY").is_some(), Relaxed);
 }
 
 /// An event counter for a feature's stats (`static HITS: Counter = Counter::new();`, `HITS.bump()`, `{HITS}` in its
