@@ -1,17 +1,12 @@
 //! `macrospace`, Linux: the text stream's reader (cdecl, slot 2 of its vtable) jumps at entry to [`reader`].
 
 use std::arch::naked_asm;
-use std::ffi::c_void;
 
-use super::{CURRENT, FOUND, Found, Getc, POS, TEXT, Ungetc, drop_space};
+use super::{CURRENT, FOUND, Found, POS, TEXT, drop_space};
 use crate::base::code::Foreign;
 use crate::base::feature::Ctx;
+use crate::base::linux::glibc::{self, File};
 use crate::base::{Result, bail, ensure};
-
-unsafe extern "C" {
-    fn getc(f: *mut c_void) -> i32;
-    fn ungetc(c: i32, f: *mut c_void) -> i32;
-}
 
 /// The text stream's reader: mov eax,[esp+4] ; mov edx,[eax+3Ch] ; mov ecx,[eax+34h] ; movzx ecx,byte [ecx+edx] ;
 /// mov [eax+40h],ecx ; test ecx,ecx ; je end ; add edx,1 ; mov [eax+3Ch],edx ; mov eax,ecx ; ret ; ...
@@ -124,8 +119,8 @@ pub fn install(cx: &Ctx) -> Result<String> {
         slot: SLOT,
         text_reader: g,
         file_reader,
-        getc: Foreign::at(getc as Getc),
-        ungetc: Foreign::at(ungetc as Ungetc),
+        getc: Foreign::at(glibc::getc as unsafe extern "C" fn(*mut File) -> i32),
+        ungetc: Foreign::at(glibc::ungetc as unsafe extern "C" fn(i32, *mut File) -> i32),
     };
     core.untouched(&[(g, ENTRY)])?;
     core.jump(g, ENTRY, reader as unsafe extern "C" fn())?;

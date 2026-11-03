@@ -1,4 +1,5 @@
-//! glibc's i386 `FILE` layout, shared by the stream fast paths (features `stdio`, `macrospace`, `dmbread`).
+//! glibc's i386 `FILE` layout (features `stdio`, `macrospace`, `dmbread`), and `getc`/`ungetc`, which several
+//! features of one crate use: a crate may declare a C function only once.
 
 use std::ffi::c_int;
 
@@ -21,3 +22,8 @@ const _: () = assert!(std::mem::offset_of!(File, offset) == 0x4C);
 pub const IO_CURRENTLY_PUTTING: c_int = 0x800;
 /// `_IO_IS_APPENDING`: opened in append mode.
 pub const IO_IS_APPENDING: c_int = 0x1000;
+
+unsafe extern "C" {
+    pub fn getc(fp: *mut File) -> c_int;
+    pub fn ungetc(c: c_int, fp: *mut File) -> c_int;
+}
