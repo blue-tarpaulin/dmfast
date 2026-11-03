@@ -3,6 +3,7 @@
 use crate::base::feature::Ctx;
 
 pub mod banner;
+pub mod children;
 pub mod ctype;
 pub mod dirs;
 pub mod dmbbuf;
@@ -10,6 +11,7 @@ pub mod fastexit;
 pub mod fscache;
 pub mod listinit;
 pub mod lists;
+pub mod parent;
 pub mod poll;
 pub mod protos;
 pub mod vecgrow;
