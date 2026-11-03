@@ -35,9 +35,9 @@ pub static COMPILER_PERF: &[&Feature] = &[
 /// DreamDaemon speed patches: game behaviour is identical to stock.
 pub static SERVER_PERF: &[&Feature] = &[
     &private::server::perf::dmbread::DMBREAD,
-    &private::server::perf::procs::PROCS,
+    &public::server::perf::procs::PROCS,
     &private::server::perf::strtree::STRTREE,
-    &private::server::perf::sortmap::SORTMAP,
+    &public::server::perf::sortmap::SORTMAP,
     &private::server::perf::crc::CRC,
     &private::server::perf::strtable::STRTABLE,
     &public::server::perf::varlist::VARLIST,

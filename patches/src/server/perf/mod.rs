@@ -6,6 +6,8 @@ pub mod getvar;
 pub mod iconcopy;
 pub mod iconstates;
 pub mod locidx;
+pub mod procs;
+pub mod sortmap;
 pub mod truth;
 pub mod turfvar;
 pub mod varlist;
