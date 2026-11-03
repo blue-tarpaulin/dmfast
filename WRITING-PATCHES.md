@@ -41,10 +41,10 @@ Checks: `require(addr, ida, what)` (a pattern), `follow_call(at, ida, what)` (a 
   code around), then `Image::write_stub(site, len, &stub)` or `Image::write_code` (bytes from `code::branch`,
   `code::pad`); data: `Image::write_data`. Over another feature's write (listed in `after`): `wrap_code`, `wrap_data`.
 - New code: a Rust function where the registers allow, a `#[unsafe(naked)]` function with `naked_asm!` (typed
-  statics for the addresses it needs: `code::Foreign` for functions, `code::Addr` for places it jumps to), or a
-  `code::Stub` built one instruction at a time: `bytes`, `bytes_u32` (an embedded dword), and `call`, `jmp`, `jcc`,
-  `jmp8`, `jcc8` to an address or a label in it (`label`, `bind`). `code::trampoline` runs instructions moved out of a
-  mid-function rewrite (for a function's entry, use `hook`).
+  statics for the addresses it needs: `code::Foreign` for functions, `code::Addr` for places it jumps to and data it
+  reads), or a `code::Stub` built one instruction at a time: `bytes`, `bytes_u32` (an embedded dword), and `call`,
+  `jmp`, `jcc`, `jmp8`, `jcc8` to an address or a label in it (`label`, `bind`). `code::trampoline` runs instructions
+  moved out of a mid-function rewrite (for a function's entry, use `hook`).
 - Calling Rust (`extern "C"`) from BYOND's code: arguments pushed right to left and popped after; `eax`, `ecx`,
   `edx`, and the flags are clobbered; on Linux `esp` is 16-byte aligned at the `call`.
 

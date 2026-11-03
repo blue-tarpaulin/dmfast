@@ -1,23 +1,28 @@
 //! `pickweight`, Windows: a wrapper runs the stock opcode and redirects a jump to a threshold.
 
-use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
-
 use crate::base::code::{self, Foreign, live_u32, trampoline};
 use crate::base::feature::Ctx;
+use crate::base::sync::Installed;
 use crate::base::{Result, ensure};
 
-static ORIGINAL: Foreign<unsafe extern "C" fn()> = Foreign::new();
-/// The global holding the interpreter state: `+0x10` the code (one dword per word), `+0x14` the program counter.
-static STATE: AtomicUsize = AtomicUsize::new(0);
+/// What install found: the relocated opcode start, and the global holding the interpreter state (`+0x10` the code,
+/// one dword per word; `+0x14` the program counter).
+struct Found {
+    original: Foreign<unsafe extern "C" fn()>,
+    state: usize,
+}
+
+static FOUND: Installed<Found> = Installed::new();
 
 extern "C" fn pick() {
-    // SAFETY: STATE is BYOND's interpreter state global and ORIGINAL the relocated opcode start, set at install.
+    let f = FOUND.get();
+    // SAFETY: BYOND's interpreter state and the relocated opcode start, found at install.
     unsafe {
-        let state = || live_u32(STATE.load(Relaxed)) as usize;
+        let state = || live_u32(f.state) as usize;
         let code = live_u32(state() + 0x10) as usize;
         let word = |i: usize| live_u32(code + 4 * i) as u16;
         let start = usize::from(live_u32(state() + 0x14) as u16);
-        ORIGINAL.get()();
+        f.original.get()();
         let pc = state() + 0x14;
         let last = start + 2 + 2 * usize::from(word(start + 1));
         let target = word(last);
@@ -46,8 +51,8 @@ pub fn install(cx: &Ctx) -> Result<String> {
         "weighted pick final target",
     )?;
     ensure!((f + 1..=f + 0x100).contains(&tail), "weighted pick final target: not in the opcode found");
-    STATE.store(core.ptr_at(f + 5)?, Relaxed);
-    ORIGINAL.set(trampoline(core.bytes(f, 12)?, f + 12)?);
+    let found = Found { original: Foreign::at(trampoline(core.bytes(f, 12)?, f + 12)?), state: core.ptr_at(f + 5)? };
+    FOUND.commit(cx, found);
     core.jump(f, 12, pick as extern "C" fn())?;
     Ok(core.report(&[f]))
 }

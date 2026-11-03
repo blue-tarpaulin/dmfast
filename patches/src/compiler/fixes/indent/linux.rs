@@ -2,7 +2,6 @@
 //! a copy that also records the character; where a line is accepted as code, [`check_line`] runs the check.
 
 use std::arch::naked_asm;
-use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 use super::{BUF, CAP, check};
 use crate::base::Result;
@@ -24,7 +23,7 @@ const REPORT: &str = "83 EC 08 68 ?? ?? ?? ?? 53 E8 ?? ?? ?? ?? 8B 53 18 83 C4 1
 const MESSAGE_PUSH: usize = 4;
 const REPORT_CALL: usize = 9;
 
-static MESSAGE: AtomicUsize = AtomicUsize::new(0);
+static MESSAGE: Addr = Addr::new();
 static REPORT_FN: Addr = Addr::new();
 static BACK: Addr = Addr::new();
 
@@ -90,7 +89,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
         let stub = s.exec()?;
         core.jump(site, COUNT_LEN, stub)?;
     }
-    MESSAGE.store(message, Relaxed);
+    MESSAGE.set(message);
     REPORT_FN.set(core.call_target(e + REPORT_CALL)?);
     BACK.set(c + ACCEPT_LEN);
     core.jump(c, ACCEPT_LEN, check_line as unsafe extern "C" fn())?;

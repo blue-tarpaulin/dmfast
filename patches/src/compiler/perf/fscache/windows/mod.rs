@@ -4,7 +4,7 @@
 
 use std::ffi::c_void;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
 
 use windows_sys::Win32::Foundation::{GetLastError, HANDLE, INVALID_HANDLE_VALUE, SetLastError};
 use windows_sys::Win32::Globalization::{CP_ACP, MultiByteToWideChar};
@@ -17,7 +17,7 @@ use crate::base::driver::Counter;
 use crate::base::feature::Ctx;
 use crate::base::hash::{self, Map, Set};
 use crate::base::image::Image;
-use crate::base::sync::{Owned, lock};
+use crate::base::sync::{Installed, Owned, lock};
 use crate::base::windows::ucrt::ucrt_export;
 use crate::base::{Result, bail};
 
@@ -43,7 +43,8 @@ static VOLATILE: Mutex<Set<Box<[u16]>>> = Mutex::new(hash::set());
 static MODIFICATIONS: Counter = Counter::new();
 /// Bumped by `_wchdir`: the owner thread re-reads the current directory.
 static CWD_GEN: AtomicU32 = AtomicU32::new(0);
-static FAKE_BASE: AtomicUsize = AtomicUsize::new(0);
+/// Reserved, never-mapped addresses handed out as find handles, `FAKE_SLOTS` dwords from here.
+static FAKE_BASE: Installed<usize> = Installed::new();
 const FAKE_SLOTS: usize = 0x4000;
 
 // The original readers, from their import slots.
@@ -288,12 +289,12 @@ unsafe extern "system" fn find_first_file_w(name: *const u16, data: *mut WIN32_F
         }
         *data = e.data;
         st.next_fake = (st.next_fake + 1) % FAKE_SLOTS;
-        (FAKE_BASE.load(Relaxed) + 4 * st.next_fake) as HANDLE
+        (FAKE_BASE.get() + 4 * st.next_fake) as HANDLE
     }
 }
 
 unsafe extern "system" fn find_close(h: HANDLE) -> i32 {
-    let base = FAKE_BASE.load(Relaxed);
+    let base = *FAKE_BASE.get();
     if (base..base + 4 * FAKE_SLOTS).contains(&(h as usize)) {
         return 1;
     }
@@ -426,7 +427,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
             bail!("{module_name} imports {name}, which the cache does not watch");
         }
     }
-    FAKE_BASE.store(reserve(4 * FAKE_SLOTS)?, Relaxed);
+    FAKE_BASE.commit(cx, reserve(4 * FAKE_SLOTS)?);
     STATE.set(State { cwd_gen: u32::MAX, ..Default::default() })?;
     for (m, slot) in modifier_slots {
         let image = module(m.module, cx, &others)?;

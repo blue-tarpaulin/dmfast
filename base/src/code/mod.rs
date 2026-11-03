@@ -1,4 +1,4 @@
-//! Code for hooks: calling BYOND's functions ([`Foreign`]) and jumping to its code ([`Addr`]), building x86 stubs
+//! Code for hooks: calling BYOND's functions ([`Foreign`]) and addresses asm uses ([`Addr`]), building x86 stubs
 //! ([`Stub`], [`trampoline`]), bytes for code rewritten in place ([`branch`], [`pad`]), run-time reads and writes of
 //! BYOND's memory ([`read`], [`write`], [`live_u32`]), and the C allocator fn types. Install code reads BYOND's code
 //! through [`crate::image::Image`].
