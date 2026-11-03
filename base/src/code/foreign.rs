@@ -53,8 +53,9 @@ impl<F: Copy> Default for Foreign<F> {
     }
 }
 
-/// A code address in BYOND's code that a stub jumps to through a static (`jmp dword ptr [{back}]`, `back = sym BACK`):
-/// a label, never called from Rust. Set at install. For a function to call, use [`Foreign`].
+/// An address that naked asm or a stub uses through a static, set at install: a place in BYOND's code it jumps to
+/// (`jmp dword ptr [{back}]`, `back = sym BACK`), or data it reads (`mov eax, dword ptr [{count}]` for a global's or a
+/// table's address). Never called from Rust: for a function to call, use [`Foreign`].
 #[repr(transparent)]
 pub struct Addr(AtomicUsize);
 

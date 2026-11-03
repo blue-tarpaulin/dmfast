@@ -2,7 +2,7 @@
 //! count at the loop's exit; where a line is accepted as code, [`check_line`] runs the check.
 
 use std::arch::naked_asm;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering::Relaxed};
+use std::sync::atomic::AtomicU32;
 
 use super::{BUF, CAP, check};
 use crate::base::Result;
@@ -30,7 +30,7 @@ const REPORT_CALL: usize = 0x3D;
 static COUNT: AtomicU32 = AtomicU32::new(0);
 static LOOP_HEAD: Addr = Addr::new();
 static AFTER_LOOP: Addr = Addr::new();
-static MESSAGE: AtomicUsize = AtomicUsize::new(0);
+static MESSAGE: Addr = Addr::new();
 static REPORT: Addr = Addr::new();
 static BACK: Addr = Addr::new();
 
@@ -106,7 +106,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     core.untouched(&[(l + TAIL, TAIL_LEN), (c, ACCEPT_LEN)])?;
     LOOP_HEAD.set(l);
     AFTER_LOOP.set(l + EXIT);
-    MESSAGE.store(message, Relaxed);
+    MESSAGE.set(message);
     REPORT.set(core.call_target(c + REPORT_CALL)?);
     BACK.set(c + ACCEPT_LEN);
     core.jump(l + TAIL, TAIL_LEN, count_loop as unsafe extern "C" fn())?;
