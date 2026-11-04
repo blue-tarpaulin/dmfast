@@ -60,9 +60,9 @@ Checks: `require(addr, ida, what)` (a pattern), `follow_call(at, ida, what)` (a 
 ## Errors, checks, and stats
 
 `bail!`, `ensure!`, `Result`. `driver::verify`: `DMFAST_VERIFY=1`, where a feature that caches answers also runs
-BYOND's code and counts mismatches (in a sibling `verify.rs`). `driver::stats`: `DMFAST_STATS=1`, where
-`Feature::stats` prints counters (`driver::Counter`) at exit. Dependency guards on BYOND functions a feature relies on
-staying unchanged: `deps`.
+BYOND's code and counts mismatches (in a sibling `verify.rs`). `driver::stats`: `DMFAST_STATS=1`, where each applied
+feature's `Feature::stats` prints its own counters (`driver::Counter`) at exit. Dependency guards on BYOND functions a
+feature relies on staying unchanged: `deps`.
 
 ## Platform
 

@@ -56,12 +56,10 @@ unsafe extern "C" fn set_state(list_type: u32, list: u32, key_type: u32, key: u3
 }
 
 fn print_stats() {
-    if SET.addr() != 0 {
-        eprintln!(
-            "dmfast: icon_states states={STATES} verify={} checked={} mismatches={}",
-            verify(),
-            verify::CHECKED,
-            verify::MISMATCHES
-        );
-    }
+    eprintln!(
+        "dmfast: icon_states states={STATES} verify={} checked={} mismatches={}",
+        verify(),
+        verify::CHECKED,
+        verify::MISMATCHES
+    );
 }

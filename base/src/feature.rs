@@ -417,7 +417,8 @@ impl Feature {
         self
     }
 
-    /// Print its counters at exit under `DMFAST_STATS` (and verify mismatches under `DMFAST_VERIFY`).
+    /// Print its counters at exit under `DMFAST_STATS` (and verify mismatches under `DMFAST_VERIFY`). Called only if
+    /// it applied, so `f` needn't check that.
     pub const fn stats(mut self, f: fn()) -> Feature {
         self.stats = Some(f);
         self

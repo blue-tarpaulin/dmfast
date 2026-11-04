@@ -48,7 +48,7 @@ pub(super) unsafe fn check(f: &Found) {
 }
 
 pub(super) fn print_stats() {
-    if FOUND.is_set() && FOUND.get().check {
+    if FOUND.get().check {
         eprintln!("dmfast: string table load verify checked={CHECKED} mismatches={MISMATCHES}");
     }
 }

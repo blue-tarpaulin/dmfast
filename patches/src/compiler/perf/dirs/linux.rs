@@ -355,17 +355,15 @@ pub fn install(cx: &Ctx) -> Result<String> {
 }
 
 pub fn print_stats() {
-    if let Some(dirs) = lock(&CACHE).as_ref() {
-        eprintln!(
-            "dmfast: dir listings hits={} (without chdir {}) reads={} dirs={} verify={} mismatches={}; entries opened={} skipped={}",
-            HITS,
-            WITHOUT_CHDIR,
-            READS,
-            dirs.len(),
-            verify(),
-            super::verify::MISMATCHES,
-            OPENED,
-            SKIPPED
-        );
-    }
+    eprintln!(
+        "dmfast: dir listings hits={} (without chdir {}) reads={} dirs={} verify={} mismatches={}; entries opened={} skipped={}",
+        HITS,
+        WITHOUT_CHDIR,
+        READS,
+        lock(&CACHE).as_ref().map_or(0, |dirs| dirs.len()),
+        verify(),
+        super::verify::MISMATCHES,
+        OPENED,
+        SKIPPED
+    );
 }

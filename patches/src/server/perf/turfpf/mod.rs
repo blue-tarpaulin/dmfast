@@ -149,12 +149,10 @@ unsafe fn things((count, table): (usize, usize), mut id: u32, mut d: u32) {
 }
 
 fn print_stats() {
-    if GLOBALS.is_set() {
-        eprintln!(
-            "dmfast: turfpf checked={} followed={} mismatches={}",
-            verify::CHECKED,
-            verify::FOLLOWED,
-            verify::MISMATCHES
-        );
-    }
+    eprintln!(
+        "dmfast: turfpf checked={} followed={} mismatches={}",
+        verify::CHECKED,
+        verify::FOLLOWED,
+        verify::MISMATCHES
+    );
 }

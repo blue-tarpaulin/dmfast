@@ -31,14 +31,15 @@ pub static REBUILD: Feature = Feature::perf(
     "intern rebuild",
     install!(windows: windows::install_rebuild, linux: linux::install_rebuild),
 )
-.stats(print_stats);
+.stats(|| eprintln!("dmfast: intern tree rebuilds={REBUILDS}"));
 
 pub static INTERNIDX: Feature = Feature::perf(
     Hosts::COMPILER,
     "internidx",
     "intern index",
     install!(windows: windows::install_index, linux: linux::install_index),
-);
+)
+.stats(print_stats);
 
 /// The table: its entry array and entry count (the intern's tree root is at +80h).
 const ENTRIES: usize = 0x84;
@@ -160,11 +161,11 @@ extern "C" fn should_rebuild(count: u32) -> u32 {
 
 fn print_stats() {
     // SAFETY: exit-time stats: the compiler no longer runs the hooks.
-    let (hits, misses, stale) = unsafe { INDEX.shared() }.map_or((0, 0, 0), |ix| (ix.hits, ix.misses, ix.stale));
+    let Some(ix) = (unsafe { INDEX.shared() }) else { return };
+    let (hits, misses, stale) = (ix.hits, ix.misses, ix.stale);
     eprintln!(
-        "dmfast: intern index hits={hits} misses={misses} stale={stale} verify={} mismatches={}; tree rebuilds={}",
+        "dmfast: intern index hits={hits} misses={misses} stale={stale} verify={} mismatches={}",
         crate::base::driver::verify(),
-        verify::MISMATCHES,
-        REBUILDS
+        verify::MISMATCHES
     );
 }

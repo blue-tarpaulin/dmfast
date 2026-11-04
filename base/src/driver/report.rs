@@ -84,7 +84,9 @@ pub fn print_stats() {
     }
     let Some(&(config, host)) = INSTALLED.get() else { return };
     for f in config.ordered(host) {
-        if let (Some(stats), Some(_)) = (f.stats, f.install.run) {
+        if let Some(stats) = f.stats
+            && f.applied()
+        {
             stats();
         }
     }

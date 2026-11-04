@@ -2,7 +2,7 @@
 
 use std::arch::naked_asm;
 
-use super::{INSTALLED, KEY, LEFT, LOOK, MASK, NEXT, RIGHT, verify};
+use super::{KEY, LEFT, LOOK, MASK, NEXT, RIGHT, verify};
 use crate::base::code::{Cond, Foreign, read};
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
@@ -129,6 +129,5 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
         core.hook(f, ENTRY, fast_stub as unsafe extern "C" fn())?
     };
     ORIGINAL.set(original);
-    INSTALLED.commit(cx, ());
     Ok(format!("{}{}", core.report(&[f]), if verifying { " (verify)" } else { "" }))
 }

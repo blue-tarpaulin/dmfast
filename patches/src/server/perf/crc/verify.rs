@@ -21,7 +21,7 @@ pub(super) unsafe fn original(ours: u32, seed: u32, data: *const u8, len: u32) -
 }
 
 pub(super) fn print_stats() {
-    if verify() && FOUND.is_set() {
+    if verify() {
         eprintln!("dmfast: CRC-32 verify checked={CHECKED} mismatches={MISMATCHES}");
     }
 }

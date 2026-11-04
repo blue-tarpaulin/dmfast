@@ -1,6 +1,6 @@
 //! `seenclear`, Linux: libbyond's clear (cdecl `tree`, eax = 0 after) jumps to [`clear_seen`], which matches it.
 
-use super::{INSTALLED, clear_seen};
+use super::clear_seen;
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
 
@@ -35,6 +35,5 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
     // The free belongs to the same pool code.
     ensure!(free.abs_diff(a) <= SPAN, "record pool free: not next to the allocator ({free:#x} {a:#x})");
     core.jump(f, 5, clear_seen as unsafe extern "C" fn(usize) -> u32)?;
-    INSTALLED.commit(cx, ());
     Ok(core.report(&[f]))
 }

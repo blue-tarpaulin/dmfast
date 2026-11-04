@@ -58,7 +58,7 @@ pub(super) unsafe extern "C" fn verify_visit(node: usize, mode: u32) -> u32 {
 }
 
 pub(super) fn print_stats() {
-    if FOUND.is_set() {
+    if crate::base::driver::verify() {
         eprintln!("dmfast: leaf skip verify checked={CHECKED} mismatches={MISMATCHES}");
     }
 }

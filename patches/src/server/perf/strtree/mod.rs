@@ -411,9 +411,6 @@ pub(crate) fn index_matches(index: &Index) -> bool {
 }
 
 fn print_stats() {
-    if !FOUND.is_set() {
-        return;
-    }
     let st = lock(&STATE);
     eprintln!(
         "dmfast: string tree index hits={} misses={} removes={} resets={} collided={} verify={} mismatches={} dropped={}",

@@ -139,13 +139,11 @@ unsafe extern "C" fn compare(a: *const u8, b: *const u8) -> i32 {
 }
 
 pub(super) fn print_stats() {
-    if FOUND.is_set() {
-        eprintln!(
-            "dmfast: icon state name compare fast={FAST} fallback={FALLBACK} verify={} mismatches={}",
-            driver::verify(),
-            verify::MISMATCHES
-        );
-    }
+    eprintln!(
+        "dmfast: icon state name compare fast={FAST} fallback={FALLBACK} verify={} mismatches={}",
+        driver::verify(),
+        verify::MISMATCHES
+    );
 }
 
 pub fn install(cx: &Ctx) -> Result<String> {

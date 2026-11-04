@@ -8,7 +8,6 @@
 //! appearance none (FFFFh), which returns at once. `DMFAST_VERIFY=1` hooks [`verify::check`] instead.
 
 use crate::base::feature::{Feature, Hosts, install};
-use crate::base::sync::Installed;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -35,16 +34,11 @@ const LOOK: usize = 0x30;
 /// The mask the unchanged path returns the flags through (after setting the seen flag).
 const MASK: u32 = 0xDCF;
 
-/// Set when the install commits.
-static INSTALLED: Installed<()> = Installed::new();
-
 fn print_stats() {
-    if INSTALLED.is_set() {
-        eprintln!(
-            "dmfast: mapskip checked={} unchanged={} mismatches={}",
-            verify::CHECKED,
-            verify::UNCHANGED,
-            verify::MISMATCHES
-        );
-    }
+    eprintln!(
+        "dmfast: mapskip checked={} unchanged={} mismatches={}",
+        verify::CHECKED,
+        verify::UNCHANGED,
+        verify::MISMATCHES
+    );
 }

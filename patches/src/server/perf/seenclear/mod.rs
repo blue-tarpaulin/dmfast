@@ -11,7 +11,6 @@
 use crate::base::code::{read, write};
 use crate::base::driver::verify;
 use crate::base::feature::{Feature, Hosts, install};
-use crate::base::sync::Installed;
 use crate::server::layout::{RECORD_FLAGS, SEEN};
 
 #[cfg(target_os = "linux")]
@@ -40,9 +39,6 @@ const SLOTS: usize = 0x20;
 const NEXT: usize = 0x0C;
 const COLOUR: usize = 0x18;
 const FREE: u16 = 0xFFFF;
-
-/// Set when the install commits.
-static INSTALLED: Installed<()> = Installed::new();
 
 /// Calls `f(slot, in use)` on each slot of the chunks with live nodes; unless `all`, a chunk stops after its last live
 /// node.
@@ -107,7 +103,7 @@ unsafe extern "C" fn clear_seen(tree: usize) -> u32 {
 }
 
 fn print_stats() {
-    if INSTALLED.is_set() && verify() {
+    if verify() {
         eprintln!("dmfast: seenclear verified={} mismatches={}", verify::CALLS, verify::MISMATCHES);
     }
 }

@@ -2,7 +2,7 @@
 
 use std::arch::naked_asm;
 
-use super::{INSTALLED, clear_seen};
+use super::clear_seen;
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
 
@@ -54,6 +54,5 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
         core.rely(x, FREE.split_whitespace().count())?;
     }
     core.jump(f, 5, stub as unsafe extern "C" fn())?;
-    INSTALLED.commit(cx, ());
     Ok(core.report(&[f]))
 }

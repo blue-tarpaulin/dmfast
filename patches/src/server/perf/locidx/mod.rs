@@ -199,11 +199,8 @@ fn init(original: usize) -> crate::base::Result<()> {
 }
 
 fn print_stats() {
-    // SAFETY: only whether it is set.
-    if unsafe { INDEX.shared() }.is_some() {
-        eprintln!(
-            "dmfast: locidx lookups={LOOKUPS} rebuilds={REBUILDS} other-thread={FOREIGN} mismatches={}",
-            verify::MISMATCHES
-        );
-    }
+    eprintln!(
+        "dmfast: locidx lookups={LOOKUPS} rebuilds={REBUILDS} other-thread={FOREIGN} mismatches={}",
+        verify::MISMATCHES
+    );
 }
