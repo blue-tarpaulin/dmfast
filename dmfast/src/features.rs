@@ -1,6 +1,7 @@
 //! Every feature, by group, in install order (see `crate::base::driver`).
 
 use dmfast_patches as public;
+use dmfast_private as private;
 
 use crate::base::feature::Feature;
 
@@ -83,7 +84,7 @@ pub static SERVER_FIXES: &[&Feature] = &[
     &public::server::fixes::tick::TICKINIT,
     &public::server::fixes::tick::TICK0,
     &public::server::fixes::callref::CALLREF,
-    &public::server::fixes::hubsock::HUBSOCK,
+    &private::server::fixes::hubsock::HUBSOCK,
     &public::server::fixes::rscid::RSCID,
     &public::server::fixes::profself::PROFSELF,
     &public::server::fixes::iconwrap::ICONWRAP,

@@ -5,4 +5,5 @@ use dmfast_base as base;
 
 pub mod common;
 pub mod compiler;
+pub mod deps;
 pub mod server;

@@ -61,8 +61,11 @@ dmfast is licensed under the BSD 3-Clause License, © 2026 Greytide Worldwide; s
 
 It bundles [mimalloc](https://github.com/microsoft/mimalloc) (MIT, Microsoft Corporation & Daan Leijen - [vendor/mimalloc-x86/LICENSE.txt](vendor/mimalloc-x86/LICENSE.txt)).
 
-dmfast patches your own installed copy of BYOND in memory while it runs. 
-The installer only makes the BYOND programs load dmfast and keeps their originals, so uninstalling restores stock BYOND. Output is identical to the stock versions (unless opted in to bugfixes).
+Byte signatures, instruction patterns and any other material identifying or derived from third-party software are not covered by this license 
+and remain the property of their respective owners. No rights to such material are granted.
+
+dmfast patches your installed copy of BYOND in memory while it runs. 
+The installer only makes the BYOND programs load dmfast, and uninstalling restores stock BYOND. Output is identical to the stock versions (unless opted in to bugfixes).
 
 This repository contains no BYOND code or binaries. dmfast is not affiliated with or endorsed by BYOND in any way.
 

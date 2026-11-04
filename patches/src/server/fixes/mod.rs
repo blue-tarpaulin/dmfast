@@ -5,7 +5,6 @@ pub mod cmperr;
 pub mod dbbignum;
 pub mod dbclose;
 pub mod filtername;
-pub mod hubsock;
 pub mod iconwrap;
 pub mod initvar;
 pub mod jsonutf;

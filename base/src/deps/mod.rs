@@ -3,7 +3,9 @@
 //! of BYOND still treats the mirrored data the same way, so before any patch writes code, a patch failing one of
 //! these checks is not installed:
 //!
-//! - Fingerprint: each function the patch replaces, or that writes its data, matches a known form.
+//! - Fingerprint: each function the patch replaces, or that writes its data, matches a known form. A form is kept
+//!   as a fingerprint, not as code: its leading bytes (a signature), its length, where its wildcards are, and a
+//!   hash of the rest.
 //! - Globals: the writable globals such a function uses have the known number of code references (relocations).
 //! - Callers: unhooked writers have the known number of `call` sites.
 //!
@@ -18,9 +20,14 @@ use crate::image::Image;
 /// A [`Variant::globals`] offset for a global that form doesn't address.
 const ABSENT: u16 = 0xFFFF;
 
-/// One known form of a function: its IDA-style signature and the offset of each [`Dep::globals`] operand in it.
+/// One known form of a function, as a fingerprint: `prefix`, its first bytes as an IDA-style signature; `len`, its
+/// length; `holes`, the (offset, length) of each wildcarded span; `hash`, [`fnv1a`] over the rest of its bytes.
+/// `globals` holds the offset of each [`Dep::globals`] operand in it.
 pub struct Variant {
-    pub ida: &'static str,
+    pub prefix: &'static str,
+    pub len: u32,
+    pub holes: &'static [(u16, u16)],
+    pub hash: u64,
     pub globals: &'static [u16],
 }
 
@@ -40,29 +47,10 @@ pub(crate) fn check(deps: &[Dep], core: &Image) {
     // Images are open while deps are checked (before install); a closed one finds nothing, as if every dep failed.
     let code = core.hays(Some(true)).unwrap_or_default();
 
-    // Fingerprints: the first form that occurs exactly once (all forms searched in one pass).
-    let pats: Vec<Vec<Option<u8>>> =
-        deps.iter().flat_map(|d| d.variants).map(|v| crate::scan::parse(v.ida).unwrap_or_default()).collect();
-    let mut hits = crate::scan::find_patterns(&code, &pats).into_iter();
-    let found: Vec<Option<(usize, &Variant)>> = deps
-        .iter()
-        .map(|dep| {
-            let mut first = None;
-            for v in dep.variants {
-                // Every form's hits are consumed, matched or not, to stay in step with `pats`.
-                let h = hits.next().unwrap_or_default();
-                if first.is_none()
-                    && let [at] = h[..]
-                {
-                    first = Some((at, v));
-                }
-            }
-            first
-        })
-        .collect();
+    let found = locate(deps, &code);
 
     // Globals: count code references (relocated words in code) to each matched form's globals.
-    let present = |v: &'static Variant| v.globals.iter().enumerate().filter(|&(_, &off)| off != ABSENT);
+    let present = |v: &Variant| v.globals.iter().enumerate().filter(|&(_, &off)| off != ABSENT);
     let global = |at: usize, off: u16| core.u32_at(at + off as usize).ok();
     let mut refs: FxHashMap<u32, u32> = FxHashMap::default();
     for (at, v) in found.iter().flatten() {
@@ -122,6 +110,97 @@ pub(crate) fn check(deps: &[Dep], core: &Image) {
     }
 }
 
+/// The first form of each dep that occurs exactly once: where its prefix matches (all prefixes searched in one
+/// pass) and the bytes there hash to its fingerprint. (address, form).
+fn locate<'a>(deps: &'a [Dep], code: &[crate::scan::Hay]) -> Vec<Option<(usize, &'a Variant)>> {
+    let pats: Vec<Vec<Option<u8>>> =
+        deps.iter().flat_map(|d| d.variants).map(|v| crate::scan::parse(v.prefix).unwrap_or_default()).collect();
+    let mut hits = crate::scan::find_patterns(code, &pats).into_iter();
+    let fits = |at: usize, v: &Variant| {
+        code.iter().any(|&(start, bytes)| {
+            at.checked_sub(start)
+                .and_then(|i| bytes.get(i..i + v.len as usize))
+                .is_some_and(|f| fnv1a(f, v.holes) == v.hash)
+        })
+    };
+    deps.iter()
+        .map(|dep| {
+            let mut first = None;
+            for v in dep.variants {
+                // Every form's hits are consumed, matched or not, to stay in step with `pats`.
+                let h = hits.next().unwrap_or_default();
+                if first.is_none() {
+                    let mut at = h.into_iter().filter(|&at| fits(at, v));
+                    if let (Some(at), None) = (at.next(), at.next()) {
+                        first = Some((at, v));
+                    }
+                }
+            }
+            first
+        })
+        .collect()
+}
+
+/// FNV-1a 64 over `bytes`, skipping the (offset, length) spans in `holes` (in order).
+fn fnv1a(bytes: &[u8], holes: &[(u16, u16)]) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    let mut eat = |s: &[u8]| {
+        for &b in s {
+            h = (h ^ b as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    let mut at = 0;
+    for &(off, n) in holes {
+        let off = (off as usize).clamp(at, bytes.len());
+        eat(&bytes[at..off]);
+        at = (off + n as usize).min(bytes.len());
+    }
+    eat(&bytes[at..]);
+    h
+}
+
 pub(crate) fn missing(key: &str) -> bool {
     crate::sync::lock(&MISSING).contains(&key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A form: push ebp ; mov ebp,esp ; mov eax,[global] (a hole) ; ret ; nop.
+    const FORM: [u8; 10] = [0x55, 0x8B, 0xEC, 0xA1, 1, 2, 3, 4, 0xC3, 0x90];
+
+    fn dep(variants: &'static [Variant]) -> Dep {
+        Dep { keys: &["x"], globals: &[], callers: &[], variants }
+    }
+
+    /// A form wins where its prefix occurs once and its bytes hash right; the next form is tried otherwise.
+    #[test]
+    fn fingerprints_match_once_with_their_hash() {
+        let hash = fnv1a(&FORM, &[(4, 4)]);
+        assert_eq!(hash, fnv1a(&[0x55, 0x8B, 0xEC, 0xA1, 9, 9, 9, 9, 0xC3, 0x90], &[(4, 4)]));
+        assert_ne!(hash, fnv1a(&FORM, &[]));
+        let v = |hash| Variant { prefix: "55 8B EC A1", len: 10, holes: &[(4, 4)], hash, globals: &[] };
+        let right: &'static [Variant] = Box::leak(Box::new([v(hash)]));
+        let wrong: &'static [Variant] = Box::leak(Box::new([v(hash ^ 1), v(hash)]));
+        let at = |deps: Dep, code: &[(usize, &[u8])]| locate(&[deps], code)[0].map(|(at, f)| (at, f as *const Variant));
+
+        let mut one = vec![0xCCu8; 4];
+        one.extend(FORM);
+        one.extend([0xCC; 4]);
+        let code = [(0x1000, &one[..])];
+        assert_eq!(at(dep(right), &code), Some((0x1004, &right[0] as *const _)));
+        // A wrong hash fails that form; the next one still matches.
+        assert_eq!(at(dep(wrong), &code), Some((0x1004, &wrong[1] as *const _)));
+        assert_eq!(at(dep(&wrong[..1]), &code), None);
+        // Cut short: the form doesn't fit in the range.
+        assert_eq!(at(dep(right), &[(0x1000, &one[..10])]), None);
+        // Two hits: no form occurs exactly once. A second prefix hit with other bytes doesn't count.
+        let mut two = one.clone();
+        two.extend(FORM);
+        assert_eq!(at(dep(right), &[(0x1000, &two[..])]), None);
+        let mut other = one.clone();
+        other.extend([0x55, 0x8B, 0xEC, 0xA1, 1, 2, 3, 4, 0xC2, 0x00]);
+        assert_eq!(at(dep(right), &[(0x1000, &other[..])]), Some((0x1004, &right[0] as *const _)));
+    }
 }

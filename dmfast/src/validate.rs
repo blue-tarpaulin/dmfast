@@ -20,10 +20,10 @@ fn no_cycles() {
     validate::no_cycles(&CONFIG);
 }
 
-/// Every key the dependency guards name (both OSes' tables in `patches-private/src/deps.rs`) is a feature.
+/// Every key the dependency guards name (both OSes' tables in `patches/src/deps.rs`) is a feature.
 #[test]
 fn deps_keys_are_features() {
-    let data = include_str!("../../patches-private/src/deps.rs");
+    let data = include_str!("../../patches/src/deps.rs");
     let mut n = 0;
     for list in data.split("keys: &[").skip(1) {
         let list = &list[..list.find(']').expect("keys list end")];

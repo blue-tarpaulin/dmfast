@@ -1,7 +1,7 @@
 //! BYOND's core library is patched in memory once mapped.
 //! Each feature is a `static` `base::feature::Feature` in `dmfast_patches`, grouped by program (`compiler`,
 //! `server`) and kind (`perf`, `fixes`); [`features`] lists them in install order. The dependency guards are in
-//! `dmfast_private`.
+//! `dmfast_patches::deps`.
 //! The loader entry hands `CONFIG` to `base::driver`, which installs the loading program's features (`base::feature::Host`).
 //!
 //! Features are located by signature and validated completely before writing, and
@@ -29,9 +29,9 @@ static CONFIG: base::driver::Config = base::driver::Config {
     version: VERSION,
     after_install: dmfast_patches::compiler::perf::banner::finish_banners,
     #[cfg(windows)]
-    deps: dmfast_private::deps::WINDOWS,
+    deps: dmfast_patches::deps::WINDOWS,
     #[cfg(target_os = "linux")]
-    deps: dmfast_private::deps::LINUX,
+    deps: dmfast_patches::deps::LINUX,
 };
 
 #[cfg(windows)]
