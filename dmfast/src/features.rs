@@ -36,10 +36,10 @@ pub static COMPILER_PERF: &[&Feature] = &[
 pub static SERVER_PERF: &[&Feature] = &[
     &public::server::perf::dmbread::DMBREAD,
     &public::server::perf::procs::PROCS,
-    &private::server::perf::strtree::STRTREE,
+    &public::server::perf::strtree::STRTREE,
     &public::server::perf::sortmap::SORTMAP,
-    &private::server::perf::crc::CRC,
-    &private::server::perf::strtable::STRTABLE,
+    &public::server::perf::crc::CRC,
+    &public::server::perf::strtable::STRTABLE,
     &public::server::perf::varlist::VARLIST,
     &public::server::perf::dmicmp::DMICMP,
     &public::server::perf::iconstates::ICONSTATES,

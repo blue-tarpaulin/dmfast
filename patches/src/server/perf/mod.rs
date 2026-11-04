@@ -1,6 +1,7 @@
 //! DreamDaemon speed patches: game behaviour is identical to stock.
 
 pub mod argload;
+pub mod crc;
 pub mod dmbread;
 pub mod dmicmp;
 pub mod getvar;
@@ -11,6 +12,8 @@ pub mod mapskip;
 pub mod procs;
 pub mod seenclear;
 pub mod sortmap;
+pub mod strtable;
+pub mod strtree;
 pub mod truth;
 pub mod turfpf;
 pub mod turfvar;
