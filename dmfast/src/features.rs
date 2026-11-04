@@ -46,11 +46,11 @@ pub static SERVER_PERF: &[&Feature] = &[
     &public::server::perf::iconcopy::ICONCOPY,
     &public::server::perf::argload::ARGLOAD,
     &public::server::perf::seenclear::SEENCLEAR,
-    &private::server::perf::mapskip::MAPSKIP,
+    &public::server::perf::mapskip::MAPSKIP,
     &public::server::perf::varread::VARREAD,
     &public::server::perf::getvar::GETVAR,
     &public::server::perf::turfvar::TURFVAR,
-    &private::server::perf::turfpf::TURFPF,
+    &public::server::perf::turfpf::TURFPF,
     &public::server::perf::locidx::LOCIDX,
     &public::server::perf::truth::TRUTH,
 ];
