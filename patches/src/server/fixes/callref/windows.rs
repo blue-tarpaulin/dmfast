@@ -2,7 +2,7 @@
 //! (`[ebp-224h]`, which the fix makes the arglist opcode store as 1).
 
 use super::{args, release_first};
-use crate::base::code::{Foreign, trampoline};
+use crate::base::code::{Cond, Foreign, trampoline};
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
 
@@ -27,20 +27,23 @@ const OTHER_JNE: usize = 0x61;
 const BAD_PROC: &str = "80 BD E8 FD FF FF 26 0F 84 ?? ?? ?? ?? 68 ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 C4 04 E9 ?? ?? ?? ??";
 const BAD_PROC_PUSH: usize = 13;
 /// The arglist opcode, just before: mov eax,0FFFEh ; add [edi+46h],ax (pop 2 values) ; ... (as above) ; cmp al,6 ;
-/// je string ; cmp al,26h ; je call ; other: cmp al,45h ; jne bad ; ... ; jne bad ; push "call_ext() ..." ;
-/// call Error ; add esp,4 ; jmp exit
+/// je string ; cmp al,26h ; je call ; other: cmp al,45h, then `jne bad` (short or near) and [`CALL_EXT`].
 const ARGLIST: &str = "B8 FE FF 00 00 66 01 47 46 8B 47 40 0F B7 4F 46 8B B5 E8 FD FF FF 8B 14 C8 8B 4C C8 04 8B 85 EC \
                        FD FF FF 50 56 89 95 E8 FD FF FF 89 8D EC FD FF FF E8 ?? ?? ?? ?? 8A 85 E8 FD FF FF 83 C4 08 3C \
-                       06 74 ?? 3C 26 0F 84 ?? ?? ?? ?? 3C 45 75 ?? FF B5 EC FD FF FF E8 ?? ?? ?? ?? 83 C4 04 85 C0 74 \
-                       ?? 83 78 08 0C 75 ?? 68 ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 C4 04 E9";
-/// Its `call Unref` field, `je call` field, `other:`, the three `jne bad`/`je bad` fields after it, and the
-/// call_ext report's `push`.
+                       06 74 ?? 3C 26 0F 84 ?? ?? ?? ?? 3C 45";
+/// Its `call Unref` field, `je call` field, `other:` and its `jne bad`.
 const ARGLIST_UNREF_CALL: usize = 0x32;
 const ARGLIST_CALL_JE: usize = 0x47;
 const OTHER: usize = 0x4B;
-const BAD_JUMPS: [usize; 3] = [3, 0x15, 0x1B];
-const EXT_PUSH: usize = 0x1C;
-/// Its string route: cmp byte [ebp-218h],26h ; je call ; push "bad proc" ; call Error ; add esp,4 ; jmp exit
+const OTHER_BAD: usize = 2;
+/// After that `jne bad`: ... ; je bad ; ... ; jne bad ; push "call_ext() ..." ; call Error ; add esp,4 ; jmp exit
+const CALL_EXT: &str = "FF B5 EC FD FF FF E8 ?? ?? ?? ?? 83 C4 04 85 C0 74 ?? 83 78 08 0C 75 ?? 68 ?? ?? ?? ?? E8 \
+                        ?? ?? ?? ?? 83 C4 04 E9";
+/// Its `je bad`/`jne bad` fields and the call_ext report's `push`.
+const BAD_JUMPS: [usize; 2] = [0x11, 0x17];
+const EXT_PUSH: usize = 0x18;
+/// The arglist opcode's string route: cmp byte [ebp-218h],26h ; je call ; push "bad proc" ; call Error ; add esp,4 ;
+/// jmp exit
 const ARGLIST_BAD_PROC: &str = "80 BD E8 FD FF FF 26 74 ?? 68 ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 C4 04 E9";
 const ARGLIST_BAD_PROC_PUSH: usize = 9;
 
@@ -68,12 +71,16 @@ pub fn install(cx: &Ctx) -> Result<String> {
     core.expect(msg, b"bad proc\0", "the error message is not \"bad proc\"")?;
     let al = core.find_unique_in(op - 0x200, 0x200, ARGLIST, "call(arglist()) opcode")?;
     let other = al + OTHER;
-    let ext = other + EXT_PUSH;
+    let jne_bad = core.jcc_at(other + OTHER_BAD, Cond::NotEqual)?;
+    let call_ext = jne_bad.next;
+    core.require(call_ext, CALL_EXT, "call(arglist()) call_ext() route")?;
+    let ext = call_ext + EXT_PUSH;
     let bad = core.find_unique_in(ext, op - ext, ARGLIST_BAD_PROC, "call(arglist()) bad proc report")?
         + ARGLIST_BAD_PROC_PUSH;
     let routes_ok = core.rel32(al + ARGLIST_UNREF_CALL)? == unref
         && core.rel32(op + OTHER_JNE)? == other
-        && BAD_JUMPS.iter().all(|&j| core.rel8(other + j).is_ok_and(|t| t == bad))
+        && jne_bad.target == bad
+        && BAD_JUMPS.iter().all(|&j| core.rel8(call_ext + j).is_ok_and(|t| t == bad))
         && core.rel8(bad - 1)? == core.rel32(al + ARGLIST_CALL_JE)?
         && core.ptr_at(bad + 1)? == msg;
     ensure!(routes_ok, "the call() opcodes' failure routes are not as expected");

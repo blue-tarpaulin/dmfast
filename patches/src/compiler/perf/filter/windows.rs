@@ -3,10 +3,11 @@
 
 use std::arch::naked_asm;
 
-use super::{MIN_CHILDREN, init, record, should_skip};
+use super::{Decls, MIN_CHILDREN, init, record, should_skip};
 use crate::base::code::{Addr, Foreign};
 use crate::base::feature::Ctx;
 use crate::base::{Result, bail, ensure};
+use crate::compiler::names::Names;
 
 /// Locals of the resolution function (ebp-relative): child count, loop start index.
 const LOCAL_COUNT: i8 = -0x1C;
@@ -19,6 +20,18 @@ const ENTRY: &str = "8B 4D 18 8B DE 88 01 85 F6 0F 84 ?? ?? ?? ??";
 /// not relied on.
 const INSERT: &str = "8B 45 08 B9 ?? ?? ?? ?? 89 45 F8 8B 07 89 45 FC 8D 45 0C 50 8D 45 F8 50 E8 ?? ?? ?? ??";
 const INSERT_CALL: usize = 24;
+/// A loop path indexing an unmarked child: test byte [esi+14h],8 ; jne probe ; push esi ; push esi ; call indexer ;
+/// add esp,8. Then (516) it marks the child: or dword [esi+14h],8.
+const INDEX: &str = "F6 46 14 08 75 ?? 56 56 E8 ?? ?? ?? ?? 83 C4 08";
+const INDEX_SKIP: usize = 5;
+const INDEX_CALL: usize = 8;
+const MARK: &str = "83 4E 14 08";
+/// An indexer that marks the node it walks: push ebp ; mov ebp,esp ; sub esp,8 ; push ebx ; push edi ;
+/// mov edi,[ebp+0Ch] (the node). Its walk of the node's children indexes each, then marks the node: mov eax,[edi+1Ch] ;
+/// push [eax+esi*4] ; push [ebp+8] ; call itself ; inc esi ; add esp,8 ; cmp esi,ebx ; jb ; or dword [edi+14h],8
+const MARKING: &str = "55 8B EC 83 EC 08 53 57 8B 7D 0C";
+const MARKING_WALK: &str = "8B 47 1C FF 34 B0 FF 75 08 E8 ?? ?? ?? ?? 46 83 C4 08 3B F3 72 ?? 83 4F 14 08";
+const MARKING_WALK_CALL: usize = 9;
 
 /// BYOND's insert (thiscall).
 static INSERT_FN: Addr = Addr::new();
@@ -130,14 +143,19 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
     core.expect(fwd - 14, &[0x8B, 0x7D, 0x08, 0x85, 0xDB], err)?;
     let after = core.rel32(fwd + 5)?;
     let body = fwd - back;
-    // Child type dispatch: sub eax,1EDh ; je path_a ; sub eax,0Ah ; je path_b ; sub eax,1 ; jne next ; path_b.
-    // [ebp+10h] picks: A (0x1ED) only when 0 (`cmp byte [ebp+10h],0 ; jne next`), B otherwise (`... ; je next`).
-    let d = core
-        .find_bytes_in(back, body, &[0x2D, 0xED, 0x01, 0x00, 0x00, 0x0F, 0x84])?
-        .unique("child type dispatch (0x1ED/0x1F7/0x1F8)")?;
+    // Child type dispatch: sub eax,<var> ; je path_a ; sub eax,<verb - var> ; je path_b ; sub eax,1 ; jne next ;
+    // path_b. [ebp+10h] picks: A (`var`) only when 0 (`cmp byte [ebp+10h],0 ; jne next`), B otherwise (`... ; je next`).
+    let d = core.find_in(back, body, "2D ?? ?? 00 00 0F 84")?.unique("child type dispatch")?;
     let path_a = core.rel32(d + 7)?;
     let path_b = d + 25;
-    core.expect(d + 11, &[0x83, 0xE8, 0x0A, 0x74], "resolution loop does not look as expected")?;
+    core.require(d + 11, "83 E8 ?? 74", "child type dispatch")?;
+    let var = core.u32_at(d + 1)?;
+    let verb = var + u32::from(core.u8_at(d + 13)?);
+    let names = Names::new(core)?;
+    ensure!(
+        [var, verb, verb + 1] == [names.id("var")?, names.id("verb")?, names.id("proc")?],
+        "child type dispatch: not var, verb, and proc"
+    );
     ensure!(
         core.rel8(d + 15)? == path_b
             && core.bytes(d + 16, 5)? == [0x83, 0xE8, 0x01, 0x0F, 0x85]
@@ -150,26 +168,38 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
             && core.find_bytes_in(back, body, &[0x8B, 0x49, 0x18, 0x85, 0xC9, 0x75])?.len() == 1,
         "resolution loop does not look as expected"
     );
-    // The filter relies on the loop marking indexed children: `or dword ptr [esi+14h], 8` right after each indexer
-    // call (516). Builds that re-index on every lookup (517 alpha) are not eligible.
-    let ors = core.find_bytes_in(back, body, &[0x83, 0x4E, 0x14, 0x08])?;
-    let [o0, o1] = ors.as_slice()[..] else {
-        bail!("expected 2 indexed-flag stores in the loop, found {}", ors.len());
+    // The filter relies on a child marked indexed having all its keys inserted. Each path indexes an unmarked child
+    // ([`INDEX`]), then marks it, or its indexer marks the node it walked once all its keys are in.
+    let calls = core.find_in(back, body, INDEX)?;
+    let [c0, c1] = calls.as_slice()[..] else {
+        bail!("expected 2 indexer calls in the loop, found {}", calls.len());
     };
-    // Each then probes for (child, name) with name = `mov r32,[ebp+0Ch]`, the name the entry stub uses.
-    for o in [o0, o1] {
-        let [op, modrm, disp] = core.array(o + 4)?;
+    let probe_at = |c: usize| -> Result<usize> {
+        let next = c + INDEX.split_whitespace().count();
+        let at = if core.is_at(next, MARK)? {
+            next + MARK.split_whitespace().count()
+        } else {
+            let f = core.follow_call(c + INDEX_CALL, MARKING, "indexer")?;
+            let w = core.find_unique_in(f, 0x100, MARKING_WALK, "indexer: marking walk")?;
+            ensure!(core.rel32(w + MARKING_WALK_CALL + 1)? == f, "indexer: the walk is not its own");
+            next
+        };
+        ensure!(core.rel8(c + INDEX_SKIP)? == at, "resolution loop: an indexed child does not skip to its probe");
+        // The probe for (child, name), name = `mov r32,[ebp+0Ch]`: the name the entry stub uses.
+        let [op, modrm, disp] = core.array(at)?;
         ensure!(op == 0x8B && modrm & 0xC7 == 0x45 && disp == 0x0C, "resolution loop: probe name not [ebp+0Ch]");
-    }
+        Ok(at)
+    };
+    let (p0, p1) = (probe_at(c0)?, probe_at(c1)?);
     // Each path then loads its table (mov ecx,<table>) and calls the probe with it.
-    let table_after = |o: usize| -> Result<(usize, usize)> {
-        let load = core.find_bytes_in(o + 4, 12, &[0xB9])?.first_or("table load")?;
+    let table_after = |p: usize| -> Result<(usize, usize)> {
+        let load = core.find_bytes_in(p, 12, &[0xB9])?.first_or("table load")?;
         let call = core.find_bytes_in(load + 5, 0x18, &[0xE8])?.first_or("probe call")?;
         Ok((core.ptr_at(load + 1)?, core.call_target(call)?))
     };
-    let (oa, ob) = if o1 > path_a && o0 < path_a { (o1, o0) } else { (o0, o1) };
-    ensure!(oa >= path_a && ob <= path_a, "could not tell the two declaration paths apart");
-    let [(table_a, probe), (table_b, probe_b)] = [table_after(oa)?, table_after(ob)?];
+    let (pa, pb) = if p1 > path_a && p0 < path_a { (p1, p0) } else { (p0, p1) };
+    ensure!(pa >= path_a && pb <= path_a, "could not tell the two declaration paths apart");
+    let [(table_a, probe), (table_b, probe_b)] = [table_after(pa)?, table_after(pb)?];
     let tables = [table_a, table_b];
     // The probe (ecx = table): mov esi,ecx ; ... ; mov eax,[esi+14h] ; shr edx,cl ; mov eax,[eax+edx*4]
     ensure!(
@@ -203,7 +233,7 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
     FWD.set(fwd);
     AFTER.set(after);
     PROBE.set(probe);
-    init(cx, false, tables)?;
+    init(cx, false, tables, Decls { a: var, b: [verb, verb + 1] })?;
     core.call(call_a, 5, insert_stub_a as unsafe extern "C" fn())?;
     core.call(call_b, 5, insert_stub_b as unsafe extern "C" fn())?;
     core.jump(site, 12, entry_stub as unsafe extern "C" fn())?;

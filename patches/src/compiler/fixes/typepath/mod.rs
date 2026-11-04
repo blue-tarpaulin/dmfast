@@ -5,10 +5,10 @@
 //! .post++ .post-- .reference .dereference .index`) pass. The fix raises the bound to the id of `.index`, read from
 //! BYOND's name table. `/obj/:` and `/obj/;` are not reached through an id and are unchanged.
 
-use super::{name_of, name_table};
 use crate::base::feature::{Feature, Hosts, Tier, install};
 use crate::base::image::Image;
 use crate::base::{Result, ensure};
+use crate::compiler::names::Names;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -29,8 +29,8 @@ const OPERATORS: [&[u8]; 11] =
 
 /// The id of the last operator name (`.index`) in BYOND's name table; `plus` and `goto` are the check's ids.
 fn last_operator(core: &Image, plus: usize, goto: usize) -> Result<usize> {
-    let names = name_table(core)?;
-    let name = |id: usize| name_of(core, names, id);
+    let names = Names::new(core)?;
+    let name = |id: usize| names.name(id as u32);
     ensure!(
         name(plus)? == Some(&b"+"[..]) && name(goto)? == Some(&b"goto"[..]),
         "name table: + is not id {plus:#x} or goto is not id {goto:#x}"

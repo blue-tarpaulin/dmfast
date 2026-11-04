@@ -1,6 +1,6 @@
 //! `filter`: the name-resolution miss filter. Name resolution walks scopes outward and, per scope, indexes declaration
-//! children (type 0x1ED in table A, or 0x1F7/0x1F8 in table B) and probes a hash keyed (child, name); most probes
-//! miss.
+//! children (`var` blocks, probed in table A; `verb` and `proc` blocks, in table B) and probes a hash keyed (child,
+//! name); most probes miss.
 //!
 //! Every insert is mirrored as (scope = the child's parent link, name, table) in `found`. When a scope's matching
 //! children are all indexed and keyed under it, and `found` lacks the key, every probe would miss, so the child loops
@@ -34,16 +34,23 @@ pub static FILTER: Feature =
 
 /// Smaller scopes are cheap to walk; checking them costs more than it saves.
 const MIN_CHILDREN: u16 = 8;
-/// The `var` node id in 516 (see [`crate::compiler::layout`]).
-const TYPE_DECL_A: u32 = 0x1ED;
-const TYPES_DECL_B: [u32; 2] = [0x1F7, 0x1F8];
 const FLAG_INDEXED: u8 = 8;
+
+/// The declaration node ids (see [`crate::compiler::layout`]), read from the resolution loop at install.
+#[derive(Clone, Copy)]
+struct Decls {
+    /// `var`: table A.
+    a: u32,
+    /// `verb` and `proc`: table B.
+    b: [u32; 2],
+}
 
 /// What install found.
 struct Found {
-    /// 516.1660 (Linux): the table-B loops probe type 0x1ED children against table B too.
+    /// 516.1660 (Linux): the table-B loops probe `var` children against table B too.
     b_has_a: bool,
     tables: [usize; 2],
+    decls: Decls,
 }
 
 /// The filter, owned by the compiler's thread. The counts are plain `u64`s: they are bumped on every lookup.
@@ -64,9 +71,9 @@ static STATE: Owned<State> = Owned::new();
 static OFF: AtomicBool = AtomicBool::new(false);
 
 /// At install, once everything is checked.
-fn init(cx: &Ctx, b_has_a: bool, tables: [usize; 2]) -> Result<()> {
+fn init(cx: &Ctx, b_has_a: bool, tables: [usize; 2], decls: Decls) -> Result<()> {
     STATE.set(State { bufs: [0; 2], found: hash::set(), complete: hash::map(), calls: 0, skips: 0, inserts: 0 })?;
-    FOUND.commit(cx, Found { b_has_a, tables });
+    FOUND.commit(cx, Found { b_has_a, tables, decls });
     Ok(())
 }
 
@@ -111,7 +118,8 @@ extern "C" fn should_skip(scope: usize, name: u32, sel: u32, count: u32) -> u32 
         let t = u32::from(sel as u8 != 0);
         let matching = |child: usize| {
             let ty = live_u32(child + ID);
-            if t == 0 { ty == TYPE_DECL_A } else { TYPES_DECL_B.contains(&ty) || (x.b_has_a && ty == TYPE_DECL_A) }
+            let d = x.decls;
+            if t == 0 { ty == d.a } else { d.b.contains(&ty) || (x.b_has_a && ty == d.a) }
         };
         let children = live_u32(scope + CHILDREN) as usize;
         let child = |i: usize| live_u32(children + 4 * i) as usize;

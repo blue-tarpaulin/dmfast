@@ -4,7 +4,7 @@
 
 use std::arch::naked_asm;
 
-use super::{MIN_CHILDREN, init, record, should_skip};
+use super::{Decls, MIN_CHILDREN, init, record, should_skip};
 use crate::base::code::{Addr, hx, live_u32, read};
 use crate::base::feature::Ctx;
 use crate::base::image::Image;
@@ -187,22 +187,24 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
             let err = "unexpected forward-loop header (516.1660)";
             core.expect(fwd, &[0x8B, 0x45, 0xDC, 0x85, 0xC0, 0x0F, 0x84], err)?;
             core.expect(fwd + 11, &[0x80, 0x7D, 0xD7, 0x00], err)?;
-            // Here the table-B loops probe 0x1ED children against table B as well.
+            // Here the table-B loops probe `var` children against table B as well.
             (site, core.rel32(fwd + 7)?, true)
         }
     };
     let back = site + 8;
     let fwd = core.rel32(site + 4)?;
     let lo = fwd.min(back);
-    // The child loops: table A (type 0x1ED, probe A) and table B (0x1F7/0x1F8, probe B).
-    let probe_after = |ida: &str, what: &str| -> Result<usize> {
+    // The child loops: table A (`var`, probe A) and table B (`verb` or `proc`, probe B). The match and the probe.
+    let probe_after = |ida: &str, what: &str| -> Result<(usize, usize)> {
         let m = core.find_in(lo, after + 0x1000 - lo, ida)?.first_or(what)?;
-        core.call_target(m + ida.split_whitespace().count() - 1)
+        Ok((m, core.call_target(m + ida.split_whitespace().count() - 1)?))
     };
     // cmp [eax],1EDh ; jne next ; mov edx,[ebp-20h] ; call probe_a
-    let probe_a = probe_after("81 38 ED 01 00 00 75 ?? 8B 55 E0 E8", "table A probe")?;
+    let (a, probe_a) = probe_after("81 38 ED 01 00 00 75 ?? 8B 55 E0 E8", "table A probe")?;
     // sub eax,1F7h ; cmp eax,1 ; ja next ; mov edx,[ebp-20h] ; mov eax,ecx ; call probe_b
-    let probe_b = probe_after("2D F7 01 00 00 83 F8 01 77 ?? 8B 55 E0 89 C8 E8", "table B probe")?;
+    let (b, probe_b) = probe_after("2D F7 01 00 00 83 F8 01 77 ?? 8B 55 E0 89 C8 E8", "table B probe")?;
+    let verb = core.u32_at(b + 1)?;
+    let decls = Decls { a: core.u32_at(a + 2)?, b: [verb, verb + 1] };
     // The flags test, hash, and buckets `should_skip` and `has_key` rely on.
     ensure!(
         core.is_at(probe_a, PROBE_A)? && core.is_at(probe_b, PROBE_B)?,
@@ -230,7 +232,7 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
     AFTER.set(after);
     FREELIST_A.set(tables[0] + 4);
     FREELIST_B.set(tables[1] + 4);
-    init(cx, b_has_a, tables)?;
+    init(cx, b_has_a, tables, decls)?;
     let stubs: [(unsafe extern "C" fn(), &Vec<usize>); 2] = [(insert_stub_a, &sites[0]), (insert_stub_b, &sites[1])];
     for (stub, sites) in stubs {
         for &s in sites {

@@ -18,12 +18,11 @@
 use std::ops::RangeInclusive;
 use std::sync::Mutex;
 
-use super::require_names;
 use crate::base::Result;
 use crate::base::code::{Foreign, read, write};
 use crate::base::feature::{Feature, Hosts, Tier, install};
-use crate::base::image::Image;
 use crate::base::sync::{Installed, lock};
+use crate::compiler::names::Names;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -38,30 +37,36 @@ pub static FINALPATH: Feature = Feature::fix(
     install!(windows: windows::install, linux: linux::install),
 );
 
-/// Name ids (checked against the name table at install).
-const PARENT_LINK: u32 = 0x45;
-const CHILD_TYPE: u32 = 0x46;
-const OPERATORS: RangeInclusive<u32> = 0xAD..=0xF0;
-const VAR: u32 = 0x1ED;
-const VERB: u32 = 0x1F7;
-const PROC: u32 = 0x1F8;
-const ARG: u32 = 0x251;
-const FINAL: u32 = 0x253;
-const NAMES: [(u32, &str); 9] = [
-    (PARENT_LINK, ".."),
-    (CHILD_TYPE, ".child_type"),
-    (*OPERATORS.start(), "+"),
-    (*OPERATORS.end(), ".index"),
-    (VAR, "var"),
-    (VERB, "verb"),
-    (PROC, "proc"),
-    (ARG, ".arg"),
-    (FINAL, "final"),
-];
+/// The name ids the fix tells nodes apart by, looked up in the name table at install.
+struct Ids {
+    /// `..`
+    parent_link: u32,
+    /// `.child_type`
+    child_type: u32,
+    /// `+` through `.index`.
+    operators: RangeInclusive<u32>,
+    var: u32,
+    verb: u32,
+    proc: u32,
+    /// `.arg`
+    arg: u32,
+    /// `final`
+    fin: u32,
+}
 
-/// Checks the name ids the fix uses.
-fn require_ids(core: &Image) -> Result<()> {
-    require_names(core, &NAMES)
+impl Ids {
+    fn new(names: &Names) -> Result<Self> {
+        Ok(Self {
+            parent_link: names.id("..")?,
+            child_type: names.id(".child_type")?,
+            operators: names.id("+")?..=names.id(".index")?,
+            var: names.id("var")?,
+            verb: names.id("verb")?,
+            proc: names.id("proc")?,
+            arg: names.id(".arg")?,
+            fin: names.id("final")?,
+        })
+    }
 }
 
 /// A definition's flag for `final`.
@@ -85,12 +90,14 @@ type Alloc = unsafe extern "C" fn(usize) -> usize;
 /// The overridden definition's lookup: (node in, definition out; its flags; whether it's built in) -> found.
 type Lookup = unsafe extern "C" fn(*mut usize, *mut u32, *mut u8) -> u8;
 
-/// Where a tree node keeps its parent, child array, child count (u16), and flags byte (bit 0: defined).
+/// Where a tree node keeps its parent, child array, child count (u16), and flags byte (bit 0: defined), and the name
+/// ids of the nodes told apart.
 struct Layout {
     parent: usize,
     children: usize,
     count: usize,
     flags: usize,
+    ids: Ids,
 }
 
 /// What install found: the node layout and size, the compiler's node allocator, constructor, child append, and
@@ -136,7 +143,7 @@ impl Layout {
         unsafe {
             self.count(n) > 0 && {
                 let v = self.child(n, 0);
-                self.id(v) == VAR && self.count(v) > 0 && self.id(self.child(v, 0)) == ARG
+                self.id(v) == self.ids.var && self.count(v) > 0 && self.id(self.child(v, 0)) == self.ids.arg
             }
         }
     }
@@ -144,10 +151,10 @@ impl Layout {
     /// A node that may be a type: a plain name without a value, not a proc, a block keyword, or a link.
     unsafe fn is_type(&self, n: usize) -> bool {
         unsafe {
-            let id = self.id(n);
+            let (id, i) = (self.id(n), &self.ids);
             id != 0
-                && !matches!(id, VAR | VERB | PROC | PARENT_LINK | CHILD_TYPE)
-                && !OPERATORS.contains(&id)
+                && ![i.var, i.verb, i.proc, i.parent_link, i.child_type].contains(&id)
+                && !i.operators.contains(&id)
                 && read::<u8>(n + VALUE) == 0
                 && !self.is_proc(n)
         }
@@ -220,7 +227,7 @@ impl Found {
                         b
                     }
                 };
-                write(c, FINAL);
+                write(c, l.ids.fin);
                 self.add_child.get()(block, c);
             }
             at - i
@@ -236,7 +243,7 @@ impl Found {
                 let c = l.child(t, i);
                 if !l.is_type(c) {
                     i += 1;
-                } else if l.id(c) == FINAL && !top && self.movable(c) {
+                } else if l.id(c) == l.ids.fin && !top && self.movable(c) {
                     i += self.unwrap(t, i, c, finals);
                 } else {
                     self.walk(c, false, finals);
@@ -249,11 +256,12 @@ impl Found {
     /// A `final` node with children, all of them overrides or `proc`, `verb`, and `var` blocks.
     unsafe fn movable(&self, fin: usize) -> bool {
         let l = &self.layout;
+        let blocks = [l.ids.var, l.ids.verb, l.ids.proc];
         unsafe {
             l.count(fin) > 0
                 && (0..l.count(fin))
                     .map(|j| l.child(fin, j))
-                    .all(|c| l.is_proc(c) || (matches!(l.id(c), VAR | VERB | PROC) && read::<u8>(c + VALUE) == 0))
+                    .all(|c| l.is_proc(c) || (blocks.contains(&l.id(c)) && read::<u8>(c + VALUE) == 0))
         }
     }
 
@@ -263,7 +271,7 @@ impl Found {
         unsafe {
             let mut p = l.parent(x);
             while p != 0 {
-                if matches!(l.id(p), PROC | VERB) {
+                if [l.ids.proc, l.ids.verb].contains(&l.id(p)) {
                     return false;
                 }
                 p = l.parent(p);

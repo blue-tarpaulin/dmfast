@@ -9,9 +9,11 @@ use crate::base::feature::Ctx;
 /// mov eax,[edi+8] ; test eax,eax ; je ; xor ecx,ecx ; xor ebx,ebx ; cmp cx,[eax+66h]
 const PASS: &str = "8B 47 0C 83 C4 1C 83 38 13 75 36 8B 47 08 85 C0 74 2F 33 C9 33 DB 66 3B 48 66";
 const PASS_CMP: usize = 6;
-/// The var-name dispatch of an entry: cmp dword [eax],13h ; mov ecx,[ebp-9Ch] ; mov ecx,[esi+ecx] ; jne other ;
-/// cmp ecx,13Ah ; ja
-const DISPATCH: &str = "83 38 13 8B 8D 64 FF FF FF 8B 0C 0E 0F 85 ?? ?? ?? ?? 81 F9 3A 01 00 00 0F 87";
+/// The var-name dispatch of an entry (ecx = the var's name): jne other ; cmp ecx,13Ah ; ja, after
+/// `cmp dword [eax],13h`, right after it or after loading ecx: mov ecx,[ebp-9Ch] ; mov ecx,[esi+ecx] (516).
+const DISPATCH: &str = "0F 85 ?? ?? ?? ?? 81 F9 3A 01 00 00 0F 87";
+const WORLD_TEST: &str = "83 38 13";
+const WORLD_TEST_LOAD: &str = "83 38 13 8B 8D 64 FF FF FF 8B 0C 0E";
 
 /// The type path builder: push ebp ; mov ebp,esp ; push ecx ; push edi ; mov edi,[ebp+8] (node) ; test edi,edi ;
 /// je ; mov ecx,[ebp+10h] ; push ebx ; mov ebx,[ebp+0Ch] ; push ecx ; push ebx ; push [edi+parent] ; call itself.
@@ -24,7 +26,7 @@ const RECURSE: usize = 29;
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let p = core.find_unique(PASS, "world node test")? + PASS_CMP;
-    let q = core.find_unique(DISPATCH, "world var dispatch")?;
+    let j = core.find_unique(DISPATCH, "world var dispatch")?;
     let parent = parent_offset(core, BUILDER, PARENT, RECURSE)?;
     // jne skip, re-encoded.
     redirect(
@@ -32,7 +34,14 @@ pub fn install(cx: &Ctx) -> Result<String> {
         Site { at: p, node: EAX, copy: 0, jcc: Some(core.jcc_at(p + 3, Cond::NotEqual)?), back: p + 5 },
         parent,
     )?;
-    // mov ecx,[ebp-9Ch] copied; the jne after it stays.
-    redirect(core, Site { at: q, node: EAX, copy: 6, jcc: None, back: q + 9 }, parent)?;
+    // Either cmp ; jne, re-encoded in the stub, or cmp ; mov ecx,[ebp-9Ch], copied ; mov ecx,[esi+ecx] ; jne, which
+    // stays.
+    let (q, copy, jcc) = if core.is_at(j - 3, WORLD_TEST)? {
+        (j - 3, 0, Some(core.jcc_at(j, Cond::NotEqual)?))
+    } else {
+        core.require(j - 12, WORLD_TEST_LOAD, "world var dispatch")?;
+        (j - 12, 6, None)
+    };
+    redirect(core, Site { at: q, node: EAX, copy, jcc, back: q + 9 }, parent)?;
     Ok(core.report(&[p, q]))
 }

@@ -35,10 +35,11 @@ pub fn install(cx: &Ctx) -> Result<String> {
         "55 8B EC 8B 4D 08 0F B6 C1 83 C0 D4 83 F8 26 77 ?? 0F B6 80 ?? ?? ?? ?? FF 24 85 ?? ?? ?? ?? FF 75 0C 51 E8",
         "initial() entry",
     )?;
-    // The ordinary read of var `var` on value (tag, id): an SEH-framed switch on the tag.
+    // The ordinary read of var `var` on value (tag, id): an SEH-framed switch on the tag (its frame size and the
+    // number of tags vary by build).
     let read = core.find_unique(
-        "55 8B EC 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 83 EC 0C 53 56 57 A1 ?? ?? ?? ?? 33 C5 50 8D 45 F4 \
-         64 A3 00 00 00 00 8B 5D 08 8B 75 10 8B 7D 0C 0F B6 C3 48 83 F8 57 0F 87",
+        "55 8B EC 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 83 EC ?? 53 56 57 A1 ?? ?? ?? ?? 33 C5 50 8D 45 F4 \
+         64 A3 00 00 00 00 8B 5D 08 8B 75 10 8B 7D 0C 0F B6 C3 48 83 F8 ?? 0F 87",
         "var read",
     )?;
     // cdecl with three arguments: some call to it is followed by `add esp,0Ch` (that call is relied on, the others

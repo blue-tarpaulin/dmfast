@@ -5,7 +5,7 @@ use std::arch::naked_asm;
 
 use super::verify::check;
 use super::{BUILDING, SET, SetFn, set_state};
-use crate::base::code::Addr;
+use crate::base::code::{Addr, Cond};
 use crate::base::driver::verify;
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
@@ -20,9 +20,9 @@ const BUILDER: &str = "6A 0F 6A 00 E8 ?? ?? ?? ?? 83 C4 04 50 E8 ?? ?? ?? ?? 83 
      ?? ?? FF 35 ?? ?? ?? ?? 52 50 FF 75 FC FF 75 10 E8 ?? ?? ?? ?? 83 C4 28 46 3B 77 0C 7C ??";
 /// Its call of the set.
 const SITE: usize = 125;
-/// The set: push ebp ; mov ebp,esp ; mov al,[ebp+8] ; cmp al,0Fh ; je list ; cmp al,55h ; je alist (516.1660 on) or
-/// jne error (before).
-const SET_HEAD: &str = "55 8B EC 8A 45 08 3C 0F 74 ?? 3C 55 ?? ??";
+/// The set: push ebp ; mov ebp,esp ; mov al,[ebp+8] ; cmp al,0Fh ; je list (rel8, or rel32). The other types'
+/// branches after it aren't used: the builder's list is a plain list.
+const SET_HEAD: &str = "55 8B EC 8A 45 08 3C 0F";
 /// The list branch hands every argument but the type on to the list set.
 const LIST: &str = "FF 75 1C FF 75 18 FF 75 14 FF 75 10 FF 75 0C E8 ?? ?? ?? ?? 83 C4 14 5D C3";
 /// The list set: look the key up in the tree ([list+4]); found: replace the value; else the new-key path.
@@ -99,8 +99,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     let site = core.find_unique(BUILDER, "icon_states builder")? + SITE;
     let set = core.call_target(site)?;
     core.require(set, SET_HEAD, "associative set")?;
-    ensure!(matches!(core.u8_at(set + 12)?, 0x74 | 0x75), "associative set: not as expected");
-    let list = core.rel8(set + 9)?;
+    let list = core.jcc_at(set + 8, Cond::Equal)?.target;
     core.require(list, LIST, "associative set: list branch")?;
     let list_set = core.call_target(list + 15)?;
     core.require(list_set, LIST_SET, "list associative set")?;

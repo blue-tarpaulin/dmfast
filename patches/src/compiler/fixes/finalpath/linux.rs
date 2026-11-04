@@ -3,10 +3,11 @@
 
 use std::arch::naked_asm;
 
-use super::{FOUND, Found, Layout, Lookup, lookup, require_ids, unwrap_finals};
+use super::{FOUND, Found, Ids, Layout, Lookup, lookup, unwrap_finals};
 use crate::base::code::{Addr, Foreign};
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
+use crate::compiler::names::Names;
 
 /// Before the definition passes: push "Assigning parent types\n" ; call log ; add esp,10h ; mov eax,[root] ;
 /// call pass ; mov eax,[root] ; movzx edx,word [eax+1Eh]
@@ -111,7 +112,7 @@ unsafe extern "C" fn unwrap_finals_c(root: usize) {
 
 pub fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
-    require_ids(core)?;
+    let ids = Ids::new(&Names::new(core)?)?;
     let pass = core.find_unique(PASS, "parent-type pass call")?;
     ensure!(core.c_str(core.ptr_at(pass + PASS_LOG)?)? == b"Assigning parent types\n", "parent-type pass: not its log");
     let pass_fn = core.follow_call(pass + PASS_CALL, PASS_FN, "parent-type pass")?;
@@ -136,6 +137,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
         children,
         count: children + usize::from(core.u8_at(push + PUSH_COUNT)?),
         flags: usize::from(core.u8_at(defined + DEFINED_FLAGS)?),
+        ids,
     };
     ensure!(
         usize::from(core.u8_at(add_child + ADD_CHILDREN)?) == layout.children

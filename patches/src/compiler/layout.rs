@@ -1,6 +1,6 @@
 //! The compiler's object-tree node: where its fields are, per platform. Each user pins the offsets it reads with its
-//! signatures. Keyword node ids change between builds (`var` is 0x1ED in 516, 0x1D1 in 515), so users read them
-//! from code or check them.
+//! signatures. Keyword node ids change between builds (`var` is 0x1D1 / 0x1ED / 0x1FE), so users
+//! read them from code and check them, or look them up ([`crate::compiler::names`]).
 
 /// The node's id (u32): its name's string id, or a keyword node's kind (`var`, a proc's argument list).
 pub const ID: usize = 0;
