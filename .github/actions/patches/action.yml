@@ -1,10 +1,10 @@
 name: "Fetch dmfast-patches-private"
-description: "Checks out the patches-private/ submodule (blue-tarpaulin/dmfast-patches-private) with a read-only deploy key"
+description: "Checks out the patches-private/ submodule (blue-tarpaulin/dmfast-patches-private) with a read-only deploy key; a PR without the key (from a fork) builds without it"
 
 inputs:
   key:
     description: "Private half of the dmfast-patches-private deploy key (secret DMFAST_PATCHES_KEY)"
-    required: true
+    required: false
 
 runs:
   using: "composite"
@@ -12,8 +12,15 @@ runs:
     - shell: bash
       env:
         KEY: ${{ inputs.key }}
+        EVENT: ${{ github.event_name }}
       run: |
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        if [ -z "$KEY" ]; then
+          # Only a PR may build without the private patches: a push or a release must not ship without them.
+          [ "$EVENT" = pull_request ] || { echo "::error::no DMFAST_PATCHES_KEY"; exit 1; }
+          echo "::notice::No patches key (fork PR): building without the private patches"
+          exit 0
+        fi
         mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/dmfast_patches && chmod 600 ~/.ssh/dmfast_patches
         git -c url."git@github.com:".insteadOf="https://github.com/" \
             -c core.sshCommand="ssh -i $HOME/.ssh/dmfast_patches -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \

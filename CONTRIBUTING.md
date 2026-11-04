@@ -2,16 +2,15 @@
 
 ## Build
 
-Some patches live in a private submodule (`patches-private`). The library builds without it; with it checked out
-(`--recurse-submodules` below), its patches are built in too.
+Some patches live in a private submodule (`patches-private`). Most of the tool builds without it, but releases include patches from it.
 
 We believe that openly publishing certain portions of BYOND internals is not what Lummox wants at the moment. 
  However, there's a description of what each one does - and for the optional bugfixes, a bit more detail on how these were accomplished if one wanted to port these to BYOND.
 
 The main motivation behind this project was to accelerate SS13's ability to create fun, creative, and engaging content.
-Being stuck with compiler technology of the early 2000s wasn't forwarding that goal. As of this moment, our patches are server and compiler only.
+Being stuck with compiler technology of the early 2000s wasn't forwarding that goal.
 
-If you believe you can help improve this tool, [open an access request](https://github.com/blue-tarpaulin/dmfast/issues/new?template=access_request.yml). We'll give access to community members we trust.
+If you want to view the private patches or contribute to them, [open an access request](https://github.com/blue-tarpaulin/dmfast/issues/new?template=access_request.yml). We'll give access to community members we trust.
 
 ```
 git clone --recurse-submodules https://github.com/blue-tarpaulin/dmfast.git
@@ -45,7 +44,7 @@ Output: `dist/dmfast-install.exe` - works on both operating systems.
 
 ## Writing a patch
 
-What the shared `base` crate offers a patch, by task: [WRITING-PATCHES.md](WRITING-PATCHES.md).
+What the shared `base` crate offers: [WRITING-PATCHES.md](WRITING-PATCHES.md).
 
 Features live in `patches/`, shared infrastructure in `base/`, and the install order in `dmfast/src/features.rs`. 
 A feature that changes behaviour in any case is a fix, even if it also makes things faster.
