@@ -18,6 +18,10 @@ pub mod parent;
 pub mod poll;
 pub mod protos;
 pub mod resources;
+pub mod slots;
+pub mod stdio;
+pub mod strings;
+pub mod strtab;
 pub mod vecgrow;
 
 /// The compiler executable is known (Linux: the loader can leave the main program out of its list).

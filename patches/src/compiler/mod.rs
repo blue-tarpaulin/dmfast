@@ -3,3 +3,5 @@
 pub mod fixes;
 pub mod layout;
 pub mod perf;
+#[cfg(windows)]
+mod string_table;

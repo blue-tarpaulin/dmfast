@@ -1,7 +1,6 @@
 //! Every feature, by group, in install order (see `crate::base::driver`).
 
 use dmfast_patches as public;
-use dmfast_private as private;
 
 use crate::base::feature::Feature;
 
@@ -9,10 +8,10 @@ use crate::base::feature::Feature;
 pub static COMPILER_PERF: &[&Feature] = &[
     &public::compiler::perf::poll::POLL,
     &public::compiler::perf::banner::BANNER,
-    &private::compiler::perf::stdio::STDIO,
-    &private::compiler::perf::strings::STRINGS,
-    &private::compiler::perf::stdio::FTELL,
-    &private::compiler::perf::strtab::STRTAB,
+    &public::compiler::perf::stdio::STDIO,
+    &public::compiler::perf::strings::STRINGS,
+    &public::compiler::perf::stdio::FTELL,
+    &public::compiler::perf::strtab::STRTAB,
     &public::compiler::perf::fastexit::FASTEXIT,
     &public::compiler::perf::ctype::CTYPE,
     &public::compiler::perf::dirs::DIRS,
@@ -24,7 +23,7 @@ pub static COMPILER_PERF: &[&Feature] = &[
     &public::compiler::perf::fscache::FSCACHE,
     &public::compiler::perf::resources::RESOURCES,
     &public::compiler::perf::dmbbuf::DMBBUF,
-    &private::compiler::perf::slots::SLOTS,
+    &public::compiler::perf::slots::SLOTS,
     &public::compiler::perf::intern::REBUILD,
     &public::compiler::perf::lists::LISTS,
     &public::compiler::perf::listinit::LISTINIT,

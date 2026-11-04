@@ -68,5 +68,5 @@ feature relies on staying unchanged: `deps`.
 
 - `windows`: ucrtbase's exports (`ucrt::ucrt_export`) and `FILE` layout, `module_range`, `Image::crt_alloc`,
   `Image::call_iat_to`.
-- `linux`: `linux::symbol`, dmfast's allocator, which the process uses (`linux::alloc`: `malloc`, `realloc`), glibc's
-  `FILE` (`linux::glibc`).
+- `linux`: `linux::symbol`, dmfast's allocator, which the process uses (`linux::alloc`: `malloc`, `realloc`), and
+  glibc's `FILE`, stdio functions, and standard streams (`linux::glibc`: `is_standard`).

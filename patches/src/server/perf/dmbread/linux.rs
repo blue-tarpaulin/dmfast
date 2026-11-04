@@ -17,7 +17,7 @@ use crate::base::code::{Foreign, MallocFn};
 use crate::base::feature::Ctx;
 use crate::base::image::Image;
 use crate::base::linux::alloc;
-use crate::base::linux::glibc::{self, File, IO_CURRENTLY_PUTTING, IO_IS_APPENDING};
+use crate::base::linux::glibc::{self, File, IO_CURRENTLY_PUTTING, IO_IS_APPENDING, ftell, is_standard};
 use crate::base::sync::Owned;
 use crate::base::{Result, ensure};
 
@@ -31,20 +31,6 @@ struct State {
 
 static STATE: Owned<State> = Owned::new();
 
-unsafe extern "C" {
-    static stdin: *mut File;
-    static stdout: *mut File;
-    static stderr: *mut File;
-    fn ftell(fp: *mut File) -> c_long;
-}
-
-/// Whether `fp` is a standard stream, which other threads use too.
-#[inline(always)]
-fn standard(fp: *mut File) -> bool {
-    // SAFETY: glibc's standard stream pointers, only compared.
-    unsafe { fp == stdin || fp == stdout || fp == stderr }
-}
-
 struct Glibc;
 
 impl Stream for Glibc {
@@ -55,7 +41,7 @@ impl Stream for Glibc {
         // SAFETY: a live glibc stream and `n` bytes at `buf` (caller); a read stream holds read_ptr..read_end.
         unsafe {
             if let Some(st) = STATE.get()
-                && !standard(fp)
+                && !is_standard(fp)
             {
                 let f = &mut *fp;
                 if f.flags & IO_CURRENTLY_PUTTING == 0 && (f.read_end as usize).wrapping_sub(f.read_ptr as usize) >= n {
@@ -98,7 +84,8 @@ unsafe fn tell(fp: *mut File, check: bool) -> c_long {
     // SAFETY: a live glibc stream (caller).
     unsafe {
         let f = &mut *fp;
-        let plain = !standard(fp) && f.flags & (IO_CURRENTLY_PUTTING | IO_IS_APPENDING) == 0 && !f.read_base.is_null();
+        let plain =
+            !is_standard(fp) && f.flags & (IO_CURRENTLY_PUTTING | IO_IS_APPENDING) == 0 && !f.read_base.is_null();
         if !plain {
             return ftell(fp);
         }
@@ -262,7 +249,7 @@ fn ftells(core: &Image) -> Result<()> {
 pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     self_test()?;
-    let fgetc = libc::fgetc as unsafe extern "C" fn(*mut FILE) -> c_int as usize;
+    let fgetc = glibc::fgetc as unsafe extern "C" fn(*mut File) -> c_int as usize;
     let [u16_fn, u16k_fn, u32_fn, f32_fn] = [&U16, &U16_KEYED, &U32, &F32].map(|h| find(core, h, fgetc));
     let mut parts = cx.parts();
     for (h, f, hook) in [
