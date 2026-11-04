@@ -153,6 +153,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     // `__xstat`/`lstat` imports aren't covered. readdir's call sites aren't checked: `dirs` rewrites them to calls
     // through the lookup checked above.
     ensure!(!cx.core().import_calls("stat", stat as StatFn)?.is_empty(), "libbyond does not import stat");
-    ON.store(true, Relaxed);
+    // The wrappers are this library's own exports and run whatever the ledger does: switch them on only on commit.
+    cx.on_commit(|| ON.store(true, Relaxed));
     Ok("64-bit inode numbers in stat, fstat and readdir".into())
 }
