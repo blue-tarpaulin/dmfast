@@ -2,7 +2,8 @@
 
 ## Build
 
-Private patches live in a submodule (`patches-private`); building needs access to it.
+Some patches live in a private submodule (`patches-private`). The library builds without it; with it checked out
+(`--recurse-submodules` below), its patches are built in too.
 
 We believe that openly publishing certain portions of BYOND internals is not what Lummox wants at the moment. 
  However, there's a description of what each one does - and for the optional bugfixes, a bit more detail on how these were accomplished if one wanted to port these to BYOND.

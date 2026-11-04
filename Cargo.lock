@@ -45,7 +45,6 @@ version = "7.0.0"
 dependencies = [
  "dmfast-base",
  "dmfast-patches",
- "dmfast-private",
  "winresource",
 ]
 
@@ -84,14 +83,6 @@ dependencies = [
  "libc",
  "rustc-hash",
  "windows-sys",
-]
-
-[[package]]
-name = "dmfast-private"
-version = "7.0.0"
-dependencies = [
- "dmfast-base",
- "dmfast-patches",
 ]
 
 [[package]]

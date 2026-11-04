@@ -9,7 +9,6 @@ crate-type = ["cdylib"]
 [dependencies]
 dmfast-base = { path = "../base" }
 dmfast-patches = { path = "../patches" }
-dmfast-private = { path = "../patches-private" }
 
 [dev-dependencies]
 dmfast-base = { path = "../base", features = ["validate"] }

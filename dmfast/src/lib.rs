@@ -12,6 +12,10 @@
 use dmfast_base as base;
 
 mod features;
+/// The private submodule's patches, built in when it is checked out (`build.rs`).
+#[cfg(dmfast_private)]
+#[path = "../../patches-private/src/lib.rs"]
+mod private;
 
 #[cfg(test)]
 mod validate;
@@ -25,6 +29,7 @@ static CONFIG: base::driver::Config = base::driver::Config {
         features::COMPILER_FIXES,
         features::SERVER_FIXES,
         features::COMMON_FIXES,
+        features::PRIVATE,
     ],
     version: VERSION,
     after_install: dmfast_patches::compiler::perf::banner::finish_banners,

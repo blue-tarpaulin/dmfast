@@ -1,7 +1,6 @@
 //! Every feature, by group, in install order (see `crate::base::driver`).
 
 use dmfast_patches as public;
-use dmfast_private as private;
 
 use crate::base::feature::Feature;
 
@@ -84,7 +83,6 @@ pub static SERVER_FIXES: &[&Feature] = &[
     &public::server::fixes::tick::TICKINIT,
     &public::server::fixes::tick::TICK0,
     &public::server::fixes::callref::CALLREF,
-    &private::server::fixes::hubsock::HUBSOCK,
     &public::server::fixes::rscid::RSCID,
     &public::server::fixes::profself::PROFSELF,
     &public::server::fixes::iconwrap::ICONWRAP,
@@ -94,3 +92,9 @@ pub static SERVER_FIXES: &[&Feature] = &[
 
 /// Fixes for both programs.
 pub static COMMON_FIXES: &[&Feature] = &[&public::common::fixes::inodes::INODES];
+
+/// The private submodule's features, if it is checked out (`build.rs`).
+#[cfg(dmfast_private)]
+pub static PRIVATE: &[&Feature] = crate::private::FEATURES;
+#[cfg(not(dmfast_private))]
+pub static PRIVATE: &[&Feature] = &[];
