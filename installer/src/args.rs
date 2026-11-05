@@ -6,8 +6,10 @@ use std::path::PathBuf;
 pub struct Opts {
     pub target: PathBuf,
     pub uninstall: bool,
-    /// Also patch DreamDaemon (the default; `--no-runtime` turns it off).
-    pub runtime: bool,
+    /// Speed up the compiler (the default; `--no-compiler` leaves it stock).
+    pub compiler: bool,
+    /// Speed up DreamDaemon (the default; `--no-server` leaves it stock).
+    pub server: bool,
     /// `--fixes`: the bug-fix selection to save; None keeps the current one.
     pub fixes: Option<String>,
     /// Windows: this is the relaunched admin copy.
@@ -26,7 +28,7 @@ pub enum Action {
 
 /// Paths may be any bytes (`OsString`); options are ASCII, so an argument that isn't valid Unicode is a path.
 pub fn parse(args: &[OsString]) -> Action {
-    let (mut target, mut uninstall, mut runtime, mut fixes) = (None, false, true, None);
+    let (mut target, mut uninstall, mut compiler, mut server, mut fixes) = (None, false, true, true, None);
     #[cfg(windows)]
     let mut elevated = false;
     let mut args = args.iter();
@@ -35,9 +37,8 @@ pub fn parse(args: &[OsString]) -> Action {
         match a {
             "--version" | "-V" => return Action::Version,
             "--uninstall" => uninstall = true,
-            "--no-runtime" => runtime = false,
-            // Needed before DreamDaemon was on by default; still accepted so existing scripts keep working.
-            "--runtime" => runtime = true,
+            "--no-compiler" => compiler = false,
+            "--no-server" => server = false,
             "--fixes" => match args.next().and_then(|v| v.to_str()) {
                 Some(v) if !v.is_empty() && !v.starts_with("--") => fixes = Some(v.to_string()),
                 _ => return Action::Error("--fixes needs a value: safe, extended, breaking, none, or fix keys".into()),
@@ -51,10 +52,9 @@ pub fn parse(args: &[OsString]) -> Action {
             #[cfg(windows)]
             "--elevated" => elevated = true,
             "-h" | "--help" | "/?" => {
-                return if args.next().and_then(|v| v.to_str()) == Some("bugfixes") {
-                    Action::BugFixes
-                } else {
-                    Action::Help
+                return match args.next().and_then(|v| v.to_str()) {
+                    Some("bugfixes") => Action::BugFixes,
+                    _ => Action::Help,
                 };
             }
             _ if a.starts_with('-') => return Action::Error(format!("unknown option {a:?} (see --help)")),
@@ -63,10 +63,17 @@ pub fn parse(args: &[OsString]) -> Action {
         }
     }
     let Some(target) = target else { return Action::Error("no BYOND folder given (see --help)".into()) };
+    if uninstall && (!compiler || !server || fixes.is_some()) {
+        return Action::Error("--uninstall takes no other option".into());
+    }
+    if !compiler && !server {
+        return Action::Error("--no-compiler and --no-server leave nothing to install".into());
+    }
     Action::Run(Opts {
         target,
         uninstall,
-        runtime,
+        compiler,
+        server,
         fixes,
         #[cfg(windows)]
         elevated,

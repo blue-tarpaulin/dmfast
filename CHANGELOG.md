@@ -10,6 +10,8 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **Changed:** `jsonutf` is now in the `extended` tier since its output can differ from stock.
 - **New fix:** `filtername` (extended): adding a named filter to `filters` replaces the filter of that name instead of keeping both.
 - **New fix:** `finalpath` (breaking): `final` before a proc or var in a type's path (`/foo/final/bar()`) is the `final` modifier instead of a type `/foo/final`.
+- **New:** `--no-compiler` leaves the compiler stock.
+- **Changed:** `--no-runtime` is now `--no-server`, `--runtime` is gone, and `--uninstall` takes no other option.
 
 ## 7.0.0
 

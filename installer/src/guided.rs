@@ -64,9 +64,9 @@ pub fn run() -> Option<Vec<String>> {
         None => folder("BYOND folder (drag BYOND here or paste its path; Enter cancels):")?,
     };
     let bin = platform::bin_dir(&target).ok()?;
-    let (installed, runtime_now) = platform::state(&bin);
+    let now = platform::state(&bin);
     let path = target.to_string_lossy().into_owned();
-    if installed {
+    if now.any {
         loop {
             match ask("dmfast is installed there. [U]pdate, [r]emove or [c]ancel?")?.to_ascii_lowercase().as_str() {
                 "" | "u" | "update" => break,
@@ -76,12 +76,20 @@ pub fn run() -> Option<Vec<String>> {
             }
         }
     }
-    let mut args = Vec::new();
-    if !yes("Speed up DreamDaemon too?", !installed || runtime_now)? {
-        args.push("--no-runtime".into());
+    // A first install defaults to the compiler and DreamDaemon; an update to what is installed.
+    let first = !now.any;
+    let compiler = yes("Speed up the compiler?", first || now.compiler)?;
+    let server = yes("Speed up the server (DreamDaemon)?", first || now.server)?;
+    if !compiler && !server {
+        return None;
     }
-    let now = fixes::current(&bin).ok().flatten();
-    let keep = now.as_deref().unwrap_or("none");
+    let mut args: Vec<String> = [(!compiler, "--no-compiler"), (!server, "--no-server")]
+        .into_iter()
+        .filter(|&(on, _)| on)
+        .map(|(_, flag)| flag.into())
+        .collect();
+    let saved = fixes::current(&bin).ok().flatten();
+    let keep = saved.as_deref().unwrap_or("none");
     println!("Bug fixes ('--help bugfixes' lists them):");
     loop {
         let a = ask(&format!("  (n)one, (s)afe or (e)xtended? [{keep}]"))?.to_ascii_lowercase();

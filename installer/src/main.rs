@@ -24,6 +24,13 @@ use windows as platform;
 
 use std::ffi::OsString;
 
+/// What of dmfast a BYOND folder has now (the guided install starts from it).
+pub struct Installed {
+    pub any: bool,
+    pub compiler: bool,
+    pub server: bool,
+}
+
 /// Keep a double-clicked / drag-dropped console window open until the result is read.
 fn pause() {
     #[cfg(windows)]
@@ -61,7 +68,7 @@ fn run(o: &Opts) -> Result<String, Failure> {
         Some(spec) => fixes::set(&d, spec)?,
         None => fixes::describe(&d)?,
     };
-    let msg = platform::install(&d, o.runtime)?;
+    let msg = platform::install(&d, o.compiler, o.server)?;
     Ok(format!("{msg}\n{fixes}"))
 }
 

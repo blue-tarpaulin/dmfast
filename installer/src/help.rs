@@ -24,7 +24,8 @@ pub const HELP: &str = concat!(
 dmfast-install [options] <BYOND or bin folder, dm.exe or dreamdaemon.exe>
   options:
      --uninstall        remove dmfast and restores originals
-     --no-runtime       leave DreamDaemon stock (only speed up the compiler)
+     --no-compiler      leave the compiler stock
+     --no-server        leave DreamDaemon stock
      --fixes <which>    opt-in bug fixes: 'safe', 'extended' (recommended), 'breaking',
                         or fix keys that are comma-separated; -key leaves one out
                         ('experimental' adds the experimental ones of those tiers)
@@ -49,7 +50,8 @@ pub const HELP: &str = concat!(
 dmfast-install [options] <BYOND or bin folder, DreamMaker or DreamDaemon>
   options:
      --uninstall        remove dmfast and restores originals
-     --no-runtime       leave DreamDaemon stock (only speed up the compiler)
+     --no-compiler      leave the compiler stock
+     --no-server        leave DreamDaemon stock
      --fixes <which>    opt-in bug fixes: 'safe', 'extended' (recommended), 'breaking',
                         or fix keys that are comma-separated; -key leaves one out
                         ('experimental' adds the experimental ones of those tiers)

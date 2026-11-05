@@ -47,7 +47,7 @@ Automatically measured on this release's GitHub Actions runners; your gains depe
 
 1. Close BYOND.
 2. Download \`dmfast-install.exe\` below.
-3. Run it on your BYOND \`bin\` folder (or drag \`dm.exe\` onto it). It speeds up the compiler and DreamDaemon; add \`--no-runtime\` to leave DreamDaemon stock.
+3. Run it on your BYOND \`bin\` folder (or drag \`dm.exe\` onto it).
 
 On Linux: \`sh dmfast-install.exe ~/byond/bin\`
 
