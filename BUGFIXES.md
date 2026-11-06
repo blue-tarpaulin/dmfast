@@ -2,7 +2,8 @@
 
 Fixes for bugs in BYOND itself. 
 
-Unlike the [speed patches](PATCHES.md), these change what BYOND does, so they're off by default.
+Unlike the [speed patches](PATCHES.md), these change what BYOND does, so they're off by default. DreamSeeker's fixes
+are listed in [CLIENT.md](CLIENT.md).
 
 Turn them on when installing:
 

@@ -4,14 +4,16 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
+- **New:** `--client` (Windows) patches DreamSeeker with opt-in-only client fixes, `safe` by default.
+- **New:** `--audit` (Windows) checks DreamSeeker's patched DLLs against the stock ones in `bin/backup/`.
 - **New patch:** `truth` (DreamDaemon, Linux): faster `if(x)`, `!x`, `&&`, and `||` on numbers. ~1% less CPU usage in-round.
 - **New patch:** `varread` (DreamDaemon, Windows): faster reads of user-defined vars by name. ~1% less CPU usage in-round.
 - **Changed:** the list initialization patch key `pairs` is now `listinit`.
 - **Changed:** `jsonutf` is now in the `extended` tier since its output can differ from stock.
 - **New fix:** `filtername` (extended): adding a named filter to `filters` replaces the filter of that name instead of keeping both.
 - **New fix:** `finalpath` (breaking): `final` before a proc or var in a type's path (`/foo/final/bar()`) is the `final` modifier instead of a type `/foo/final`.
-- **New:** `--no-compiler` leaves the compiler stock.
 - **Changed:** `--no-runtime` is now `--no-server`, `--runtime` is gone, and `--uninstall` takes no other option.
+- **New:** `--no-compiler` leaves the compiler stock.
 
 ## 7.0.0
 

@@ -87,6 +87,18 @@ version's `byondcore.dll` and `libbyond.so`:
 A change fails with an instruction diff and the counts that moved, and nothing is written. Check the patches on that
 build (fixtest, `DMFAST_VERIFY=1` on real codebases), then accept it.
 
+### DreamSeeker patches
+
+These are [private](./CONTRIBUTING.md#build). The public side guarantees:
+
+- each patched site jumps to a [public gate](seeker/src/gate.rs) that runs the patch only in
+  dreamseeker.exe;
+- the server and compiler are not affected by these patches, due to them re-loading the original code;
+  - the stock DLLs are kept in `bin/backup/`.
+  - `dmfast-install --audit` checks a patched DLL against them.
+
+For more information, see [CLIENT.md](CLIENT.md).
+
 ## Release
 
 Rename `## Unreleased` in [CHANGELOG.md](CHANGELOG.md) to the version (e.g. `## 4.4.0`), commit, then push a `v*` tag (e.g. `v4.4.0`). The release notes include that section.
