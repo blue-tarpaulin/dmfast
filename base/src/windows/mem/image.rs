@@ -63,21 +63,33 @@ impl Image {
         Ok(self.base + self.live_u32(self.base + 0x3C)? as usize)
     }
 
-    /// (address, size, executable) of each section.
-    fn sections(&self) -> Result<Vec<(usize, usize, bool)>> {
+    /// The section headers, 40 bytes each.
+    fn section_headers(&self) -> Result<&[[u8; 40]]> {
         let nt = self.nt()?;
         let count = (self.live_u32(nt + 4)? >> 16) as usize; // FileHeader.NumberOfSections
         let optional_size = (self.live_u32(nt + 0x14)? & 0xFFFF) as usize; // FileHeader.SizeOfOptionalHeader
-        let table = self.live_bytes(nt + 0x18 + optional_size, 40 * count)?;
-        Ok(table
-            .as_chunks::<40>()
-            .0
+        Ok(self.live_bytes(nt + 0x18 + optional_size, 40 * count)?.as_chunks::<40>().0)
+    }
+
+    /// (address, size, executable) of each section.
+    fn sections(&self) -> Result<Vec<(usize, usize, bool)>> {
+        Ok(self
+            .section_headers()?
             .iter()
             .filter_map(|s| {
                 let (size, rva, flags) = (le32(s, 8)?, le32(s, 0xC)?, le32(s, 0x24)?);
                 Some((self.base + rva as usize, size as usize, flags & IMAGE_SCN_MEM_EXECUTE != 0))
             })
             .collect())
+    }
+
+    /// (address, size) of the section named `name` (NUL-padded), if the image has one.
+    pub(crate) fn section(&self, name: &[u8; 8]) -> Result<Option<(usize, usize)>> {
+        Ok(self
+            .section_headers()?
+            .iter()
+            .find(|s| s.starts_with(name))
+            .and_then(|s| Some((self.base + le32(s, 0xC)? as usize, le32(s, 8)? as usize))))
     }
 
     /// Addresses of every absolute address the loader fixed up (`IMAGE_REL_BASED_HIGHLOW`), in code and data;
