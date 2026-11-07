@@ -3,7 +3,8 @@
 //! Windows: double-click for a guided install, or drag `dm.exe` (or the bin folder) onto this exe; see
 //! `windows`. Linux: run it on the BYOND or bin folder, or with no arguments in a terminal for a guided
 //! install; see `linux`. Running it again updates dmfast; after a BYOND update it picks up the new
-//! compiler. `--uninstall` puts the original back.
+//! compiler. `--uninstall` puts the original back. `--audit` checks DreamSeeker's patches (Windows) and writes
+//! nothing.
 
 mod args;
 mod files;
@@ -29,6 +30,8 @@ pub struct Installed {
     pub any: bool,
     pub compiler: bool,
     pub server: bool,
+    #[cfg(windows)]
+    pub client: bool,
 }
 
 /// Keep a double-clicked / drag-dropped console window open until the result is read.
@@ -47,12 +50,16 @@ fn interactive() -> bool {
     launched_alone && std::io::stdin().is_terminal()
 }
 
-/// Installs or uninstalls as `o` says; the message to print.
+/// Installs, uninstalls, or audits as `o` says; the message to print.
 fn run(o: &Opts) -> Result<String, Failure> {
     if let Some(spec) = &o.fixes {
         fixes::check(spec)?;
     }
     let d = platform::bin_dir(&o.target)?;
+    #[cfg(windows)]
+    if o.audit {
+        return platform::audit(&d);
+    }
     if o.uninstall {
         // Only remove the settings file when dmfast was actually there: it may be the user's own.
         return Ok(match platform::uninstall(&d)? {
@@ -68,6 +75,9 @@ fn run(o: &Opts) -> Result<String, Failure> {
         Some(spec) => fixes::set(&d, spec)?,
         None => fixes::describe(&d)?,
     };
+    #[cfg(windows)]
+    let msg = platform::install(&d, o.compiler, o.server, o.client)?;
+    #[cfg(not(windows))]
     let msg = platform::install(&d, o.compiler, o.server)?;
     Ok(format!("{msg}\n{fixes}"))
 }
@@ -105,6 +115,12 @@ fn main() {
             pause();
             return;
         }
+        #[cfg(windows)]
+        Action::ClientPatches => {
+            println!("{}", platform::client_list());
+            pause();
+            return;
+        }
         Action::Error(msg) => {
             eprintln!("error: {msg}");
             pause();
@@ -116,8 +132,9 @@ fn main() {
             println!("{msg}");
             0
         }
+        // An audit only reads, so its failure is never retried with admin rights.
         #[cfg(windows)]
-        Err(Failure::Denied(msg)) if !o.elevated => {
+        Err(Failure::Denied(msg)) if !o.elevated && !o.audit => {
             println!("{msg}\nasking for admin rights...");
             // The guided answers are in `argv`, so the admin copy doesn't ask again.
             let argv: Vec<String> = argv.iter().map(|a| a.to_string_lossy().into_owned()).collect();

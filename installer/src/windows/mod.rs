@@ -2,10 +2,12 @@
 //! pulls in `mimalloc.dll`, dmfast's allocator (mimalloc for small blocks, the process heap for large
 //! ones; source in `vendor/mimalloc-x86`). It goes into the compiler (`dm.exe`) unless `--no-compiler` is given, and
 //! DreamDaemon (`dreamdaemon.exe`, `dd.exe`) unless `--no-server` is; each patched program's original is kept as
-//! `<name>_orig.exe`, and byondcore.dll and every other program stay stock.
+//! `<name>_orig.exe`, and every other program stays stock. With `--client`, byondcore.dll and byondwin.dll also get
+//! the DreamSeeker patches the fix selection picks, on disk (`seeker`), with the stock DLLs in `bin/backup/`.
 
 mod elevate;
 mod pe;
+mod seeker;
 
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -57,10 +59,12 @@ fn missing_backup(dir: &Path, name: &str) -> Failure {
 /// For the guided install: what of dmfast `dir` has now.
 pub fn state(dir: &Path) -> Installed {
     let patched = |exe: &str| backup_of(dir, exe).is_file();
+    let client = seeker::client_patched(dir);
     Installed {
-        any: dir.join(DLL).is_file(),
+        any: dir.join(DLL).is_file() || client,
         compiler: patched(COMPILER),
         server: RUNTIME.iter().any(|exe| patched(exe)),
+        client,
     }
 }
 
@@ -192,11 +196,8 @@ fn restore(dir: &Path, name: &str) -> Result<(), Failure> {
     rename_retry(&backup_of(dir, name), &exe).map_err(|e| io_err("cannot restore", &exe, e))
 }
 
-pub fn install(dir: &Path, compiler: bool, server: bool) -> Result<String, Failure> {
+pub fn install(dir: &Path, compiler: bool, server: bool, client: bool) -> Result<String, Failure> {
     let names = targets(dir, compiler, server);
-    if names.is_empty() {
-        return Err(format!("nothing to install in {}: no {}", dir.display(), RUNTIME.join(" or ")).into());
-    }
     // A program left out is put back (re-running without it means "not this one").
     let mut left_out = Vec::new();
     for name in PROGRAMS.into_iter().filter(|n| !names.contains(n)) {
@@ -221,10 +222,27 @@ pub fn install(dir: &Path, compiler: bool, server: bool) -> Result<String, Failu
     let dll = dir.join(DLL);
     let installed = dll.is_file().then(|| read(&dll)).transpose()?.and_then(|d| pe::canary(&d));
     let states = names.iter().map(|n| check(dir, n)).collect::<Result<Vec<_>, _>>()?;
+    let seeker = seeker::plan_install(dir, client)?;
+    if names.is_empty() && !seeker.patched {
+        // Without the compiler, `server` or `client` was asked for.
+        let mut why = Vec::new();
+        if server {
+            why.push(format!("no {}", RUNTIME.join(" or ")));
+        }
+        if client {
+            why.extend(seeker.lines().iter().cloned());
+        }
+        if why.is_empty() {
+            why.push("no DreamSeeker DLL to patch".into());
+        }
+        return Err(format!("nothing to install in {}: {}", dir.display(), why.join(", and ")).into());
+    }
     // The DLLs first: a patched program must never import a DLL that isn't there.
-    write(&dll, DMFAST_DLL)?;
-    for (name, data) in SUPPORT {
-        write(&dir.join(name), data)?;
+    if !names.is_empty() {
+        write(&dll, DMFAST_DLL)?;
+        for (name, data) in SUPPORT {
+            write(&dir.join(name), data)?;
+        }
     }
     let mut before = None;
     for (name, state) in names.iter().zip(states) {
@@ -234,24 +252,35 @@ pub fn install(dir: &Path, compiler: bool, server: bool) -> Result<String, Failu
     for name in &left_out {
         restore(dir, name)?;
     }
-    for name in OBSOLETE {
+    // No program imports dmfast.dll any more: it and what it needs go too.
+    let unused =
+        if names.is_empty() { [DLL].into_iter().chain(SUPPORT.map(|(name, _)| name)).collect() } else { vec![] };
+    for name in OBSOLETE.into_iter().chain(unused) {
         let p = dir.join(name);
         if p.is_file() {
             fs::remove_file(&p).map_err(|e| io_err("cannot remove", &p, e))?;
         }
     }
-    let before = before.unwrap_or_default();
-    let mut msg = format!("installed {ours} in {} (was {before}) for {}", dir.display(), names.join(", "));
+    let mut msg = match before {
+        Some(before) => format!("installed {ours} in {} (was {before}) for {}", dir.display(), names.join(", ")),
+        None => format!("DreamSeeker patched in {}", dir.display()),
+    };
     if !left_out.is_empty() {
         msg += &format!("; restored stock {}", left_out.join(", "));
     }
+    for line in seeker::carry_out(dir, seeker)? {
+        msg += &format!("\n{line}");
+    }
     Ok(msg)
 }
+
+pub use seeker::{audit, client_list, has_client_patches};
 
 /// None if dmfast isn't installed in `dir` (nothing of ours was found).
 pub fn uninstall(dir: &Path) -> Result<Option<String>, Failure> {
     let dll = dir.join(DLL);
     ensure_none_in_use(dir, &PROGRAMS)?;
+    let seeker = seeker::plan_uninstall(dir)?;
     // Only for the message: an unreadable DLL must not block removing it.
     let ver = dll.is_file().then(|| read(&dll).ok()).flatten().and_then(|d| pe::canary(&d));
     let (mut restored, mut lost) = (Vec::new(), Vec::new());
@@ -270,7 +299,7 @@ pub fn uninstall(dir: &Path) -> Result<Option<String>, Failure> {
             }
         }
     }
-    if restored.is_empty() && lost.is_empty() && !dll.is_file() {
+    if restored.is_empty() && lost.is_empty() && !dll.is_file() && seeker.is_empty() {
         return Ok(None);
     }
     for p in [dll].into_iter().chain(SUPPORT.map(|(name, _)| dir.join(name))).chain(OBSOLETE.map(|name| dir.join(name)))
@@ -288,6 +317,9 @@ pub fn uninstall(dir: &Path) -> Result<Option<String>, Failure> {
             "\nwarning: {} was missing, so {name} is gone; reinstall BYOND to get it back",
             backup_of(dir, name).display()
         );
+    }
+    for line in seeker::carry_out(dir, seeker)? {
+        msg += &format!("\n{line}");
     }
     Ok(Some(msg))
 }

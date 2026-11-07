@@ -1,12 +1,14 @@
-//! Minimal PE32 reading/editing: section names, exports (the canary), and prepending an import descriptor.
+//! Minimal PE32 reading/editing: section names, exports (the canary), and prepending an import descriptor (the
+//! section append is the seeker crate's).
 
+use dmfast_seeker::pe::{self as image, DATA_FLAGS, DIR_IMPORT, NewSection, Pe, put32};
 use object::read::pe::{ExportTarget, PeFile32};
 
 type Result<T, E = String> = std::result::Result<T, E>;
 
 const CANARY_EXPORT: &[u8] = b"dmfast_canary";
 /// Section added to dm.exe for the new import table.
-const IMPORT_SECTION: &[u8; 8] = b".dmfimp\0";
+const IMPORT_SECTION: [u8; 8] = *b".dmfimp\0";
 
 fn parse(data: &[u8]) -> Result<PeFile32<'_>> {
     PeFile32::parse(data).map_err(|e| format!("not a 32-bit PE file: {e}"))
@@ -41,51 +43,17 @@ pub fn canary(data: &[u8]) -> Option<String> {
     Some(String::from_utf8_lossy(&bytes[..end]).into_owned())
 }
 
-fn u16_at(d: &[u8], o: usize) -> u16 {
-    u16::from_le_bytes(d[o..o + 2].try_into().unwrap())
-}
-fn u32_at(d: &[u8], o: usize) -> u32 {
-    u32::from_le_bytes(d[o..o + 4].try_into().unwrap())
-}
-fn put32(d: &mut [u8], o: usize, v: u32) {
-    d[o..o + 4].copy_from_slice(&v.to_le_bytes());
-}
-fn align(x: u32, a: u32) -> u32 {
-    x.div_ceil(a) * a
-}
-
 /// Copy of `exe` whose import table starts with `dll!func` for each of `first`, in order, so the loader
 /// loads and initialises those DLLs (and their own imports) before the exe's other imports. The original
 /// descriptors are kept as-is; the new table lives in an appended section.
 pub fn add_imports_first(exe: &[u8], first: &[(&str, &str)]) -> Result<Vec<u8>> {
-    let mut d = exe.to_vec();
-    let fh = u32_at(&d, 0x3C) as usize + 4;
-    let nsec = u16_at(&d, fh + 2) as usize;
-    let opt = fh + 20;
-    if u16_at(&d, opt) != 0x10B {
-        return Err("not a PE32 image".into());
-    }
-    let sec_table = opt + u16_at(&d, fh + 16) as usize;
-    let (sa, fa) = (u32_at(&d, opt + 32), u32_at(&d, opt + 36));
-    let sec = |i: usize| sec_table + 40 * i;
-    let last = sec(nsec - 1);
-    let first_raw = (0..nsec).map(|i| u32_at(&d, sec(i) + 20)).filter(|&p| p != 0).min().unwrap() as usize;
-    let hdr = sec(nsec);
-    if hdr + 40 > (u32_at(&d, opt + 60) as usize).min(first_raw) || d[hdr..hdr + 40].iter().any(|&b| b != 0) {
-        return Err("no room for another section header".into());
-    }
-    if d.len() != (u32_at(&d, last + 20) + u32_at(&d, last + 16)) as usize {
-        return Err("image has overlay data".into());
-    }
-
+    let pe = Pe::parse(exe)?;
     // Existing descriptors (without the terminator).
-    let (idir_rva, idir_size) = (u32_at(&d, opt + 104), u32_at(&d, opt + 108));
-    let pe = parse(exe)?;
-    let old = pe.section_table().pe_data_at(exe, idir_rva).ok_or("import directory not in a section")?;
-    let old: Vec<&[u8; 20]> =
-        old[..idir_size as usize].as_chunks::<20>().0.iter().take_while(|c| c.iter().any(|&b| b != 0)).collect();
+    let (idir_rva, idir_size) = pe.dir(DIR_IMPORT);
+    let old = pe.bytes(idir_rva, idir_size).ok_or("import directory not in a section")?;
+    let old: Vec<&[u8; 20]> = old.as_chunks::<20>().0.iter().take_while(|c| c.iter().any(|&b| b != 0)).collect();
 
-    let va = align(u32_at(&d, last + 12) + u32_at(&d, last + 8), sa);
+    let va = pe.next_rva();
     let n = first.len() + old.len() + 1; // ours + old + terminator
     let mut blob = vec![0u8; 20 * n];
     let put = |blob: &mut Vec<u8>, data: &[u8], alignment: usize| {
@@ -110,22 +78,9 @@ pub fn add_imports_first(exe: &[u8], first: &[(&str, &str)]) -> Result<Vec<u8>> 
         blob[20 * (first.len() + i)..20 * (first.len() + i + 1)].copy_from_slice(*desc);
     }
 
-    let raw_ptr = align(d.len() as u32, fa);
-    let raw_size = align(blob.len() as u32, fa);
-    d[hdr..hdr + 8].copy_from_slice(IMPORT_SECTION);
-    put32(&mut d, hdr + 8, blob.len() as u32);
-    put32(&mut d, hdr + 12, va);
-    put32(&mut d, hdr + 16, raw_size);
-    put32(&mut d, hdr + 20, raw_ptr);
-    put32(&mut d, hdr + 36, 0xC000_0040); // initialised data, read/write (the loader writes the IAT)
-    d[fh + 2..fh + 4].copy_from_slice(&(nsec as u16 + 1).to_le_bytes());
-    put32(&mut d, opt + 56, align(va + blob.len() as u32, sa)); // SizeOfImage
-    put32(&mut d, opt + 64, 0); // CheckSum (not checked for user-mode images)
-    put32(&mut d, opt + 104, va); // DataDirectory[IMPORT]
-    put32(&mut d, opt + 108, 20 * n as u32);
-    d.resize(raw_ptr as usize, 0);
-    d.extend(&blob);
-    d.resize((raw_ptr + raw_size) as usize, 0);
+    // Initialised data, read and write: the loader writes the IAT.
+    let section = NewSection { name: IMPORT_SECTION, flags: DATA_FLAGS, data: &blob, vsize: 0 };
+    let d = image::append(&pe, &[section], &[(DIR_IMPORT, va, 20 * n as u32)])?;
 
     for (dll, _) in first {
         if !imports(&d, dll)? {

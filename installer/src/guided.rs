@@ -80,10 +80,14 @@ pub fn run() -> Option<Vec<String>> {
     let first = !now.any;
     let compiler = yes("Speed up the compiler?", first || now.compiler)?;
     let server = yes("Speed up the server (DreamDaemon)?", first || now.server)?;
-    if !compiler && !server {
+    #[cfg(windows)]
+    let client = platform::has_client_patches() && yes("Patch the client (DreamSeeker)?", now.client)?;
+    #[cfg(not(windows))]
+    let client = false;
+    if !compiler && !server && !client {
         return None;
     }
-    let mut args: Vec<String> = [(!compiler, "--no-compiler"), (!server, "--no-server")]
+    let mut args: Vec<String> = [(!compiler, "--no-compiler"), (!server, "--no-server"), (client, "--client")]
         .into_iter()
         .filter(|&(on, _)| on)
         .map(|(_, flag)| flag.into())

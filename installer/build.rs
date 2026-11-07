@@ -1,7 +1,8 @@
 //! Builds the 32-bit dmfast library for the installer's target OS (it must match BYOND's x86
 //! processes regardless of the installer's own architecture) and hands its path to `include_bytes!`
-//! via `DMFAST_LIB`. On Windows also embeds the installer's version information and manifest; on Linux
-//! checks that the library loads wherever BYOND does (no glibc symbol newer than [`GLIBC_FLOOR`]).
+//! via `DMFAST_LIB`, and lists the private DreamSeeker patches (if any) in `$OUT_DIR/client.rs`. On Windows also
+//! embeds the installer's version information and manifest; on Linux checks that the library loads wherever BYOND
+//! does (no glibc symbol newer than [`GLIBC_FLOOR`]).
 
 use std::env;
 use std::path::PathBuf;
@@ -26,6 +27,7 @@ fn main() {
     println!("cargo:rerun-if-changed={}", root.join("patches").display());
     println!("cargo:rerun-if-changed={}", root.join("patches-private").display());
     write_bugfix_list(&root);
+    client_patches(&root, windows);
     if !windows {
         check_glibc(&lib);
         return;
@@ -56,6 +58,59 @@ fn build_x86(root: &std::path::Path, target_dir: &std::path::Path, triple: &str,
         .unwrap_or_else(|e| panic!("failed to run cargo for {package}: {e}"));
     assert!(status.success(), "building {file} failed");
     target_dir.join(triple).join("release").join(file)
+}
+
+/// The private DreamSeeker patches, one folder each (`patches-private/client/<key>/`: `patch.rs` and `patch.spec`),
+/// compiled (with dmfast's version in `DMFAST_VERSION`), checked, and each held to its row in CLIENT.md, then listed
+/// in `$OUT_DIR/client.rs` as `(key, object, spec)` for the installer to include; an empty list when there are none or
+/// the target isn't Windows.
+fn client_patches(root: &std::path::Path, windows: bool) {
+    let dir = root.join("patches-private").join("client");
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let mut keys: Vec<PathBuf> = match std::fs::read_dir(&dir) {
+        Ok(entries) if windows => entries.map(|e| e.expect("listing patches-private/client").path()).collect(),
+        _ => Vec::new(),
+    };
+    keys.retain(|k| k.join("patch.spec").is_file());
+    keys.sort();
+    let rustc = env::var("RUSTC").unwrap();
+    let listed = client_doc(root);
+    let mut list = String::from("&[\n");
+    for dir in keys {
+        let name = dir.strip_prefix(root).unwrap_or(&dir).display().to_string();
+        let key = dir.file_name().unwrap().to_string_lossy().into_owned();
+        let rs = dir.join("patch.rs");
+        let obj_path = dmfast_seeker::author::compile(&rustc, &rs, &out_dir, env!("CARGO_PKG_VERSION"))
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
+        let obj = std::fs::read(&obj_path).expect("reading a compiled DreamSeeker patch");
+        let spec_path = dir.join("patch.spec");
+        let spec = std::fs::read_to_string(&spec_path).expect("reading a DreamSeeker patch's spec");
+        let patches =
+            dmfast_seeker::author::from_object(&obj, &spec, &key).unwrap_or_else(|e| panic!("{name}/patch.spec: {e}"));
+        for p in &patches {
+            let tier = listed.iter().find(|(k, _)| *k == key).map(|(_, t)| t.as_str());
+            assert!(
+                tier == Some(p.tier.name()),
+                "{name}: CLIENT.md needs a row for `{key}` with tier `{}` (has {tier:?})",
+                p.tier.name()
+            );
+        }
+        list += &format!("    ({key:?}, include_bytes!({obj_path:?}), include_str!({spec_path:?})),\n");
+    }
+    std::fs::write(out_dir.join("client.rs"), list + "]\n").expect("writing client.rs");
+}
+
+/// CLIENT.md's rows: each DreamSeeker patch's key and tier, the public list the private patches must match.
+fn client_doc(root: &std::path::Path) -> Vec<(String, String)> {
+    let doc = root.join("CLIENT.md");
+    println!("cargo:rerun-if-changed={}", doc.display());
+    let text = std::fs::read_to_string(&doc).expect("reading CLIENT.md");
+    text.lines()
+        .map(|line| line.split('|').map(|c| c.trim().replace('`', "")).collect::<Vec<_>>())
+        // "| Fix | Key | Tier | What changes | Bug report |" rows; skip the header and the |---| separator.
+        .filter(|cells| cells.len() >= 6 && cells[1] != "Fix" && !cells[1].starts_with('-'))
+        .map(|cells| (cells[2].clone(), cells[3].clone()))
+        .collect()
 }
 
 /// `--help bugfixes`: the fix tables of BUGFIXES.md (name, key, tier, OS), written to

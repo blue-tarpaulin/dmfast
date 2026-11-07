@@ -23,7 +23,7 @@ const NEW_FILE: &str = "; dmfast settings, read when a BYOND program starts. dmf
 /// The entries of a `--fixes` value: tier names, `experimental`, fix keys, or `-key` to leave one out, separated
 /// by commas.
 /// `none` alone means no fixes (no entries).
-fn entries(spec: &str) -> Result<Vec<String>, Failure> {
+pub(crate) fn entries(spec: &str) -> Result<Vec<String>, Failure> {
     let entries: Vec<String> =
         spec.split(|c: char| c == ',' || c.is_whitespace()).filter(|e| !e.is_empty()).map(str::to_owned).collect();
     if entries.is_empty() {
