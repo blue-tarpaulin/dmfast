@@ -1,0 +1,69 @@
+# Export and import names a patch body may not call: one case-insensitive substring per line, then why.
+socket          # networking: sockets
+socklib         # networking: the socket library and its log
+network         # networking: diagnostics and profiling
+byondhttp       # networking: the HTTP server
+httplink        # networking: HTTP links
+httpport        # networking: HTTP ports
+httpfile        # networking: HTTP fetches
+webfile         # networking: web fetches
+ipaddress       # networking: addresses
+nslookup        # networking: name lookups
+serverport      # networking: server ports
+proxy           # networking: proxies
+connectto       # networking: connecting
+reconnect       # networking: reconnecting
+connection      # networking: connections
+userdisconnect  # networking: dropping a user
+download        # networking: downloads
+upload          # networking: uploads
+sendpages       # sending: pages
+sendmessagefromhost     # sending: host messages
+topic           # sending: world topics
+command@dungclient      # sending: commands to the server
+command_cio     # sending: commands to the server
+commandevent    # sending: commands to the server
+handlelink      # sending: byond:// links
+handlebyondurls # sending: byond:// links
+startupserver   # networking: hosting
+dungserver      # networking: the server
+clientserver    # networking: the server
+servermedal     # networking: medals
+serverui        # networking: server actions
+servershutdown  # networking: server shutdown and logout
+steam           # networking: Steam
+friend          # networking: friends list
+foe@            # networking: foes list
+login           # login and keys
+logout          # login and keys
+password        # passwords
+passport        # login and keys
+pword           # passwords
+webid           # login and keys
+sessionid       # login and keys
+loginkey        # login and keys
+keyfile         # login and keys: the key file
+keylist         # login and keys
+deletekey       # login and keys
+keyisinstalled  # login and keys
+authorize       # login and keys
+certfailed      # login and keys: certificates
+hub             # hub
+pager           # pager
+exec            # process launching: commands and processes
+launch          # process launching
+redirector      # process launching: child processes
+withrun         # process launching: running worlds
+runlink         # shell launching: links
+browselink      # shell launching: links
+gotourl         # shell launching: links
+runcontrolpanel # shell launching: the control panel
+regkey          # registry
+shellfiletypes  # registry: file associations
+tokenprivilege  # process privileges
+crypt           # crypto
+md5             # crypto: hashing
+deletefile      # files: deleting
+removefile      # files: deleting
+movefile        # files: moving
+renamefile      # files: renaming
