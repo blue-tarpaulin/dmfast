@@ -1,0 +1,13 @@
+[package]
+name = "dmfast-seeker"
+version.workspace = true
+edition = "2024"
+
+[features]
+# `build`: apply, audit, and validate patches. 
+# Without it, only the manifest reader that dmfast.dll uses.
+build = ["dep:iced-x86", "dep:object"]
+
+[dependencies]
+iced-x86 = { version = "1.22", default-features = false, features = ["std", "decoder", "instr_info"], optional = true }
+object = { version = "0.40.0", default-features = false, features = ["read_core", "pe", "coff", "std"], optional = true }

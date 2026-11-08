@@ -4,7 +4,8 @@
 usage: compat.py [--phase PHASE] [--work DIR] [--suite-cache DIR] <BYOND version> <installer> <project.dme>
 
 Checks: identical .dmb, verify mode, world load and output, bug fixes (fixtest.py), DM test suite
-(dmtests.py). Writes a Markdown row to compat-<os>-<version>.md and $GITHUB_STEP_SUMMARY.
+(dmtests.py), and on Windows DreamSeeker's patches (installed with --client, checked with --audit). Writes a Markdown
+row to compat-<os>-<version>.md and $GITHUB_STEP_SUMMARY.
 Phases (setup project verify load world fixes suite report) share state through --work; report fails the run.
 """
 import argparse, json, os, re, shutil, statistics, subprocess, sys, tempfile, time, zipfile
@@ -153,10 +154,18 @@ def setup():
         f.chmod(0o755)
     shutil.copytree(WORK / "x" / "byond" / "bin", STOCK)
     shutil.copytree(WORK / "x" / "byond" / "bin", FAST)
-    p = subprocess.run(([] if WIN else ["sh"]) + [str(INSTALLER), str(FAST)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    # Windows: with DreamSeeker's patches too, so every later phase runs over patched DLLs, then audited.
+    client = ["--client"] if WIN else []
+    p = subprocess.run(([] if WIN else ["sh"]) + [str(INSTALLER), *client, str(FAST)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if p.returncode != 0:
         log(p.stdout.decode("utf-8", "replace"))
         sys.exit(1)
+    if WIN:
+        a = subprocess.run([str(INSTALLER), "--audit", str(FAST)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        out = a.stdout.decode("utf-8", "replace")
+        log(out.rstrip())
+        if a.returncode != 0:
+            fail("dmfast-install --audit fails on DreamSeeker's patches")
 
 
 def project():
