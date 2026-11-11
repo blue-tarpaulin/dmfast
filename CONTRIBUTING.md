@@ -96,6 +96,7 @@ These are [private](./CONTRIBUTING.md#build). The public side guarantees:
 - the server and compiler are not affected by these patches, due to them re-loading the original code;
   - the stock DLLs are kept in `bin/backup/`.
   - `dmfast-install --audit` checks a patched DLL against them.
+- patches are `no_std` Rust.
 
 For more information, see [CLIENT.md](CLIENT.md).
 
