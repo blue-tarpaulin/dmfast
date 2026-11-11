@@ -1,0 +1,12 @@
+// world.Export of a 128 MB file from a local server (httpexport-gen.sh), five times: each gets the whole file.
+/world/New()
+	..()
+	spawn(1)
+		var/url = "http://127.0.0.1:[text2num(file2text("httpexport-port.txt"))]/httpexport.bin"
+		var/ok = 0
+		for(var/i in 1 to 5)
+			var/list/r = world.Export(url)
+			if(r && length(r["CONTENT"]) == 134217728)
+				ok++
+		world.log << "[ok] of 5 downloads complete"
+		shutdown()
