@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 
 use dmfast_format::manifest::Field;
 use dmfast_seeker::author::{compile, from_object};
-use dmfast_seeker::patch::{Dll, Fixup, Patch, Place, Ref, Tier};
+use dmfast_seeker::patch::{Fixup, Module, Patch, Place, Ref, Tier};
 
 const SPEC: &str = include_str!("fixture/counter.spec");
 /// The counter patch without comments: `patch` on line 1, `body` on line 5.
@@ -72,10 +72,11 @@ fn counter_fixture() {
             tier: Tier::Safe,
             name: "counter".to_string(),
             about: "Counts DMString::DMString() calls in its data (test only).".to_string(),
-            dll: Dll::Core,
+            module: Module::Core,
             site: Place::Export("??0DMString@@QAE@XZ".to_string()),
             displace: 6,
             exe: Vec::new(),
+            files: Vec::new(),
             body: Vec::new(),
             entry: 0,
             fixups: Vec::new(),

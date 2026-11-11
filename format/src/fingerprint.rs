@@ -1,5 +1,5 @@
-//! The hash a function's fingerprint keeps instead of its bytes (dmfast's dependency guards, and a DreamSeeker
-//! patch's `site fingerprint`).
+//! FNV-1a hashes kept instead of bytes: of a function (dmfast's dependency guards, and a DreamSeeker patch's
+//! `site fingerprint`), or of a whole file (a DreamSeeker patch's `file` line).
 
 /// FNV-1a 64 over `bytes`, skipping the (offset, length) spans in `holes` (in order).
 pub fn fnv1a(bytes: &[u8], holes: &[(u16, u16)]) -> u64 {

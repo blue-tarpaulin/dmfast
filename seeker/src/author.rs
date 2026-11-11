@@ -3,7 +3,7 @@
 //! is. The spec has one directive per line (blank lines and lines starting with `#` are skipped); a `patch` line
 //! starts a patch and the lines after it describe that patch:
 //! ```text
-//! patch <name> <byondcore.dll|byondwin.dll>
+//! patch <name> <dreamseeker.exe|byondcore.dll|byondwin.dll>
 //! tier <safe|extended|breaking>
 //! about <text>
 //! site export <decorated name>
@@ -11,6 +11,7 @@
 //! site fingerprint <length> <hash> <IDA bytes...>
 //! displace <n>
 //! exe <IDA bytes...>
+//! file <name> <hash>
 //! body <symbol>
 //! data <bytes>
 //! ref <symbol> code|global export <name>
@@ -20,10 +21,12 @@
 //! `about`, `tier`, `site`, `displace`, and `body` are required; `data` defaults to 0; numbers are decimal or `0x`
 //! hex. `site` may repeat: the same code at several sites (patches `<name>`, `<name>-2`, ...). A fingerprint names a
 //! whole function without its bytes ([`Place::Fingerprint`]): the bytes are only how it starts, and an install that
-//! finds no match says what each function starting that way hashes to. `exe` may repeat: dreamseeker.exe's code must
-//! have each pattern once ([`Patch::exe`]). `dmf_resume`, `dmf_original`, `dmf_data`, `dmf_com`, and `dmf_com_tail`
-//! need no `ref`; `jmp dmf_original + n` runs the original instructions from offset `n`. Names are matched without the
-//! `_` (and a stdcall `@<bytes>`) i686 Windows puts on C names.
+//! finds no match says what each function starting that way hashes to. `exe` and `file` may repeat: each `exe` pattern
+//! must match exactly once in dreamseeker.exe's code ([`Patch::exe`]), and each named file in `bin` must have the
+//! given hash ([`Patch::files`]).
+//! `dmf_resume`, `dmf_original`, `dmf_data`, `dmf_com`, and `dmf_com_tail` need no `ref`; `jmp dmf_original + n` runs
+//! the original instructions from offset `n`. Names are matched without the `_` (and a stdcall `@<bytes>`) i686 Windows
+//! puts on C names.
 //!
 //! A patch's code is the functions the `body` function reaches, in order, each aligned as its section says with
 //! `int3`s between; the gate enters it at the `body` function. Core's panic paths go to the prelude's `dmf_trap`. Its
@@ -42,7 +45,7 @@ use object::{
     SymbolIndex, SymbolKind, pe,
 };
 
-use crate::patch::{Dll, Fixup, Patch, Place, Ref, Tier};
+use crate::patch::{Fixup, Module, Patch, Place, Ref, Tier};
 use dmfast_format::manifest::Field;
 
 macro_rules! bail {
@@ -93,12 +96,13 @@ struct Source {
 struct Draft {
     line: usize,
     name: String,
-    dll: Dll,
+    module: Module,
     tier: Option<Tier>,
     about: Option<String>,
     sites: Vec<Place>,
     displace: Option<u32>,
     exe: Vec<String>,
+    files: Vec<(String, u64)>,
     body: Option<(usize, String)>,
     data: Option<u32>,
     refs: HashMap<String, Ref>,
@@ -107,7 +111,7 @@ struct Draft {
 impl Draft {
     /// The patch without its body and fixups (at its first site), and where they come from.
     fn finish(self, key: &str) -> Result<(Patch, Source), String> {
-        let Draft { line, name, dll, tier, about, sites, displace, exe, body, data, refs } = self;
+        let Draft { line, name, module, tier, about, sites, displace, exe, files, body, data, refs } = self;
         let missing = |what: &str| format!("line {line}: patch {name} has no `{what}`");
         let about = about.ok_or_else(|| missing("about"))?;
         let tier = tier.ok_or_else(|| missing("tier"))?;
@@ -119,10 +123,11 @@ impl Draft {
             tier,
             name,
             about,
-            dll,
+            module,
             site,
             displace,
             exe,
+            files,
             body: Vec::new(),
             entry: 0,
             fixups: Vec::new(),
@@ -153,9 +158,9 @@ fn directive(drafts: &mut Vec<Draft>, line: usize, text: &str) -> Result<(), Str
     let rest = rest.trim();
     let args: Vec<&str> = rest.split_whitespace().collect();
     if word == "patch" {
-        let [name, file] = args[..] else { bail!("expected `patch <name> <dll>`") };
-        let Some(dll) = Dll::ALL.into_iter().find(|dll| dll.file() == file) else {
-            bail!("unknown DLL {file} (byondcore.dll or byondwin.dll)");
+        let [name, file] = args[..] else { bail!("expected `patch <name> <file>`") };
+        let Some(module) = Module::ALL.into_iter().find(|m| m.file() == file) else {
+            bail!("unknown file {file} (dreamseeker.exe, byondcore.dll, or byondwin.dll)");
         };
         if let Some(other) = drafts.iter().find(|d| d.name == name) {
             bail!("patch {name} is already on line {}", other.line);
@@ -163,12 +168,13 @@ fn directive(drafts: &mut Vec<Draft>, line: usize, text: &str) -> Result<(), Str
         drafts.push(Draft {
             line,
             name: name.to_string(),
-            dll,
+            module,
             tier: None,
             about: None,
             sites: Vec::new(),
             displace: None,
             exe: Vec::new(),
+            files: Vec::new(),
             body: None,
             data: None,
             refs: HashMap::new(),
@@ -193,7 +199,12 @@ fn directive(drafts: &mut Vec<Draft>, line: usize, text: &str) -> Result<(), Str
         }
         "exe" if rest.is_empty() => bail!("expected `exe <IDA bytes...>`"),
         "exe" => {
-            draft.exe.push(rest.to_string());
+            draft.exe.push(pattern(&args)?);
+            Ok(())
+        }
+        "file" => {
+            let [name, h] = args[..] else { bail!("expected `file <name> <hash>`") };
+            draft.files.push((name.to_string(), hash(h)?));
             Ok(())
         }
         "body" => {
@@ -240,10 +251,8 @@ fn place(args: &[&str]) -> Result<Place, String> {
     match args {
         ["export", name] => Ok(Place::Export(name.to_string())),
         ["pattern", at, bytes @ ..] if !bytes.is_empty() => Ok(Place::Pattern(pattern(bytes)?, offset(at)?)),
-        ["fingerprint", len, hash, bytes @ ..] if !bytes.is_empty() => {
-            let hash = hash.strip_prefix("0x").and_then(|h| u64::from_str_radix(h, 16).ok());
-            let hash = hash.ok_or("a fingerprint's hash is `0x` and up to 16 hex digits")?;
-            Ok(Place::Fingerprint { prefix: pattern(bytes)?, len: number(len)?, hash })
+        ["fingerprint", len, h, bytes @ ..] if !bytes.is_empty() => {
+            Ok(Place::Fingerprint { prefix: pattern(bytes)?, len: number(len)?, hash: hash(h)? })
         }
         _ => bail!(
             "expected `export <name>`, `pattern <offset> <IDA bytes...>`, or `fingerprint <length> <hash> <IDA bytes...>`"
@@ -270,6 +279,12 @@ fn number(text: &str) -> Result<u32, String> {
         None => text.parse(),
     }
     .map_err(|_| format!("bad number {text}"))
+}
+
+/// A 64-bit hash: `0x` and up to 16 hex digits.
+fn hash(text: &str) -> Result<u64, String> {
+    let hash = text.strip_prefix("0x").and_then(|h| u64::from_str_radix(h, 16).ok());
+    hash.ok_or_else(|| format!("bad hash {text} (`0x` and up to 16 hex digits)"))
 }
 
 fn offset(text: &str) -> Result<i32, String> {

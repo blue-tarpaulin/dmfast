@@ -1,20 +1,23 @@
-//! A DreamSeeker patch as written, before it is placed in a DLL: where it goes, its body's bytes, and what each of
+//! A DreamSeeker patch as written, before it is placed in a module: where it goes, its body's bytes, and what each of
 //! the body's address fields points at, by name or pattern (resolved when it is applied).
 
-/// The DLL a patch goes into.
+/// The file a patch goes into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Dll {
+pub enum Module {
+    Seeker,
     Core,
     Win,
 }
 
-impl Dll {
-    pub const ALL: [Dll; 2] = [Dll::Core, Dll::Win];
+impl Module {
+    /// dreamseeker.exe comes first, because the DLLs' gates check for its identity after patching.
+    pub const ALL: [Module; 3] = [Module::Seeker, Module::Core, Module::Win];
 
     pub fn file(self) -> &'static str {
         match self {
-            Dll::Core => "byondcore.dll",
-            Dll::Win => "byondwin.dll",
+            Module::Seeker => "dreamseeker.exe",
+            Module::Core => "byondcore.dll",
+            Module::Win => "byondwin.dll",
         }
     }
 }
@@ -98,14 +101,17 @@ pub struct Patch {
     pub name: String,
     /// What it fixes, for the audit's report.
     pub about: String,
-    pub dll: Dll,
+    pub module: Module,
     /// Where it hooks: these `displace` bytes (whole instructions; a relative branch only to the site's end) become a
     /// `jmp` to its gate.
     pub site: Place,
     pub displace: u32,
-    /// IDA patterns dreamseeker.exe's code must each have once: the client code the patch is written against, so a
-    /// BYOND build that changes it (fixing the bug there) gets no patch.
+    /// IDA patterns that must each match once in dreamseeker.exe's code: the client code the patch depends on. A BYOND
+    /// build that changes that code (to fix the bug there, say) gets no patch.
     pub exe: Vec<String>,
+    /// Files in BYOND's `bin` the patch depends on, by name and [`fnv1a`](dmfast_format::fingerprint::fnv1a) hash. If
+    /// one differs (a newer FMOD, say), the patch isn't applied.
+    pub files: Vec<(String, u64)>,
     /// Its code: the functions its entry reaches, in order. Entered at `entry` in DreamSeeker in place of the site's
     /// instructions, with every register and flag as at the site.
     pub body: Vec<u8>,
@@ -113,7 +119,7 @@ pub struct Patch {
     pub fixups: Vec<Fixup>,
     /// Bytes of zero-filled data it owns.
     pub data: u32,
-    /// Read-only data it uses (strings, tables), in the DLL's data section.
+    /// Read-only data it uses (strings, tables), in the module's data section.
     pub consts: Vec<u8>,
     /// The addresses in [`consts`](Self::consts): each field's offset there, and the offset there it points at.
     pub const_fixups: Vec<(u32, u32)>,
@@ -141,10 +147,11 @@ mod tests {
             tier,
             name: key.into(),
             about: String::new(),
-            dll: Dll::Core,
+            module: Module::Core,
             site: Place::Export(String::new()),
             displace: 5,
             exe: Vec::new(),
+            files: Vec::new(),
             body: Vec::new(),
             entry: 0,
             fixups: Vec::new(),

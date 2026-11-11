@@ -1,4 +1,4 @@
-//! Checks a patched DLL against its stock copy, byte by byte: the changes are the sites' jumps, the header fields
+//! Checks a patched module against its stock copy, byte by byte: the changes are the sites' jumps, the header fields
 //! for the two appended sections, and those sections: the code section holds exactly the manifest, the public gates,
 //! copies of the sites' original bytes, the bodies (each passing the `validate` rules), the public Direct3D helper
 //! when a patch uses it, and the relocation table; the data section holds the patches' constants (data, never run)
@@ -9,7 +9,7 @@ use std::ops::Range;
 use crate::apply::{check_site, data_vsize, original, overlap, relocations, write_site};
 use crate::com;
 use crate::gate;
-use crate::patch::Dll;
+use crate::patch::Module;
 use crate::pe::{self, CODE_FLAGS, DATA_FLAGS, DIR_BASERELOC, Pe, align, u32_at};
 use crate::validate;
 use dmfast_format::manifest::{CODE_SECTION, Class, DATA_SECTION, ExeId, Manifest};
@@ -25,8 +25,8 @@ pub fn exe_id(exe: &[u8]) -> Result<ExeId, String> {
 }
 
 /// Ok: a report of what each patch does. Err: every way `installed` differs from what the patches allow.
-pub fn audit(installed: &[u8], stock_bytes: &[u8], dll: Dll, exe: ExeId) -> Result<String, String> {
-    let file = dll.file();
+pub fn audit(installed: &[u8], stock_bytes: &[u8], module: Module, exe: ExeId) -> Result<String, String> {
+    let file = module.file();
     let stock = Pe::parse(stock_bytes).map_err(|e| format!("{file}'s backup: {e}"))?;
     let pe = Pe::parse(installed).map_err(|e| format!("{file}: {e}"))?;
     if stock.section(&CODE_SECTION).is_some() {

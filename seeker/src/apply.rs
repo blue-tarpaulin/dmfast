@@ -1,4 +1,4 @@
-//! Placing patches in a stock DLL: the sites become jumps to gates; the manifest, gates, original instructions,
+//! Placing patches in a stock module: the sites become jumps to gates; the manifest, gates, original instructions,
 //! bodies, the Direct3D helper when a patch uses it, and the new relocation table go into an appended code section;
 //! and each patch's constants and data, and the helper's cache, into an appended data section.
 
@@ -9,7 +9,7 @@ use iced_x86::{Decoder, DecoderOptions, OpKind};
 use crate::audit;
 use crate::com;
 use crate::gate;
-use crate::patch::{Dll, Patch, Place, Ref};
+use crate::patch::{Module, Patch, Place, Ref};
 use crate::pe::{self, CODE_FLAGS, DATA_FLAGS, DIR_BASERELOC, NewSection, Pe, Sweep, align, put32};
 use crate::validate;
 use dmfast_format::manifest::{CODE_SECTION, Class, DATA_SECTION, Entry, ExeId, Field, Fixup, JMP_LEN, Manifest};
@@ -43,19 +43,29 @@ struct Placed<'a> {
     refs: Vec<(u32, Field, Target)>,
 }
 
-/// Applies the patches for `dll` to its stock bytes, for `exe` (dreamseeker.exe's bytes). A patch that can't be placed
-/// on this build or breaks a rule is skipped (with a line saying why; not for a patch whose site isn't in this build
-/// when another patch of its key, the same fix for another build, applied); the result passes [`audit::audit`].
-pub fn apply(stock_bytes: &[u8], dll: Dll, exe: &[u8], patches: &[Patch]) -> Result<Applied, String> {
+/// Applies the patches for `module` to its stock bytes. `exe` is dreamseeker.exe's stock bytes, which `exe` patterns
+/// are checked against. `id` is the identity the gates check for; pass `None` when patching dreamseeker.exe itself, so
+/// that its gates check for the patched file. A patch that can't be placed on this build or breaks a rule is skipped,
+/// with a line saying why (no line for a missing site when another patch with the same key, the same fix for another
+/// build, applied). The result passes [`audit::audit`].
+pub fn apply(
+    stock_bytes: &[u8],
+    module: Module,
+    exe: &[u8],
+    id: Option<ExeId>,
+    patches: &[Patch],
+) -> Result<Applied, String> {
     let stock = Pe::parse(stock_bytes)?;
     if stock.section(&CODE_SECTION).is_some() {
-        return Err(format!("{} already has DreamSeeker patches", dll.file()));
+        return Err(format!("{} already has DreamSeeker patches", module.file()));
     }
-    let (exe_pe, exe) = (Pe::parse(exe).map_err(|e| format!("dreamseeker.exe: {e}"))?, audit::exe_id(exe)?);
+    let exe_pe = Pe::parse(exe).map_err(|e| format!("dreamseeker.exe: {e}"))?;
+    let own = id.is_none();
+    let mut id = id.map_or_else(|| audit::exe_id(stock_bytes), Ok)?;
     let sweep = stock.sweep();
     let (mut lines, mut absent) = (Vec::new(), Vec::new());
     let mut placed: Vec<Placed> = Vec::new();
-    for p in patches.iter().filter(|p| p.dll == dll) {
+    for p in patches.iter().filter(|p| p.module == module) {
         let site = match p.exe.iter().try_for_each(|ida| exe_pe.find_pattern(ida).map(drop)) {
             Ok(()) => resolve(&stock, &p.site),
             Err(e) => Err(format!("dreamseeker.exe: {e}")),
@@ -77,7 +87,12 @@ pub fn apply(stock_bytes: &[u8], dll: Dll, exe: &[u8], patches: &[Patch]) -> Res
             lines.extend(absent.into_iter().map(|(_, l)| l));
             return Ok(Applied { image: None, lines });
         }
-        let (image, m) = build(&stock, exe, &placed)?;
+        let (mut image, mut m) = build(&stock, id, &placed)?;
+        // The patched exe's size is only known after layout, so lay it out again for its gates to check that size.
+        if own && audit::exe_id(&image)? != id {
+            id = audit::exe_id(&image)?;
+            (image, m) = build(&stock, id, &placed)?;
+        }
         let pe = Pe::parse(&image)?;
         let failed: Vec<(usize, String)> = m
             .entries
@@ -91,8 +106,8 @@ pub fn apply(stock_bytes: &[u8], dll: Dll, exe: &[u8], patches: &[Patch]) -> Res
             })
             .collect();
         if failed.is_empty() {
-            audit::audit(&image, stock_bytes, dll, exe)
-                .map_err(|e| format!("internal: the patched {} fails its audit:\n{e}", dll.file()))?;
+            audit::audit(&image, stock_bytes, module, id)
+                .map_err(|e| format!("internal: the patched {} fails its audit:\n{e}", module.file()))?;
             lines.extend(absent.iter().filter(|(k, _)| !placed.iter().any(|s| &s.p.key == *k)).map(|(_, l)| l.clone()));
             lines.extend(m.entries.iter().map(|e| format!("{}: applied at +{:#x}", e.name, e.site)));
             return Ok(Applied { image: Some(image), lines });
@@ -507,10 +522,11 @@ mod tests {
             tier: crate::patch::Tier::Safe,
             name: "p".into(),
             about: "a test patch".into(),
-            dll: Dll::Core,
+            module: Module::Core,
             site: Place::Export(site.into()),
             displace,
             exe: Vec::new(),
+            files: Vec::new(),
             body: body.to_vec(),
             entry: 0,
             fixups: fixups
@@ -534,12 +550,12 @@ mod tests {
     }
 
     fn applied(p: Patch) -> Vec<u8> {
-        let a = apply(&dll(), Dll::Core, &exe(), &[p]).unwrap();
+        let a = apply(&dll(), Module::Core, &exe(), Some(EXE), &[p]).unwrap();
         a.image.unwrap_or_else(|| panic!("not applied: {:?}", a.lines))
     }
 
     fn skipped(p: Patch, why: &str) {
-        let a = apply(&dll(), Dll::Core, &exe(), &[p]).unwrap();
+        let a = apply(&dll(), Module::Core, &exe(), Some(EXE), &[p]).unwrap();
         assert!(a.image.is_none() && a.lines[0].contains(why), "expected {why:?}, got {:?}", a.lines);
     }
 
@@ -547,7 +563,7 @@ mod tests {
     fn applies_and_audits() {
         let stock = dll();
         let image = applied(counter());
-        let report = audit::audit(&image, &stock, Dll::Core, EXE).unwrap();
+        let report = audit::audit(&image, &stock, Module::Core, EXE).unwrap();
         assert!(
             report.contains("replaces 6 bytes at +0x1000 (site) with a 12-byte body")
                 && report.contains("data it uses: its own data"),
@@ -579,7 +595,7 @@ mod tests {
         // The site's address is relocated in the copy now, not in the site (which is a jmp).
         assert_eq!(pe.relocs, BTreeSet::from([orig + 1, 0x1042]));
         assert_eq!(pe.bytes(orig, 5).unwrap(), [0xA1, 0xF0, 0x21, 0x00, 0x10]);
-        audit::audit(&image, &stock, Dll::Core, EXE).unwrap();
+        audit::audit(&image, &stock, Module::Core, EXE).unwrap();
         let mut inside = patch("site", 5, &[0xC3], &[]);
         inside.site = Place::Pattern("21 00 10 C3".into(), 0);
         skipped(inside, "isn't the start of an instruction");
@@ -596,7 +612,7 @@ mod tests {
             p.site = Place::Fingerprint { prefix: "A1 ?? ?? ?? ?? C3".into(), len: 6, hash };
             p
         };
-        let a = apply(&stock, Dll::Core, &exe(), &[at(hash)]).unwrap();
+        let a = apply(&stock, Module::Core, &exe(), Some(EXE), &[at(hash)]).unwrap();
         assert_eq!(a.lines, ["p: applied at +0x1030"]);
         skipped(at(hash ^ 1), &format!("(+0x1030: {hash:#x})"));
     }
@@ -612,12 +628,26 @@ mod tests {
     }
 
     #[test]
+    fn exe_gates_check_the_patched_exe() {
+        // Patching dreamseeker.exe itself: its gates must check for the patched file's identity, not the stock one's.
+        let mut p = counter();
+        p.module = Module::Seeker;
+        let stock = exe();
+        let image = apply(&stock, Module::Seeker, &stock, None, &[p]).unwrap().image.unwrap();
+        let id = audit::exe_id(&image).unwrap();
+        assert_ne!(id, EXE);
+        let pe = Pe::parse(&image).unwrap();
+        assert_eq!(Manifest::parse(pe.section(&CODE_SECTION).unwrap().bytes(&image)).unwrap().exe, id);
+        audit::audit(&image, &stock, Module::Seeker, id).unwrap();
+    }
+
+    #[test]
     fn site_branch_to_its_end_and_original_offset() {
         // jmp to the copy's `je` (offset 2), skipping its `test eax, eax`.
         let mut p = patch("site", 6, &[0xE9, 0, 0, 0, 0], &[(1, Field::Rel32, Ref::Original(2))]);
         p.site = Place::Pattern("85 C0 74 02 31 C0".into(), 0);
         let image = applied(p.clone());
-        audit::audit(&image, &dll(), Dll::Core, EXE).unwrap();
+        audit::audit(&image, &dll(), Module::Core, EXE).unwrap();
         let pe = Pe::parse(&image).unwrap();
         let e = &Manifest::parse(pe.section(&CODE_SECTION).unwrap().bytes(&image)).unwrap().entries[0];
         // The copy keeps the `je`, which lands on the jump back.
@@ -636,7 +666,7 @@ mod tests {
         assert_eq!(overlap(&[(0x1000, 6), (0x1006, 5)]), None);
         let mut second = counter();
         second.name = "q".into();
-        let a = apply(&dll(), Dll::Core, &exe(), &[counter(), second]).unwrap();
+        let a = apply(&dll(), Module::Core, &exe(), Some(EXE), &[counter(), second]).unwrap();
         assert!(a.lines.iter().any(|l| l.contains("q: skipped (its site overlaps p's)")), "{:?}", a.lines);
     }
 
@@ -651,7 +681,7 @@ mod tests {
         );
         p.consts = b"hi\0".to_vec();
         let image = applied(p.clone());
-        let report = audit::audit(&image, &dll(), Dll::Core, EXE).unwrap();
+        let report = audit::audit(&image, &dll(), Module::Core, EXE).unwrap();
         assert!(report.contains("constants: \"hi\""), "{report}");
         let pe = Pe::parse(&image).unwrap();
         let m = Manifest::parse(pe.section(&CODE_SECTION).unwrap().bytes(&image)).unwrap();
@@ -674,7 +704,7 @@ mod tests {
         p.const_fixups = vec![(0, 4)];
         let stock = dll();
         let image = applied(p.clone());
-        audit::audit(&image, &stock, Dll::Core, EXE).unwrap();
+        audit::audit(&image, &stock, Module::Core, EXE).unwrap();
         let pe = Pe::parse(&image).unwrap();
         let e = &Manifest::parse(pe.section(&CODE_SECTION).unwrap().bytes(&image)).unwrap().entries[0];
         assert_eq!(pe.bytes(e.consts, 4).unwrap(), (BASE + e.consts + 4).to_le_bytes());
@@ -686,7 +716,7 @@ mod tests {
         let mut t = image.clone();
         let at = pe.offset(e.consts).unwrap();
         t[at] ^= 1;
-        assert!(audit::audit(&t, &stock, Dll::Core, EXE).unwrap_err().contains("doesn't hold its fixup's address"));
+        assert!(audit::audit(&t, &stock, Module::Core, EXE).unwrap_err().contains("doesn't hold its fixup's address"));
     }
 
     #[test]
@@ -697,7 +727,7 @@ mod tests {
         let code = *pe.section(&CODE_SECTION).unwrap();
         let m = Manifest::parse(code.bytes(&image)).unwrap();
         let fails = |img: &[u8], exe: ExeId, why: &str| {
-            let err = audit::audit(img, &stock, Dll::Core, exe).unwrap_err();
+            let err = audit::audit(img, &stock, Module::Core, exe).unwrap_err();
             assert!(err.contains(why), "expected {why:?}, got {err}");
         };
         let mut t = image.clone();
@@ -783,7 +813,7 @@ mod tests {
     fn functions() {
         let stock = dll();
         let image = applied(two_functions(false));
-        audit::audit(&image, &stock, Dll::Core, EXE).unwrap();
+        audit::audit(&image, &stock, Module::Core, EXE).unwrap();
         let pe = Pe::parse(&image).unwrap();
         let m = Manifest::parse(pe.section(&CODE_SECTION).unwrap().bytes(&image)).unwrap();
         let e = &m.entries[0];
@@ -817,7 +847,7 @@ mod tests {
             &[(10, Field::Rel32, Ref::Com), (15, Field::Rel32, Ref::Original(0))],
         );
         let image = applied(calls);
-        let report = audit::audit(&image, &stock, Dll::Core, EXE).unwrap();
+        let report = audit::audit(&image, &stock, Module::Core, EXE).unwrap();
         assert!(report.contains("calls Direct3D 9 methods (checked helper)"), "{report}");
         let pe = Pe::parse(&image).unwrap();
         let code = *pe.section(&CODE_SECTION).unwrap();
@@ -831,7 +861,7 @@ mod tests {
         assert!(!pe.is_code(m.com_cache));
         let mut t = image.clone();
         t[code.raw_ptr as usize + (m.com - code.rva) as usize + 20] ^= 1;
-        let err = audit::audit(&t, &stock, Dll::Core, EXE).unwrap_err();
+        let err = audit::audit(&t, &stock, Module::Core, EXE).unwrap_err();
         assert!(err.contains("isn't part of any patch"), "{err}");
         // mov eax, 5 ; jmp dmf_com_tail
         let tail = patch("site", 6, &[0xB8, 5, 0, 0, 0, 0xE9, 0, 0, 0, 0], &[(6, Field::Rel32, Ref::ComTail)]);

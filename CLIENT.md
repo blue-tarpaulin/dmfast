@@ -20,4 +20,6 @@ E.g. `--client --fixes extended`.
 | dmfast banner | `version` | safe | Options and Messages says the dmfast version | - |
 | Particle drawing | `particles` | safe | A set of more than 10,922 icon particles of one icon no longer writes past the end of BYOND's index buffer, and the depth buffer covers the whole render target. | - |
 | `preload_rsc` downloads | `rscdownload` | safe | Fast `preload_rsc` downloads are no longer cancelled midway. DreamDaemon's `world.Export()` has the same bug: the `httpexport` [bug fix](BUGFIXES.md). | [2992012](https://www.byond.com/forum/post/2992012) |
+| More sounds at once | `voices` | safe | Mixes up to 128 sounds at once instead of 32, so many effects no longer silence background sounds. | - |
 | Sound priority | `soundpriority` | extended | A higher priority (per the ref) keeps its channel instead of being the first silenced. Sounds left at the default 0 are now the first silenced. | - |
+
