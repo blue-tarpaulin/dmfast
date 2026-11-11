@@ -18,3 +18,4 @@ E.g. `--client --fixes extended`.
 | Fix | Key | Tier | What changes | Bug report |
 |---|---|---|---|---|
 | dmfast banner | `version` | safe | Options and Messages says the dmfast version | - |
+| Particle drawing | `particles` | safe | A set of more than 10,922 icon particles of one icon no longer writes past the end of BYOND's index buffer, and the depth buffer covers the whole render target. | - |
