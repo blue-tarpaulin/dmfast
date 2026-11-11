@@ -8,7 +8,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use dmfast_seeker::format::CODE_SECTION;
+use dmfast_format::manifest::CODE_SECTION;
 use dmfast_seeker::patch::{Dll, Patch};
 use dmfast_seeker::{apply, audit, author};
 

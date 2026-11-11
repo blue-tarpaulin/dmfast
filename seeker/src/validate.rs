@@ -1,9 +1,10 @@
 //! The rules every patch body keeps to, so a closed-source body can't reach the operating system on its own: it
-//! decodes as plain code that ends in a `jmp` or `ret`; its branches go into itself, back to the site, or to the
-//! start of one of BYOND's own functions (not denied ones, see `deny.txt`); it calls other BYOND DLLs only through
-//! their existing import slots; it reads no import table; it has no system calls, interrupts, port I/O, privileged
-//! instructions, segment tricks, or other indirect branches; it only moves `esp` the ordinary ways; and every
-//! address in it is a declared fixup. Its constants are in non-executable data.
+//! decodes as plain code that ends in a `jmp`, `ret`, `int3`, or `ud2`; its branches go into itself, back to the site,
+//! to the start of one of BYOND's own functions (not denied ones, see `deny.txt`), or to the checked Direct3D helper
+//! (`com.rs`); it calls other BYOND DLLs only through their existing import slots; it reads no import table; it has
+//! no system calls, interrupts, port I/O, privileged instructions, segment tricks, or other indirect branches; it only
+//! moves `esp` the ordinary ways; and every address in it is a declared fixup (its own functions' addresses are
+//! instruction starts). Its constants are in non-executable data.
 //!
 //! These are static rules on the bytes, and a determined body can get around them: it can compute an address from
 //! an allowed one (`[global + n]` reaching the import table) and jump there with `push` and `ret`, or overwrite a
@@ -16,8 +17,9 @@ use iced_x86::{
     Decoder, DecoderOptions, FlowControl, Instruction, InstructionInfoFactory, Mnemonic, OpAccess, OpKind, Register,
 };
 
-use crate::format::{Class, Entry, Field, Fixup, Manifest};
+use crate::com;
 use crate::pe::{DIR_IAT, DIR_IMPORT, Pe, Sweep, u32_at};
+use dmfast_format::manifest::{Class, Entry, Field, Fixup, Manifest};
 
 /// Names a body may not call, one case-insensitive substring per line (`#` starts a comment).
 const DENY: &str = include_str!("../deny.txt");
@@ -49,6 +51,8 @@ pub fn check(stock: &Pe, sweep: &Sweep, m: &Manifest, e: &Entry, body: &[u8]) ->
         problems: Vec::new(),
         calls: BTreeSet::new(),
         reads: BTreeSet::new(),
+        body_refs: Vec::new(),
+        d3d: false,
     };
     let mut starts = BTreeSet::new();
     let mut inner = Vec::new();
@@ -69,14 +73,24 @@ pub fn check(stock: &Pe, sweep: &Sweep, m: &Manifest, e: &Entry, body: &[u8]) ->
         }
         last = Some(ins);
     }
-    if !last.is_some_and(|i| {
+    let ends = |i: &Instruction| {
         matches!(i.flow_control(), FlowControl::UnconditionalBranch | FlowControl::Return | FlowControl::IndirectBranch)
-    }) {
-        v.problem(e.body, "doesn't end in a jmp or ret");
+            || matches!(i.mnemonic(), Mnemonic::Int3 | Mnemonic::Ud2)
+    };
+    if !last.is_some_and(|i| ends(&i)) {
+        v.problem(e.body, "doesn't end in a jmp, ret, int3, or ud2");
+    }
+    if !starts.contains(&e.entry) {
+        v.problem(e.entry, "the entry isn't an instruction of the body");
     }
     for (at, to) in inner {
         if !starts.contains(&to) {
             v.problem(at, &format!("branches to +{to:#x}, not an instruction of the body"));
+        }
+    }
+    for (at, to) in std::mem::take(&mut v.body_refs) {
+        if !starts.contains(&to) {
+            v.problem(at, &format!("takes the address +{to:#x}, not an instruction of the body"));
         }
     }
     for f in &e.fixups {
@@ -99,6 +113,9 @@ pub fn check(stock: &Pe, sweep: &Sweep, m: &Manifest, e: &Entry, body: &[u8]) ->
     if !v.reads.is_empty() {
         report.push(format!("data it uses: {}", v.reads.iter().cloned().collect::<Vec<_>>().join(", ")));
     }
+    if v.d3d {
+        report.push("calls Direct3D 9 methods (checked helper)".into());
+    }
     Checked { report, problems: v.problems }
 }
 
@@ -114,6 +131,10 @@ struct Validator<'a> {
     calls: BTreeSet<String>,
     /// Data it uses.
     reads: BTreeSet<String>,
+    /// Where it takes the address of its own code, and that address (each must be an instruction start).
+    body_refs: Vec<(u32, u32)>,
+    /// Whether it calls the Direct3D helper.
+    d3d: bool,
 }
 
 impl Validator<'_> {
@@ -204,6 +225,13 @@ impl Validator<'_> {
                 let name = self.name_of(to);
                 self.calls.insert(name);
             }
+            Class::Com | Class::ComTail => {
+                let entry = self.m.com.wrapping_add(if f.class == Class::Com { 0 } else { com::TAIL });
+                if self.m.com == 0 || f.target != entry {
+                    self.problem(at, "branch to the Direct3D helper that isn't one of its two entries");
+                }
+                self.d3d = true;
+            }
             _ => self.problem(at, "branch fixup to something that isn't code"),
         }
         None
@@ -219,6 +247,9 @@ impl Validator<'_> {
         match f.class {
             Class::Data if (self.m.data_rva..self.m.data_rva + self.m.data_len).contains(&to) => {
                 self.reads.insert("its own data".into());
+            }
+            Class::Body if (self.e.body..self.e.body + self.e.body_len).contains(&to) => {
+                self.body_refs.push((at, to));
             }
             // The audit prints the constants themselves.
             Class::Const if (self.e.consts..self.e.consts + self.e.consts_len).contains(&to) => {}
@@ -241,8 +272,10 @@ impl Validator<'_> {
                 Some((dll, name)) => self.problem(at, &format!("calls {dll}!{name}: not a BYOND DLL")),
                 None => self.problem(at, &format!("+{to:#x} isn't an import slot")),
             },
-            _ => self
-                .problem(at, "address that isn't its own data or constants, BYOND's data, or an import slot operand"),
+            _ => self.problem(
+                at,
+                "address that isn't its own data, constants, or code, BYOND's data, or an import slot operand",
+            ),
         }
     }
 
@@ -283,10 +316,16 @@ impl Validator<'_> {
             && ins.op0_kind() == OpKind::Register
             && ins.op0_register() == Register::ESP
             && matches!(ins.op1_kind(), OpKind::Immediate32 | OpKind::Immediate8to32 | OpKind::Immediate8);
-        if writes_esp && !stack_op && !adjust {
+        // A frame's epilogue: `mov esp, ebp`.
+        let frame = m == Mov
+            && (ins.op0_kind(), ins.op1_kind()) == (OpKind::Register, OpKind::Register)
+            && (ins.op0_register(), ins.op1_register()) == (Register::ESP, Register::EBP);
+        if writes_esp && !stack_op && !adjust && !frame {
             self.problem(
                 at,
-                &format!("{m:?} changes esp (only push, pop, call, ret, leave, and add/sub/and esp, imm)"),
+                &format!(
+                    "{m:?} changes esp (only push, pop, call, ret, leave, mov esp, ebp, and add/sub/and esp, imm)"
+                ),
             );
         }
     }

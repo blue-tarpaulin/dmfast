@@ -2,14 +2,14 @@
 //! dreamseeker.exe (its PE header's `TimeDateStamp` and `SizeOfImage`, read through the PEB), and to the site's
 //! original instructions otherwise. Every register and flag is as at the site either way.
 
-use crate::format::ExeId;
+use dmfast_format::manifest::ExeId;
 
 /// The gate's length in bytes.
 pub const LEN: u32 = 51;
 /// Where the `jmp` to the body and the one to the original instructions end.
 const BODY_JMP_END: u32 = 43;
 
-/// The gate at `at` (an RVA, as are `body` and `orig`).
+/// The gate at `at` (an RVA, as are `body`, the patch's entry, and `orig`).
 pub fn build(exe: ExeId, at: u32, body: u32, orig: u32) -> Vec<u8> {
     let rel = |to: u32, end: u32| to.wrapping_sub(at + end).to_le_bytes();
     let mut g = Vec::with_capacity(LEN as usize);

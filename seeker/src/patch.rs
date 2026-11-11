@@ -51,12 +51,16 @@ pub enum Place {
     Export(String),
     /// The single match of an IDA-style pattern (`??` wildcards) in the DLL's code, plus an offset.
     Pattern(String, i32),
+    /// The one function that starts with `prefix` (IDA-style), is `len` bytes long, and whose bytes hash to `hash`
+    /// ([`fnv1a`](dmfast_format::fingerprint::fnv1a), skipping relocated addresses and branches out of it): a whole function
+    /// checked without keeping its bytes.
+    Fingerprint { prefix: String, len: u32, hash: u64 },
 }
 
 /// What a body's 4-byte field points at.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ref {
-    /// An offset in the body.
+    /// An offset in the code (a function or a label).
     Body(u32),
     /// An offset in the patch's own data.
     Data(u32),
@@ -72,13 +76,17 @@ pub enum Ref {
     Global(Place),
     /// The DLL's existing import slot for `dll!name` (an `Abs32` field, as in `call dword ptr [slot]`).
     Import { dll: String, name: String },
+    /// The Direct3D helper's `dmf_com` (a `Rel32` field, `com.rs`).
+    Com,
+    /// The Direct3D helper's `dmf_com_tail` (a `Rel32` field).
+    ComTail,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fixup {
     /// The field's offset in the body.
     pub at: u32,
-    pub field: crate::format::Field,
+    pub field: dmfast_format::manifest::Field,
     pub target: Ref,
 }
 
@@ -94,8 +102,10 @@ pub struct Patch {
     /// Where it hooks: these `displace` bytes (whole instructions, no relative branches) become a `jmp` to its gate.
     pub site: Place,
     pub displace: u32,
-    /// Entered in DreamSeeker in place of the site's instructions, with every register and flag as at the site.
+    /// Its code: every function of its object, in order. Entered at `entry` in DreamSeeker in place of the site's
+    /// instructions, with every register and flag as at the site.
     pub body: Vec<u8>,
+    pub entry: u32,
     pub fixups: Vec<Fixup>,
     /// Bytes of zero-filled data it owns.
     pub data: u32,
@@ -129,6 +139,7 @@ mod tests {
             site: Place::Export(String::new()),
             displace: 5,
             body: Vec::new(),
+            entry: 0,
             fixups: Vec::new(),
             data: 0,
             consts: Vec::new(),

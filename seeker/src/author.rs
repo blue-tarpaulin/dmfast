@@ -1,6 +1,6 @@
-//! Private patches as their author writes them, turned into [`Patch`]es: an i686 COFF object whose naked functions
-//! are the bodies ([`compile`]), and a spec that says where each patch goes and what each outside symbol its body
-//! uses is. The spec has one directive per line (blank lines and lines starting with `#` are skipped); a `patch` line
+//! Private patches as their author writes them, turned into [`Patch`]es: a `no_std` Rust file compiled to an i686
+//! COFF object ([`compile`]), and a spec that says where each patch goes and what each outside symbol its code uses
+//! is. The spec has one directive per line (blank lines and lines starting with `#` are skipped); a `patch` line
 //! starts a patch and the lines after it describe that patch:
 //! ```text
 //! patch <name> <byondcore.dll|byondwin.dll>
@@ -8,6 +8,7 @@
 //! about <text>
 //! site export <decorated name>
 //! site pattern <offset> <IDA bytes...>
+//! site fingerprint <length> <hash> <IDA bytes...>
 //! displace <n>
 //! body <symbol>
 //! data <bytes>
@@ -16,12 +17,17 @@
 //! ref <symbol> import <dll> <name>
 //! ```
 //! `about`, `tier`, `site`, `displace`, and `body` are required; `data` defaults to 0; numbers are decimal or `0x`
-//! hex. `site` may repeat: the same body at several sites (patches `<name>`, `<name>-2`, ...). `dmf_resume`,
-//! `dmf_original`, and `dmf_data` need no `ref`. Names are matched without the `_` i686 Windows puts on C names.
+//! hex. `site` may repeat: the same code at several sites (patches `<name>`, `<name>-2`, ...). A fingerprint names a
+//! whole function without its bytes ([`Place::Fingerprint`]): the bytes are only how it starts, and an install that
+//! finds no match says what each function starting that way hashes to. `dmf_resume`, `dmf_original`, `dmf_data`,
+//! `dmf_com`, and `dmf_com_tail` need no `ref`. Names are matched without the `_` (and a stdcall `@<bytes>`) i686
+//! Windows puts on C names.
 //!
-//! A body's relocations become its fixups (`DIR32`: `Abs32`, `REL32`: `Rel32`), the in-place value an addend: to a
-//! label in the body, to a `dmf_data` or pattern offset, or to a read-only `static`, whose bytes join the patch's
-//! constants.
+//! A patch's code is every function of the object, in order, each aligned as its section says with `int3`s between;
+//! the gate enters it at the `body` function. Its relocations become fixups (`DIR32`: `Abs32`, `REL32`: `Rel32`), the
+//! in-place value an addend: to the code (a call, a label, a function's address), to a zero-initialised `static`
+//! (which becomes the start of the patch's data, `data` after them, where `dmf_data` points), to a read-only
+//! `static` (whose bytes join the patch's constants), to a built-in, or to a `ref`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -33,8 +39,8 @@ use object::{
     SymbolIndex, SymbolKind, pe,
 };
 
-use crate::format::Field;
 use crate::patch::{Dll, Fixup, Patch, Place, Ref, Tier};
+use dmfast_format::manifest::Field;
 
 macro_rules! bail {
     ($($t:tt)*) => {
@@ -45,6 +51,10 @@ macro_rules! bail {
 const RESUME: &str = "dmf_resume";
 const ORIGINAL: &str = "dmf_original";
 const DATA: &str = "dmf_data";
+const COM: &str = "dmf_com";
+const COM_TAIL: &str = "dmf_com_tail";
+/// The most alignment the code or the data can give: each body and each patch's data start on this boundary.
+const MAX_ALIGN: u64 = 16;
 
 /// Turns the compiled patches (`obj`, an i686 COFF object) and their `spec` into patches, all with `key` (their
 /// folder). An error about a patch names its spec line.
@@ -54,9 +64,10 @@ pub fn from_object(obj: &[u8], spec: &str, key: &str) -> Result<Vec<Patch>, Stri
     if file.architecture() != Architecture::I386 {
         bail!("the object is for {:?}, not i686", file.architecture());
     }
+    let layout = Layout::new(&file)?;
     let mut patches = Vec::new();
     for (mut patch, source) in drafts {
-        read_body(&file, &source, &mut patch)
+        read_code(&file, &layout, &source, &mut patch)
             .map_err(|e| format!("line {}: patch {}: {e}", source.line, patch.name))?;
         for (i, site) in source.sites.into_iter().enumerate() {
             let name = if i == 0 { patch.name.clone() } else { format!("{}-{}", patch.name, i + 1) };
@@ -66,7 +77,7 @@ pub fn from_object(obj: &[u8], spec: &str, key: &str) -> Result<Vec<Patch>, Stri
     Ok(patches)
 }
 
-/// Where a patch's body comes from: its `body` line and symbol, and its `ref`s by symbol; and its sites.
+/// Where a patch's code comes from: its `body` line and symbol, and its `ref`s by symbol; and its sites.
 struct Source {
     line: usize,
     symbol: String,
@@ -107,6 +118,7 @@ impl Draft {
             site,
             displace,
             body: Vec::new(),
+            entry: 0,
             fixups: Vec::new(),
             data: data.unwrap_or(0),
             consts: Vec::new(),
@@ -116,12 +128,15 @@ impl Draft {
 }
 
 fn parse_spec(spec: &str, key: &str) -> Result<Vec<(Patch, Source)>, String> {
+    let lines: Vec<(usize, &str)> = spec
+        .lines()
+        .enumerate()
+        .map(|(i, text)| (i + 1, text.trim()))
+        .filter(|(_, text)| !text.is_empty() && !text.starts_with('#'))
+        .collect();
     let mut drafts = Vec::new();
-    for (i, text) in spec.lines().enumerate() {
-        let text = text.trim();
-        if !text.is_empty() && !text.starts_with('#') {
-            directive(&mut drafts, i + 1, text).map_err(|e| format!("line {}: {e}", i + 1))?;
-        }
+    for (line, text) in lines {
+        directive(&mut drafts, line, text).map_err(|e| format!("line {line}: {e}"))?;
     }
     drafts.into_iter().map(|d| d.finish(key)).collect()
 }
@@ -207,12 +222,19 @@ fn set<T>(slot: &mut Option<T>, value: T, what: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// `export <name>` or `pattern <offset> <IDA bytes...>`.
+/// `export <name>`, `pattern <offset> <IDA bytes...>`, or `fingerprint <length> <hash> <IDA bytes...>`.
 fn place(args: &[&str]) -> Result<Place, String> {
     match args {
         ["export", name] => Ok(Place::Export(name.to_string())),
         ["pattern", at, bytes @ ..] if !bytes.is_empty() => Ok(Place::Pattern(pattern(bytes)?, offset(at)?)),
-        _ => bail!("expected `export <name>` or `pattern <offset> <IDA bytes...>`"),
+        ["fingerprint", len, hash, bytes @ ..] if !bytes.is_empty() => {
+            let hash = hash.strip_prefix("0x").and_then(|h| u64::from_str_radix(h, 16).ok());
+            let hash = hash.ok_or("a fingerprint's hash is `0x` and up to 16 hex digits")?;
+            Ok(Place::Fingerprint { prefix: pattern(bytes)?, len: number(len)?, hash })
+        }
+        _ => bail!(
+            "expected `export <name>`, `pattern <offset> <IDA bytes...>`, or `fingerprint <length> <hash> <IDA bytes...>`"
+        ),
     }
 }
 
@@ -247,14 +269,20 @@ fn builtin(name: &str) -> Option<Ref> {
         RESUME => Some(Ref::Resume),
         ORIGINAL => Some(Ref::Original),
         DATA => Some(Ref::Data(0)),
+        COM => Some(Ref::Com),
+        COM_TAIL => Some(Ref::ComTail),
         _ => None,
     }
 }
 
-/// A symbol's name without i686 Windows' leading `_`.
+/// A symbol's name without i686 Windows' leading `_`, and without the `@<bytes>` a stdcall name ends in.
 fn plain<'data>(symbol: &impl ObjectSymbol<'data>) -> Option<&'data str> {
     let name = symbol.name().ok()?;
-    Some(name.strip_prefix('_').unwrap_or(name))
+    let Some(c) = name.strip_prefix('_') else { return Some(name) };
+    Some(match c.rsplit_once('@') {
+        Some((n, bytes)) if !bytes.is_empty() && bytes.bytes().all(|b| b.is_ascii_digit()) => n,
+        _ => c,
+    })
 }
 
 /// Where a symbol at `start` in `section` (`len` bytes) ends: at its size, else the next symbol after it, else the
@@ -287,7 +315,7 @@ impl Consts {
         let index = symbol.section_index().ok_or("it isn't in a section")?;
         let section = file.section_by_index(index).map_err(|e| e.to_string())?;
         if !matches!(section.kind(), SectionKind::ReadOnlyData | SectionKind::ReadOnlyString) {
-            bail!("it is defined in the object outside the body, and not in read-only data");
+            bail!("it is defined in the object outside the code, and not in read-only data");
         }
         if section.relocations().next().is_some() {
             bail!("its section has relocations (constants can't hold addresses)");
@@ -306,58 +334,128 @@ impl Consts {
     }
 }
 
-/// Reads `patch`'s body (fields zeroed), fixups, and constants from the object.
-fn read_body(file: &CoffFile<'_>, source: &Source, patch: &mut Patch) -> Result<(), String> {
-    let data = patch.data;
+/// Whether a section holds zero-initialised statics: `.bss`, or `.data` whose bytes are all zero (no relocations).
+fn zero_filled<'data>(section: &impl ObjectSection<'data>) -> bool {
+    match section.kind() {
+        SectionKind::UninitializedData => true,
+        SectionKind::Data => {
+            section.relocations().next().is_none() && section.data().is_ok_and(|d| d.iter().all(|&b| b == 0))
+        }
+        _ => false,
+    }
+}
+
+/// The object's code, as every patch from it gets it (relocated fields not yet zeroed), and where the
+/// zero-initialised statics it uses go in a patch's data.
+struct Layout {
+    code: Vec<u8>,
+    /// Each executable section's offset in the code.
+    text: HashMap<SectionIndex, u32>,
+    /// Each zero-initialised section the code uses, and its offset in the data.
+    zero: HashMap<SectionIndex, u32>,
+    /// Where the spec's `data` starts, after the statics.
+    zero_len: u32,
+}
+
+impl Layout {
+    fn new(file: &CoffFile<'_>) -> Result<Layout, String> {
+        let (mut code, mut text) = (Vec::new(), HashMap::new());
+        for section in file.sections().filter(|s| s.kind() == SectionKind::Text && s.size() > 0) {
+            let bytes = section.data().map_err(|e| format!("reading {}: {e}", section.name().unwrap_or("code")))?;
+            code.resize(code.len().next_multiple_of(section.align().clamp(1, MAX_ALIGN) as usize), 0xCC);
+            text.insert(section.index(), code.len() as u32);
+            code.extend_from_slice(bytes);
+        }
+        if code.is_empty() {
+            bail!("the object has no code");
+        }
+        let mut used = std::collections::BTreeSet::new();
+        for section in file.sections().filter(|s| text.contains_key(&s.index())) {
+            for (_, relocation) in section.relocations() {
+                let RelocationTarget::Symbol(index) = relocation.target() else { continue };
+                let Some(at) = file.symbol_by_index(index).ok().and_then(|s| s.section_index()) else { continue };
+                if file.section_by_index(at).is_ok_and(|s| zero_filled(&s)) {
+                    used.insert(at.0);
+                }
+            }
+        }
+        let (mut zero, mut len) = (HashMap::new(), 0u64);
+        for index in used {
+            let section = file.section_by_index(SectionIndex(index)).map_err(|e| e.to_string())?;
+            if section.align() > MAX_ALIGN {
+                let name = section.name().unwrap_or("data");
+                bail!("{name} wants {}-byte alignment, more than {MAX_ALIGN}", section.align());
+            }
+            len = len.next_multiple_of(section.align().max(1));
+            zero.insert(SectionIndex(index), len as u32);
+            len += section.size();
+        }
+        let zero_len = u32::try_from(len.next_multiple_of(MAX_ALIGN)).map_err(|_| "the statics are too big")?;
+        Ok(Layout { code, text, zero, zero_len })
+    }
+}
+
+/// `pos` in `section` by the function it is in (`name+0x..`), else by the section.
+fn place_of(file: &CoffFile<'_>, section: SectionIndex, section_name: &str, pos: u64) -> String {
+    let function = file
+        .symbols()
+        .filter(|s| s.section_index() == Some(section) && s.kind() != SymbolKind::Section && s.address() <= pos)
+        .max_by_key(|s| s.address());
+    match function.as_ref().and_then(|s| Some((plain(s)?, s.address()))) {
+        Some((name, start)) => format!("{name}+{:#x}", pos - start),
+        None => format!("{section_name}+{pos:#x}"),
+    }
+}
+
+/// Reads `patch`'s code (fields zeroed), entry, fixups, constants, and data (its statics, then the spec's `data`)
+/// from the object.
+fn read_code(file: &CoffFile<'_>, layout: &Layout, source: &Source, patch: &mut Patch) -> Result<(), String> {
     let name = source.symbol.as_str();
-    let mut found = file.symbols().filter_map(|symbol| {
-        let section = symbol.section_index()?;
-        (symbol.kind() != SymbolKind::Section && plain(&symbol) == Some(name)).then_some((symbol, section))
-    });
-    let Some((symbol, section)) = found.next() else { bail!("no symbol {name} is defined in the object") };
+    let mut found = file
+        .symbols()
+        .filter(|s| s.kind() != SymbolKind::Section && s.section_index().is_some() && plain(s) == Some(name));
+    let Some(symbol) = found.next() else { bail!("no symbol {name} is defined in the object") };
     if found.next().is_some() {
         bail!("more than one symbol is named {name}");
     }
-    let code_section = file.section_by_index(section).map_err(|e| format!("reading {name}'s section: {e}"))?;
-    let bytes = code_section.data().map_err(|e| format!("reading {name}'s section: {e}"))?;
-    let start = symbol.address();
-    let end = end_of(file, section, start, symbol.size(), bytes.len());
-    let Some(mut code) = bytes.get(start as usize..end as usize).map(<[u8]>::to_vec) else {
-        bail!("{name} lies outside its section");
+    let Some(&start) = symbol.section_index().and_then(|s| layout.text.get(&s)) else {
+        bail!("{name} isn't a function");
     };
-    if code.is_empty() {
-        bail!("{name} is empty");
-    }
+    let spec_data = patch.data;
+    let mut code = layout.code.clone();
     let (mut fixups, mut consts) = (Vec::new(), Consts::default());
-    for (pos, relocation) in code_section.relocations().filter(|&(pos, _)| (start..end).contains(&pos)) {
-        let at = (pos - start) as usize;
-        let Some(addend) = crate::pe::u32_at(&code, at).map(|a| a as i32) else {
-            bail!("the relocation at {name}+{at:#x} runs past its end");
-        };
-        code[at..at + 4].fill(0);
-        let field = match relocation.flags() {
-            RelocationFlags::Coff { typ: pe::IMAGE_REL_I386_DIR32 } => Field::Abs32,
-            RelocationFlags::Coff { typ: pe::IMAGE_REL_I386_REL32 } => Field::Rel32,
-            flags => bail!(
-                "the relocation at {name}+{at:#x} is {flags:?}; only IMAGE_REL_I386_DIR32 and IMAGE_REL_I386_REL32 \
-                 are supported"
-            ),
-        };
-        let RelocationTarget::Symbol(index) = relocation.target() else {
-            bail!("the relocation at {name}+{at:#x} has no symbol");
-        };
-        let target = file.symbol_by_index(index).map_err(|e| e.to_string())?;
-        let target_name = target.name().unwrap_or("(unnamed)");
-        let elsewhere = !target.is_undefined() && target.section_index().is_some_and(|s| s != section);
-        let target = if elsewhere {
-            constant(file, &mut consts, &target, addend, field)
-        } else {
-            resolve(&target, section, start..end, addend, field, source, data)
+    for section in file.sections() {
+        let Some(&base) = layout.text.get(&section.index()) else { continue };
+        let section_name = section.name().unwrap_or("code");
+        for (pos, relocation) in section.relocations() {
+            let place = place_of(file, section.index(), section_name, pos);
+            if pos.checked_add(4).is_none_or(|end| end > section.size()) {
+                bail!("the relocation at {place} runs past its section");
+            }
+            let at = base as usize + pos as usize;
+            let addend = crate::pe::u32_at(&code, at).ok_or("internal: a relocation outside the code")? as i32;
+            code[at..at + 4].fill(0);
+            let field = match relocation.flags() {
+                RelocationFlags::Coff { typ: pe::IMAGE_REL_I386_DIR32 } => Field::Abs32,
+                RelocationFlags::Coff { typ: pe::IMAGE_REL_I386_REL32 } => Field::Rel32,
+                flags => bail!(
+                    "the relocation at {place} is {flags:?}; only IMAGE_REL_I386_DIR32 and IMAGE_REL_I386_REL32 are \
+                     supported"
+                ),
+            };
+            let RelocationTarget::Symbol(index) = relocation.target() else {
+                bail!("the relocation at {place} has no symbol");
+            };
+            let target = file.symbol_by_index(index).map_err(|e| e.to_string())?;
+            let target_name = target.name().unwrap_or("(unnamed)");
+            let target = resolve(file, layout, &mut consts, &target, addend, field, source, spec_data)
+                .map_err(|e| format!("the relocation at {place} to {target_name}: {e}"))?;
+            fixups.push(Fixup { at: at as u32, field, target });
         }
-        .map_err(|e| format!("the relocation at {name}+{at:#x} to {target_name}: {e}"))?;
-        fixups.push(Fixup { at: at as u32, field, target });
     }
     fixups.sort_by_key(|f| f.at);
+    patch.entry = start + symbol.address() as u32;
+    patch.data = layout.zero_len + spec_data;
     (patch.body, patch.fixups, patch.consts) = (code, fixups, consts.bytes);
     Ok(())
 }
@@ -380,25 +478,43 @@ fn constant<'data>(
     }
 }
 
-/// What a relocation in the body at `body` (offsets in `section`) points at.
+/// What a relocation in the code points at.
+#[allow(clippy::too_many_arguments)]
 fn resolve<'data>(
+    file: &CoffFile<'data>,
+    layout: &Layout,
+    consts: &mut Consts,
     target: &impl ObjectSymbol<'data>,
-    section: SectionIndex,
-    body: std::ops::Range<u64>,
     addend: i32,
     field: Field,
     source: &Source,
-    data: u32,
+    spec_data: u32,
 ) -> Result<Ref, String> {
-    if target.section_index() == Some(section) {
-        let at = target.address().checked_add_signed(addend.into());
-        return match at.filter(|at| body.contains(at)) {
-            Some(at) => Ok(Ref::Body((at - body.start) as u32)),
-            None => bail!("it points outside the body"),
-        };
+    if let Some(index) = target.section_index() {
+        let section = file.section_by_index(index).map_err(|e| e.to_string())?;
+        let at = target.address().checked_add_signed(addend.into()).filter(|&at| at < section.size());
+        if let Some(&base) = layout.text.get(&index) {
+            let Some(at) = at else { bail!("it points outside its section") };
+            return Ok(Ref::Body(base + at as u32));
+        }
+        if let Some(&base) = layout.zero.get(&index) {
+            if field != Field::Abs32 {
+                bail!("a branch to data");
+            }
+            let Some(at) = at else { bail!("offset {addend} is outside its section") };
+            return Ok(Ref::Data(base + at as u32));
+        }
+        if section.kind() == SectionKind::Data {
+            bail!(
+                "it is in {} with bytes that aren't zero or with addresses (only zero-initialised statics can be \
+                 written)",
+                section.name().unwrap_or("data")
+            );
+        }
+        return constant(file, consts, target, addend, field);
     }
     if !target.is_undefined() {
-        bail!("it is defined in the object outside the body");
+        bail!("it isn't in a section");
     }
     // LLVM writes REL32 as `S + A - (P + 4)`, counting from the field's end like x86, so its addend is 0.
     if field == Field::Rel32 && addend != 0 {
@@ -411,9 +527,12 @@ fn resolve<'data>(
     let shift = |offset: i32| offset.checked_add(addend).ok_or_else(|| format!("offset {offset} + {addend} overflows"));
     Ok(match base {
         Ref::Data(_) => match u32::try_from(addend) {
-            Ok(offset) if offset < data => Ref::Data(offset),
-            _ => bail!("offset {addend} is outside the patch's {data} bytes of data"),
+            Ok(offset) if offset < spec_data => Ref::Data(layout.zero_len + offset),
+            _ => bail!("offset {addend} is outside the patch's {spec_data} bytes of `data`"),
         },
+        Ref::Com | Ref::ComTail if field != Field::Rel32 => {
+            bail!("the Direct3D helper can only be called or jumped to")
+        }
         Ref::Code(Place::Pattern(bytes, offset)) => Ref::Code(Place::Pattern(bytes, shift(offset)?)),
         Ref::Global(Place::Pattern(bytes, offset)) => Ref::Global(Place::Pattern(bytes, shift(offset)?)),
         _ if addend != 0 => bail!("addend {addend} on a target that takes none"),
@@ -440,7 +559,9 @@ pub fn compile(rustc: &str, patch: &Path, out_dir: &Path, version: &str) -> Resu
     let obj = out_dir.join(format!("seeker-{key}.o"));
     let status = Command::new(rustc)
         .args(["--edition", "2024", "--crate-type", "lib", "--crate-name", "seeker_patch", "--emit", "obj"])
-        .args(["-C", "opt-level=2", "-C", "panic=abort", "--target", "i686-pc-windows-msvc", "-o"])
+        .args(["-C", "opt-level=2", "-C", "panic=abort", "-C", "codegen-units=1"])
+        // No jump tables: they are indirect branches.
+        .args(["-C", "llvm-args=-min-jump-table-entries=1000000", "--target", "i686-pc-windows-msvc", "-o"])
         .arg(&obj)
         .arg(&root)
         .env("DMFAST_VERSION", version)

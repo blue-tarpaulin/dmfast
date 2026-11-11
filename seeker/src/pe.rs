@@ -18,7 +18,9 @@ const DIR_SECURITY: usize = 4;
 pub const DIR_BASERELOC: usize = 5;
 pub const DIR_IAT: usize = 12;
 
-pub(crate) use crate::format::u32_at;
+pub(crate) fn u32_at(d: &[u8], o: usize) -> Option<u32> {
+    Some(u32::from_le_bytes(d.get(o..o.checked_add(4)?)?.try_into().ok()?))
+}
 
 fn u16_at(d: &[u8], o: usize) -> Option<u16> {
     Some(u16::from_le_bytes(d.get(o..o.checked_add(2)?)?.try_into().ok()?))
@@ -298,8 +300,8 @@ impl<'a> Pe<'a> {
         self.imports.iter().find(|i| i.2 == slot).map(|i| (i.0.as_str(), i.1.as_str()))
     }
 
-    /// The single match of an IDA-style pattern in the executable sections.
-    pub fn find_pattern(&self, ida: &str) -> Result<u32, String> {
+    /// Every match of an IDA-style pattern in the executable sections.
+    pub fn find_all(&self, ida: &str) -> Result<Vec<u32>, String> {
         let pat = ida
             .split_whitespace()
             .map(|t| if t == "??" || t == "?" { Ok(None) } else { u8::from_str_radix(t, 16).map(Some) })
@@ -317,11 +319,34 @@ impl<'a> Pe<'a> {
                 }
             }
         }
-        match hits[..] {
+        Ok(hits)
+    }
+
+    /// The single match of an IDA-style pattern in the executable sections.
+    pub fn find_pattern(&self, ida: &str) -> Result<u32, String> {
+        match self.find_all(ida)?[..] {
             [one] => Ok(one),
             [] => Err(format!("pattern {ida:?} not found")),
-            _ => Err(format!("pattern {ida:?} found {} times", hits.len())),
+            ref hits => Err(format!("pattern {ida:?} found {} times", hits.len())),
         }
+    }
+
+    /// The fingerprint hash of the `len` bytes at `rva` (see [`Place::Fingerprint`](crate::patch::Place)): the
+    /// relocated addresses in them and the targets of their `call`, `jmp`, and `jcc` instructions that leave them are
+    /// skipped, which a build's layout changes without changing the function. `None` outside the code.
+    pub fn fingerprint(&self, rva: u32, len: u32) -> Option<u64> {
+        let bytes = self.bytes(rva, len).filter(|_| self.is_code(rva) && len <= u32::from(u16::MAX))?;
+        let end = rva + len;
+        let mut holes: Vec<(u16, u16)> =
+            self.relocs.range(rva.saturating_sub(3)..end).map(|&r| hole(rva, r, end)).collect();
+        for ins in Decoder::with_ip(32, bytes, u64::from(rva), DecoderOptions::NONE) {
+            let to = ins.near_branch_target() as u32;
+            if ins.op0_kind() == OpKind::NearBranch32 && !(rva..end).contains(&to) {
+                holes.push(hole(rva, ins.ip32() + ins.len() as u32 - 4, end));
+            }
+        }
+        holes.sort();
+        Some(dmfast_format::fingerprint::fnv1a(bytes, &holes))
     }
 
     /// The RVA a section added after the last one starts at.
@@ -355,6 +380,12 @@ impl<'a> Pe<'a> {
         }
         sw
     }
+}
+
+/// The hole for the 4-byte field at `at` in a function at `start` that ends at `end`.
+fn hole(start: u32, at: u32, end: u32) -> (u16, u16) {
+    let from = at.max(start);
+    ((from - start) as u16, ((at + 4).min(end) - from) as u16)
 }
 
 fn set(bits: &mut [u64], i: u32) {

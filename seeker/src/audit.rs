@@ -1,16 +1,18 @@
 //! Checks a patched DLL against its stock copy, byte by byte: the changes are the sites' jumps, the header fields
 //! for the two appended sections, and those sections: the code section holds exactly the manifest, the public gates,
-//! copies of the sites' original bytes, the bodies (each passing the `validate` rules), and the relocation table;
-//! the data section holds the patches' constants (data, never run) and zeros.
+//! copies of the sites' original bytes, the bodies (each passing the `validate` rules), the public Direct3D helper
+//! when a patch uses it, and the relocation table; the data section holds the patches' constants (data, never run)
+//! and zeros.
 
 use std::ops::Range;
 
 use crate::apply::{check_site, data_vsize, original, overlap, relocations, write_site};
-use crate::format::{CODE_SECTION, DATA_SECTION, ExeId, Manifest};
+use crate::com;
 use crate::gate;
 use crate::patch::Dll;
 use crate::pe::{self, CODE_FLAGS, DATA_FLAGS, DIR_BASERELOC, Pe, align, u32_at};
 use crate::validate;
+use dmfast_format::manifest::{CODE_SECTION, Class, DATA_SECTION, ExeId, Manifest};
 
 /// How far past an export a site may be and still be named after it.
 const NEAR_EXPORT: u32 = 0x400;
@@ -143,7 +145,7 @@ pub fn audit(installed: &[u8], stock_bytes: &[u8], dll: Dll, exe: ExeId) -> Resu
         if let Err(err) = check_site(&stock, &sweep, e.site, e.displace) {
             problem(format!("{}: {err}", e.name));
         }
-        put(e.gate, &gate::build(exe, e.gate, e.body, e.orig), format!("{}'s gate", e.name), &mut problem);
+        put(e.gate, &gate::build(exe, e.gate, e.entry, e.orig), format!("{}'s gate", e.name), &mut problem);
         match original(&stock, e) {
             Ok(b) => put(e.orig, &b, format!("{}'s original instructions", e.name), &mut problem),
             Err(err) => problem(format!("{}: {err}", e.name)),
@@ -172,9 +174,22 @@ pub fn audit(installed: &[u8], stock_bytes: &[u8], dll: Dll, exe: ExeId) -> Resu
         report.push(format!("  replaces {} bytes at {site} with a {}-byte body", e.displace, e.body_len));
         report.extend(checked.report.into_iter().map(|l| format!("  {l}")));
         if let Some(consts) = consts.filter(|c| !c.is_empty()) {
-            let text = String::from_utf8_lossy(consts.strip_suffix(&[0]).unwrap_or(consts)).escape_debug().to_string();
-            report.push(format!("  constants: \"{text}\""));
+            // Text (a string and its NUL) is shown; anything else (a table) by its size.
+            match std::str::from_utf8(consts.strip_suffix(&[0]).unwrap_or(consts)) {
+                Ok(text) if !text.contains('\0') => report.push(format!("  constants: \"{}\"", text.escape_debug())),
+                _ => report.push(format!("  constants: {} bytes of tables", consts.len())),
+            }
         }
+    }
+
+    // The Direct3D helper: present exactly when a patch uses it, as `com::build` writes it, its cache after the
+    // patches' data, in the zero-filled part of the data section.
+    let uses_com = m.entries.iter().flat_map(|e| &e.fixups).any(|f| matches!(f.class, Class::Com | Class::ComTail));
+    if uses_com != (m.com != 0) || m.com_cache != if m.com != 0 { m.data_rva.wrapping_add(m.data_len) } else { 0 } {
+        problem("the Direct3D helper isn't there exactly when a patch uses it, with its cache after the data".into());
+    }
+    if m.com != 0 {
+        put(m.com, &com::build(m.com, m.com_cache), "the Direct3D helper".into(), &mut problem);
     }
 
     // The data section: each patch's constants, taken as they are, and zeros.

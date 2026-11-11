@@ -1,20 +1,23 @@
 //! Placing patches in a stock DLL: the sites become jumps to gates; the manifest, gates, original instructions,
-//! bodies, and the new relocation table go into an appended code section; and each patch's constants and data into
-//! an appended data section.
+//! bodies, the Direct3D helper when a patch uses it, and the new relocation table go into an appended code section;
+//! and each patch's constants and data, and the helper's cache, into an appended data section.
 
 use std::collections::BTreeSet;
 
 use iced_x86::{Decoder, DecoderOptions, OpKind};
 
 use crate::audit;
-use crate::format::{CODE_SECTION, Class, DATA_SECTION, Entry, ExeId, Field, Fixup, JMP_LEN, Manifest};
+use crate::com;
 use crate::gate;
 use crate::patch::{Dll, Patch, Place, Ref};
 use crate::pe::{self, CODE_FLAGS, DATA_FLAGS, DIR_BASERELOC, NewSection, Pe, Sweep, align, put32};
 use crate::validate;
+use dmfast_format::manifest::{CODE_SECTION, Class, DATA_SECTION, Entry, ExeId, Field, Fixup, JMP_LEN, Manifest};
 
-/// Each body starts on this boundary.
+/// Each body, and the Direct3D helper, starts on this boundary.
 const CODE_ALIGN: u32 = 16;
+/// Each patch's data starts on this boundary (its statics may want it).
+const DATA_ALIGN: u32 = 16;
 
 pub struct Applied {
     /// The patched DLL; `None` if no patch for it applies.
@@ -30,6 +33,8 @@ enum Target {
     Data(u32),
     Const(u32),
     Original,
+    Com,
+    ComTail,
 }
 
 struct Placed<'a> {
@@ -39,23 +44,32 @@ struct Placed<'a> {
 }
 
 /// Applies the patches for `dll` to its stock bytes. A patch that can't be placed on this build or breaks a rule is
-/// skipped (with a line saying why); the result passes [`audit::audit`].
+/// skipped (with a line saying why; not for a patch whose site isn't in this build when another patch of its key, the
+/// same fix for another build, applied); the result passes [`audit::audit`].
 pub fn apply(stock_bytes: &[u8], dll: Dll, exe: ExeId, patches: &[Patch]) -> Result<Applied, String> {
     let stock = Pe::parse(stock_bytes)?;
     if stock.section(&CODE_SECTION).is_some() {
         return Err(format!("{} already has DreamSeeker patches", dll.file()));
     }
     let sweep = stock.sweep();
-    let mut lines = Vec::new();
+    let (mut lines, mut absent) = (Vec::new(), Vec::new());
     let mut placed: Vec<Placed> = Vec::new();
     for p in patches.iter().filter(|p| p.dll == dll) {
-        match place(&stock, &sweep, p, &placed) {
+        let site = match resolve(&stock, &p.site) {
+            Ok(site) => site,
+            Err(e) => {
+                absent.push((&p.key, format!("{}: skipped ({e})", p.name)));
+                continue;
+            }
+        };
+        match place(&stock, &sweep, p, site, &placed) {
             Ok(s) => placed.push(s),
             Err(e) => lines.push(format!("{}: skipped ({e})", p.name)),
         }
     }
     loop {
         if placed.is_empty() {
+            lines.extend(absent.into_iter().map(|(_, l)| l));
             return Ok(Applied { image: None, lines });
         }
         let (image, m) = build(&stock, exe, &placed)?;
@@ -73,6 +87,7 @@ pub fn apply(stock_bytes: &[u8], dll: Dll, exe: ExeId, patches: &[Patch]) -> Res
         if failed.is_empty() {
             audit::audit(&image, stock_bytes, dll, exe)
                 .map_err(|e| format!("internal: the patched {} fails its audit:\n{e}", dll.file()))?;
+            lines.extend(absent.iter().filter(|(k, _)| !placed.iter().any(|s| &s.p.key == *k)).map(|(_, l)| l.clone()));
             lines.extend(m.entries.iter().map(|e| format!("{}: applied at +{:#x}", e.name, e.site)));
             return Ok(Applied { image: Some(image), lines });
         }
@@ -87,6 +102,19 @@ fn resolve(stock: &Pe, place: &Place) -> Result<u32, String> {
     match place {
         Place::Export(name) => stock.export(name).ok_or_else(|| format!("export {name} not found")),
         Place::Pattern(ida, offset) => Ok(stock.find_pattern(ida)?.wrapping_add_signed(*offset)),
+        Place::Fingerprint { prefix, len, hash } => {
+            let found: Vec<_> =
+                stock.find_all(prefix)?.into_iter().map(|at| (at, stock.fingerprint(at, *len))).collect();
+            match found.iter().filter(|(_, h)| *h == Some(*hash)).collect::<Vec<_>>()[..] {
+                [(at, _)] => Ok(*at),
+                [] => {
+                    // What each candidate hashes to, for whoever writes the fingerprint.
+                    let seen: Vec<_> = found.iter().map(|(at, h)| format!("+{at:#x}: {:#x}", h.unwrap_or(0))).collect();
+                    Err(format!("no {len}-byte function after {prefix:?} hashes to {hash:#x} ({})", seen.join(", ")))
+                }
+                ref many => Err(format!("{} functions match fingerprint {hash:#x}", many.len())),
+            }
+        }
     }
 }
 
@@ -142,11 +170,13 @@ pub(crate) fn overlap(sites: &[(u32, u32)]) -> Option<(usize, usize)> {
     (0..sites.len()).find_map(|i| (0..i).find(|&j| crosses(sites[i], sites[j])).map(|j| (i, j)))
 }
 
-fn place<'a>(stock: &Pe, sweep: &Sweep, p: &'a Patch, placed: &[Placed]) -> Result<Placed<'a>, String> {
+fn place<'a>(stock: &Pe, sweep: &Sweep, p: &'a Patch, site: u32, placed: &[Placed]) -> Result<Placed<'a>, String> {
     if p.body.is_empty() {
         return Err("its body is empty".into());
     }
-    let site = resolve(stock, &p.site)?;
+    if p.entry as usize >= p.body.len() {
+        return Err(format!("its entry +{:#x} is past its {}-byte body", p.entry, p.body.len()));
+    }
     check_site(stock, sweep, site, p.displace)?;
     let sites: Vec<_> = placed.iter().map(|o| (o.site, o.p.displace)).chain([(site, p.displace)]).collect();
     if let Some((_, j)) = overlap(&sites) {
@@ -173,6 +203,8 @@ fn place<'a>(stock: &Pe, sweep: &Sweep, p: &'a Patch, placed: &[Placed]) -> Resu
                     Class::Import,
                     stock.import_slot(dll, name).ok_or_else(|| format!("the DLL doesn't import {dll}!{name}"))?,
                 ),
+                Ref::Com => Target::Com,
+                Ref::ComTail => Target::ComTail,
             };
             Ok((f.at, f.field, t))
         })
@@ -193,6 +225,7 @@ fn build(stock: &Pe, exe: ExeId, placed: &[Placed]) -> Result<(Vec<u8>, Manifest
             gate: 0,
             orig: 0,
             body: 0,
+            entry: 0,
             body_len: s.p.body.len() as u32,
             consts: 0,
             consts_len: s.p.consts.len() as u32,
@@ -203,17 +236,22 @@ fn build(stock: &Pe, exe: ExeId, placed: &[Placed]) -> Result<(Vec<u8>, Manifest
                 .collect(),
         })
         .collect();
-    let mut m = Manifest { exe, data_rva: 0, data_len: 0, entries };
+    let mut m = Manifest { exe, data_rva: 0, data_len: 0, com: 0, com_cache: 0, entries };
     // The manifest's length depends only on the counts and strings, which are final.
     let mut off = align(m.encode().len() as u32, CODE_ALIGN);
     for (e, s) in m.entries.iter_mut().zip(placed) {
         e.gate = code_rva + off;
         e.orig = e.gate + gate::LEN;
         e.body = code_rva + align(e.orig - code_rva + e.displace + 5, CODE_ALIGN);
+        e.entry = e.body + s.p.entry;
         off = align(e.body - code_rva + e.body_len, CODE_ALIGN);
         for (f, r) in e.fixups.iter_mut().zip(&s.refs) {
             f.field_rva = e.body + r.0;
         }
+    }
+    if placed.iter().flat_map(|s| &s.refs).any(|r| matches!(r.2, Target::Com | Target::ComTail)) {
+        m.com = code_rva + off;
+        off = align(off + com::LEN, CODE_ALIGN);
     }
     let reloc_off = off;
     let relocs = pe::reloc_table(&relocations(stock, &m.entries));
@@ -227,12 +265,15 @@ fn build(stock: &Pe, exe: ExeId, placed: &[Placed]) -> Result<(Vec<u8>, Manifest
         e.consts = data_rva + consts.len() as u32;
         consts.extend_from_slice(&s.p.consts);
     }
-    consts.resize(consts.len().next_multiple_of(4), 0);
+    consts.resize(consts.len().next_multiple_of(DATA_ALIGN as usize), 0);
     m.data_rva = data_rva + consts.len() as u32;
     let mut data_offsets = Vec::new();
     for s in placed {
         data_offsets.push(m.data_len);
-        m.data_len += align(s.p.data, 4);
+        m.data_len += align(s.p.data, DATA_ALIGN);
+    }
+    if m.com != 0 {
+        m.com_cache = m.data_rva + m.data_len;
     }
 
     let mut code = vec![0xCC; code_len as usize];
@@ -244,11 +285,13 @@ fn build(stock: &Pe, exe: ExeId, placed: &[Placed]) -> Result<(Vec<u8>, Manifest
                 Target::Data(o) => (Class::Data, m.data_rva + data_off + o),
                 Target::Const(o) => (Class::Const, e.consts + o),
                 Target::Original => (Class::Original, e.orig),
+                Target::Com => (Class::Com, m.com),
+                Target::ComTail => (Class::ComTail, m.com + com::TAIL),
             };
             *f = Fixup { field_rva: e.body + at, field: *field, class, target };
         }
         let at = |rva: u32| (rva - code_rva) as usize;
-        code[at(e.gate)..at(e.orig)].copy_from_slice(&gate::build(exe, e.gate, e.body, e.orig));
+        code[at(e.gate)..at(e.orig)].copy_from_slice(&gate::build(exe, e.gate, e.entry, e.orig));
         code[at(e.orig)..at(e.orig) + e.displace as usize + 5].copy_from_slice(&original(stock, e)?);
         let body = &mut code[at(e.body)..at(e.body) + e.body_len as usize];
         body.copy_from_slice(&s.p.body);
@@ -259,6 +302,10 @@ fn build(stock: &Pe, exe: ExeId, placed: &[Placed]) -> Result<(Vec<u8>, Manifest
             };
             put32(body, (f.field_rva - e.body) as usize, v);
         }
+    }
+    if m.com != 0 {
+        let at = (m.com - code_rva) as usize;
+        code[at..at + com::LEN as usize].copy_from_slice(&com::build(m.com, m.com_cache));
     }
     code[reloc_off as usize..].copy_from_slice(&relocs);
     let header = m.encode();
@@ -275,9 +322,11 @@ fn build(stock: &Pe, exe: ExeId, placed: &[Placed]) -> Result<(Vec<u8>, Manifest
     Ok((image, m))
 }
 
-/// The data section's size in memory: the constants, then the zero-filled data (at least 4 bytes).
+/// The data section's size in memory: the constants, the zero-filled data, and the Direct3D helper's cache (at least
+/// 4 bytes).
 pub(crate) fn data_vsize(m: &Manifest, data_rva: u32) -> u32 {
-    (m.data_rva - data_rva + m.data_len).max(4)
+    let cache = if m.com != 0 { com::CACHE_LEN } else { 0 };
+    (m.data_rva - data_rva + m.data_len + cache).max(4)
 }
 
 /// The site's original bytes, then a `jmp` back to the instruction after the site.
@@ -409,6 +458,7 @@ mod tests {
             site: Place::Export(site.into()),
             displace,
             body: body.to_vec(),
+            entry: 0,
             fixups: fixups
                 .iter()
                 .map(|(at, field, target)| PatchFixup { at: *at, field: *field, target: target.clone() })
@@ -481,6 +531,22 @@ mod tests {
     }
 
     #[test]
+    fn fingerprint_sites() {
+        // `relocsite` (mov eax, [global] ; ret): its relocated address is skipped, so a changed global still matches.
+        let stock = dll();
+        let bytes = Pe::parse(&stock).unwrap().bytes(0x1030, 6).unwrap().to_vec();
+        let hash = dmfast_format::fingerprint::fnv1a(&bytes, &[(1, 4)]);
+        let at = |hash| {
+            let mut p = patch("site", 5, &[0xE9, 0, 0, 0, 0], &[(1, Field::Rel32, Ref::Original)]);
+            p.site = Place::Fingerprint { prefix: "A1 ?? ?? ?? ?? C3".into(), len: 6, hash };
+            p
+        };
+        let a = apply(&stock, Dll::Core, EXE, &[at(hash)]).unwrap();
+        assert_eq!(a.lines, ["p: applied at +0x1030"]);
+        skipped(at(hash ^ 1), &format!("(+0x1030: {hash:#x})"));
+    }
+
+    #[test]
     fn overlapping_sites() {
         assert_eq!(overlap(&[(0x1000, 6), (0x1010, 5), (0x1005, 5)]), Some((2, 0)));
         assert_eq!(overlap(&[(0x1000, 6), (0x1006, 5)]), None);
@@ -530,7 +596,7 @@ mod tests {
         fails(&t, EXE, "isn't part of any patch");
         let mut t = image.clone();
         t[code.raw_ptr as usize + (m.entries[0].body - code.rva) as usize + 7] = 0xE8; // jmp original -> call original
-        fails(&t, EXE, "doesn't end in a jmp or ret");
+        fails(&t, EXE, "doesn't end in a jmp, ret, int3, or ud2");
         fails(&image, ExeId { timestamp: 1, ..EXE }, "another program");
     }
 
@@ -577,7 +643,90 @@ mod tests {
         skipped(jmp_orig(&[0x89, 0xC4], &[]), "changes esp");
         skipped(jmp_orig(&[0xA1, 0xF0, 0x21, 0x00, 0x10], &[]), "absolute address without a fixup");
         skipped(jmp_orig(&[0xEB, 0x01, 0xB8, 0, 0, 0, 0], &[]), "not an instruction of the body");
-        skipped(patch("site", 6, &[0x90], &[]), "doesn't end in a jmp or ret");
-        skipped(jmp_orig(&[0x68, 0, 0, 0, 0], &[(1, Field::Abs32, Ref::Body(0))]), "isn't its own data");
+        skipped(patch("site", 6, &[0x90], &[]), "doesn't end in a jmp, ret, int3, or ud2");
+        skipped(jmp_orig(&[0x68, 0, 0, 0, 0], &[(1, Field::Abs32, Ref::Body(2))]), "not an instruction of the body");
+        skipped(jmp_orig(&[0x68, 0, 0, 0, 0], &[(1, Field::Abs32, Ref::Com)]), "address that isn't");
+    }
+
+    /// `f`: `mov eax, offset f ; ret`, then `int3`s to 16; the entry: `call f ; jmp original` (`int3`s, then `ud2`
+    /// when `ud2`).
+    fn two_functions(ud2: bool) -> Patch {
+        let mut body = vec![0xB8, 0, 0, 0, 0, 0xC3];
+        body.resize(16, 0xCC);
+        body.extend_from_slice(&[0xE8, 0, 0, 0, 0, 0xE9, 0, 0, 0, 0]);
+        if ud2 {
+            body.extend_from_slice(&[0xCC, 0x0F, 0x0B]);
+        }
+        let mut p = patch(
+            "site",
+            6,
+            &body,
+            &[(1, Field::Abs32, Ref::Body(0)), (17, Field::Rel32, Ref::Body(0)), (22, Field::Rel32, Ref::Original)],
+        );
+        p.entry = 16;
+        p
+    }
+
+    #[test]
+    fn functions() {
+        let stock = dll();
+        let image = applied(two_functions(false));
+        audit::audit(&image, &stock, Dll::Core, EXE).unwrap();
+        let pe = Pe::parse(&image).unwrap();
+        let m = Manifest::parse(pe.section(&CODE_SECTION).unwrap().bytes(&image)).unwrap();
+        let e = &m.entries[0];
+        assert_eq!(e.entry, e.body + 16);
+        assert_eq!(pe.bytes(e.gate, gate::LEN).unwrap(), gate::build(EXE, e.gate, e.entry, e.orig));
+        // f's address, relocated; the call to it.
+        assert_eq!(pe.bytes(e.body + 1, 4).unwrap(), (BASE + e.body).to_le_bytes());
+        assert!(pe.relocs.contains(&(e.body + 1)));
+        assert_eq!(pe.bytes(e.body + 17, 4).unwrap(), e.body.wrapping_sub(e.body + 21).to_le_bytes());
+        assert_eq!((m.com, m.com_cache), (0, 0), "no helper without a patch using it");
+        applied(two_functions(true));
+        let mut p = two_functions(false);
+        p.entry = 17;
+        skipped(p, "the entry isn't an instruction of the body");
+        let mut p = two_functions(false);
+        p.fixups[0].target = Ref::Body(2);
+        skipped(p, "takes the address +");
+        let mut p = two_functions(false);
+        p.entry = 26;
+        skipped(p, "past its 26-byte body");
+    }
+
+    #[test]
+    fn direct3d_helper() {
+        let stock = dll();
+        // push 3 ; push 2 ; push 1 ; push ecx ; push 17 ; call dmf_com ; jmp original
+        let calls = patch(
+            "site",
+            6,
+            &[0x6A, 3, 0x6A, 2, 0x6A, 1, 0x51, 0x6A, 17, 0xE8, 0, 0, 0, 0, 0xE9, 0, 0, 0, 0],
+            &[(10, Field::Rel32, Ref::Com), (15, Field::Rel32, Ref::Original)],
+        );
+        let image = applied(calls);
+        let report = audit::audit(&image, &stock, Dll::Core, EXE).unwrap();
+        assert!(report.contains("calls Direct3D 9 methods (checked helper)"), "{report}");
+        let pe = Pe::parse(&image).unwrap();
+        let code = *pe.section(&CODE_SECTION).unwrap();
+        let m = Manifest::parse(code.bytes(&image)).unwrap();
+        assert!(m.com != 0 && m.com_cache == m.data_rva + m.data_len);
+        assert_eq!(pe.bytes(m.com, com::LEN).unwrap(), com::build(m.com, m.com_cache));
+        let e = &m.entries[0];
+        assert_eq!(pe.bytes(e.body + 10, 4).unwrap(), m.com.wrapping_sub(e.body + 14).to_le_bytes());
+        let data = pe.sections.last().unwrap();
+        assert!(m.com_cache + com::CACHE_LEN <= data.rva + data.vsize, "the cache is in the data section");
+        assert!(!pe.is_code(m.com_cache));
+        let mut t = image.clone();
+        t[code.raw_ptr as usize + (m.com - code.rva) as usize + 20] ^= 1;
+        let err = audit::audit(&t, &stock, Dll::Core, EXE).unwrap_err();
+        assert!(err.contains("isn't part of any patch"), "{err}");
+        // mov eax, 5 ; jmp dmf_com_tail
+        let tail = patch("site", 6, &[0xB8, 5, 0, 0, 0, 0xE9, 0, 0, 0, 0], &[(6, Field::Rel32, Ref::ComTail)]);
+        let image = applied(tail);
+        let pe = Pe::parse(&image).unwrap();
+        let m = Manifest::parse(pe.section(&CODE_SECTION).unwrap().bytes(&image)).unwrap();
+        let e = &m.entries[0];
+        assert_eq!(pe.bytes(e.body + 6, 4).unwrap(), (m.com + com::TAIL).wrapping_sub(e.body + 10).to_le_bytes());
     }
 }
