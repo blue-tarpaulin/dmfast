@@ -10,6 +10,7 @@
 //! site pattern <offset> <IDA bytes...>
 //! site fingerprint <length> <hash> <IDA bytes...>
 //! displace <n>
+//! exe <IDA bytes...>
 //! body <symbol>
 //! data <bytes>
 //! ref <symbol> code|global export <name>
@@ -19,15 +20,17 @@
 //! `about`, `tier`, `site`, `displace`, and `body` are required; `data` defaults to 0; numbers are decimal or `0x`
 //! hex. `site` may repeat: the same code at several sites (patches `<name>`, `<name>-2`, ...). A fingerprint names a
 //! whole function without its bytes ([`Place::Fingerprint`]): the bytes are only how it starts, and an install that
-//! finds no match says what each function starting that way hashes to. `dmf_resume`, `dmf_original`, `dmf_data`,
-//! `dmf_com`, and `dmf_com_tail` need no `ref`; `jmp dmf_original + n` runs the original instructions from offset
-//! `n`. Names are matched without the `_` (and a stdcall `@<bytes>`) i686 Windows puts on C names.
+//! finds no match says what each function starting that way hashes to. `exe` may repeat: dreamseeker.exe's code must
+//! have each pattern once ([`Patch::exe`]). `dmf_resume`, `dmf_original`, `dmf_data`, `dmf_com`, and `dmf_com_tail`
+//! need no `ref`; `jmp dmf_original + n` runs the original instructions from offset `n`. Names are matched without the
+//! `_` (and a stdcall `@<bytes>`) i686 Windows puts on C names.
 //!
-//! A patch's code is every function of the object, in order, each aligned as its section says with `int3`s between;
-//! the gate enters it at the `body` function. Its relocations become fixups (`DIR32`: `Abs32`, `REL32`: `Rel32`), the
-//! in-place value an addend: to the code (a call, a label, a function's address), to a zero-initialised `static`
-//! (which becomes the start of the patch's data, `data` after them, where `dmf_data` points), to a read-only
-//! `static` (whose bytes join the patch's constants), to a built-in, or to a `ref`.
+//! A patch's code is the functions the `body` function reaches, in order, each aligned as its section says with
+//! `int3`s between; the gate enters it at the `body` function. Core's panic paths go to the prelude's `dmf_trap`. Its
+//! relocations become fixups (`DIR32`: `Abs32`, `REL32`: `Rel32`), the in-place value an addend: to the code (a call,
+//! a label, a function's address), to a zero-initialised `static` (which becomes the start of the patch's data, `data`
+//! after them, where `dmf_data` points), to a read-only `static` (whose bytes join the patch's constants, with the
+//! addresses of other constants in them), to a built-in, or to a `ref`.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -95,6 +98,7 @@ struct Draft {
     about: Option<String>,
     sites: Vec<Place>,
     displace: Option<u32>,
+    exe: Vec<String>,
     body: Option<(usize, String)>,
     data: Option<u32>,
     refs: HashMap<String, Ref>,
@@ -103,7 +107,7 @@ struct Draft {
 impl Draft {
     /// The patch without its body and fixups (at its first site), and where they come from.
     fn finish(self, key: &str) -> Result<(Patch, Source), String> {
-        let Draft { line, name, dll, tier, about, sites, displace, body, data, refs } = self;
+        let Draft { line, name, dll, tier, about, sites, displace, exe, body, data, refs } = self;
         let missing = |what: &str| format!("line {line}: patch {name} has no `{what}`");
         let about = about.ok_or_else(|| missing("about"))?;
         let tier = tier.ok_or_else(|| missing("tier"))?;
@@ -118,6 +122,7 @@ impl Draft {
             dll,
             site,
             displace,
+            exe,
             body: Vec::new(),
             entry: 0,
             fixups: Vec::new(),
@@ -163,6 +168,7 @@ fn directive(drafts: &mut Vec<Draft>, line: usize, text: &str) -> Result<(), Str
             about: None,
             sites: Vec::new(),
             displace: None,
+            exe: Vec::new(),
             body: None,
             data: None,
             refs: HashMap::new(),
@@ -184,6 +190,11 @@ fn directive(drafts: &mut Vec<Draft>, line: usize, text: &str) -> Result<(), Str
         "displace" => {
             let [n] = args[..] else { bail!("expected `displace <n>`") };
             set(&mut draft.displace, number(n)?, word)
+        }
+        "exe" if rest.is_empty() => bail!("expected `exe <IDA bytes...>`"),
+        "exe" => {
+            draft.exe.push(rest.to_string());
+            Ok(())
         }
         "body" => {
             let [symbol] = args[..] else { bail!("expected `body <symbol>`") };

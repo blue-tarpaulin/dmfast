@@ -75,6 +75,7 @@ fn counter_fixture() {
             dll: Dll::Core,
             site: Place::Export("??0DMString@@QAE@XZ".to_string()),
             displace: 6,
+            exe: Vec::new(),
             body: Vec::new(),
             entry: 0,
             fixups: Vec::new(),

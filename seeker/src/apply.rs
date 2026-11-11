@@ -43,19 +43,24 @@ struct Placed<'a> {
     refs: Vec<(u32, Field, Target)>,
 }
 
-/// Applies the patches for `dll` to its stock bytes. A patch that can't be placed on this build or breaks a rule is
-/// skipped (with a line saying why; not for a patch whose site isn't in this build when another patch of its key, the
-/// same fix for another build, applied); the result passes [`audit::audit`].
-pub fn apply(stock_bytes: &[u8], dll: Dll, exe: ExeId, patches: &[Patch]) -> Result<Applied, String> {
+/// Applies the patches for `dll` to its stock bytes, for `exe` (dreamseeker.exe's bytes). A patch that can't be placed
+/// on this build or breaks a rule is skipped (with a line saying why; not for a patch whose site isn't in this build
+/// when another patch of its key, the same fix for another build, applied); the result passes [`audit::audit`].
+pub fn apply(stock_bytes: &[u8], dll: Dll, exe: &[u8], patches: &[Patch]) -> Result<Applied, String> {
     let stock = Pe::parse(stock_bytes)?;
     if stock.section(&CODE_SECTION).is_some() {
         return Err(format!("{} already has DreamSeeker patches", dll.file()));
     }
+    let (exe_pe, exe) = (Pe::parse(exe).map_err(|e| format!("dreamseeker.exe: {e}"))?, audit::exe_id(exe)?);
     let sweep = stock.sweep();
     let (mut lines, mut absent) = (Vec::new(), Vec::new());
     let mut placed: Vec<Placed> = Vec::new();
     for p in patches.iter().filter(|p| p.dll == dll) {
-        let site = match resolve(&stock, &p.site) {
+        let site = match p.exe.iter().try_for_each(|ida| exe_pe.find_pattern(ida).map(drop)) {
+            Ok(()) => resolve(&stock, &p.site),
+            Err(e) => Err(format!("dreamseeker.exe: {e}")),
+        };
+        let site = match site {
             Ok(site) => site,
             Err(e) => {
                 absent.push((&p.key, format!("{}: skipped ({e})", p.name)));
@@ -487,6 +492,15 @@ mod tests {
         d
     }
 
+    /// dreamseeker.exe: the test DLL with `EXE`'s identity.
+    fn exe() -> Vec<u8> {
+        let mut exe = dll();
+        let at = Pe::parse(&exe).unwrap().at;
+        put32(&mut exe, at.file + 4, EXE.timestamp);
+        put32(&mut exe, at.image_size(), EXE.image_size);
+        exe
+    }
+
     fn patch(site: &str, displace: u32, body: &[u8], fixups: &[(u32, Field, Ref)]) -> Patch {
         Patch {
             key: "p".into(),
@@ -496,6 +510,7 @@ mod tests {
             dll: Dll::Core,
             site: Place::Export(site.into()),
             displace,
+            exe: Vec::new(),
             body: body.to_vec(),
             entry: 0,
             fixups: fixups
@@ -519,12 +534,12 @@ mod tests {
     }
 
     fn applied(p: Patch) -> Vec<u8> {
-        let a = apply(&dll(), Dll::Core, EXE, &[p]).unwrap();
+        let a = apply(&dll(), Dll::Core, &exe(), &[p]).unwrap();
         a.image.unwrap_or_else(|| panic!("not applied: {:?}", a.lines))
     }
 
     fn skipped(p: Patch, why: &str) {
-        let a = apply(&dll(), Dll::Core, EXE, &[p]).unwrap();
+        let a = apply(&dll(), Dll::Core, &exe(), &[p]).unwrap();
         assert!(a.image.is_none() && a.lines[0].contains(why), "expected {why:?}, got {:?}", a.lines);
     }
 
@@ -581,9 +596,19 @@ mod tests {
             p.site = Place::Fingerprint { prefix: "A1 ?? ?? ?? ?? C3".into(), len: 6, hash };
             p
         };
-        let a = apply(&stock, Dll::Core, EXE, &[at(hash)]).unwrap();
+        let a = apply(&stock, Dll::Core, &exe(), &[at(hash)]).unwrap();
         assert_eq!(a.lines, ["p: applied at +0x1030"]);
         skipped(at(hash ^ 1), &format!("(+0x1030: {hash:#x})"));
+    }
+
+    #[test]
+    fn exe_patterns() {
+        // A patch applies only while dreamseeker.exe still has the code it was written against.
+        let mut p = counter();
+        p.exe = vec!["A1 ?? ?? ?? ?? C3".into()];
+        applied(p.clone());
+        p.exe.push("DE AD BE EF".into());
+        skipped(p, "dreamseeker.exe: pattern \"DE AD BE EF\" not found");
     }
 
     #[test]
@@ -611,7 +636,7 @@ mod tests {
         assert_eq!(overlap(&[(0x1000, 6), (0x1006, 5)]), None);
         let mut second = counter();
         second.name = "q".into();
-        let a = apply(&dll(), Dll::Core, EXE, &[counter(), second]).unwrap();
+        let a = apply(&dll(), Dll::Core, &exe(), &[counter(), second]).unwrap();
         assert!(a.lines.iter().any(|l| l.contains("q: skipped (its site overlaps p's)")), "{:?}", a.lines);
     }
 

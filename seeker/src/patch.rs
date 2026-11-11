@@ -103,7 +103,10 @@ pub struct Patch {
     /// `jmp` to its gate.
     pub site: Place,
     pub displace: u32,
-    /// Its code: every function of its object, in order. Entered at `entry` in DreamSeeker in place of the site's
+    /// IDA patterns dreamseeker.exe's code must each have once: the client code the patch is written against, so a
+    /// BYOND build that changes it (fixing the bug there) gets no patch.
+    pub exe: Vec<String>,
+    /// Its code: the functions its entry reaches, in order. Entered at `entry` in DreamSeeker in place of the site's
     /// instructions, with every register and flag as at the site.
     pub body: Vec<u8>,
     pub entry: u32,
@@ -141,6 +144,7 @@ mod tests {
             dll: Dll::Core,
             site: Place::Export(String::new()),
             displace: 5,
+            exe: Vec::new(),
             body: Vec::new(),
             entry: 0,
             fixups: Vec::new(),

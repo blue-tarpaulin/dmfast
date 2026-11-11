@@ -124,10 +124,10 @@ pub fn plan_install(dir: &Path, client: bool) -> Result<Plan, Failure> {
         plan.lines.push("DreamSeeker: the fix selection picks none of its patches ('--help client' lists them)".into());
     }
     let exe = dir.join(EXE);
-    let exe_id = if patches.is_empty() {
+    let exe = if patches.is_empty() {
         None
     } else if exe.is_file() {
-        Some(audit::exe_id(&read(&exe)?)?)
+        Some(read(&exe)?)
     } else {
         plan.lines.push(format!("DreamSeeker patches skipped: no {EXE} in {}", dir.display()));
         None
@@ -148,7 +148,7 @@ pub fn plan_install(dir: &Path, client: bool) -> Result<Plan, Failure> {
             )
             .into());
         }
-        let image = match exe_id {
+        let image = match &exe {
             Some(exe) => {
                 let kept = if patched { Some(read(&backup)?) } else { None };
                 let applied = apply::apply(kept.as_deref().unwrap_or(&live[..]), dll, exe, &patches)
