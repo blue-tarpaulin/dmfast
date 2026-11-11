@@ -17,6 +17,7 @@ pub const DIR_IMPORT: usize = 1;
 const DIR_SECURITY: usize = 4;
 pub const DIR_BASERELOC: usize = 5;
 pub const DIR_IAT: usize = 12;
+const DIR_DELAY_IMPORT: usize = 13;
 
 pub(crate) fn u32_at(d: &[u8], o: usize) -> Option<u32> {
     Some(u32::from_le_bytes(d.get(o..o.checked_add(4)?)?.try_into().ok()?))
@@ -98,7 +99,7 @@ pub struct Pe<'a> {
     /// Exports by RVA (sorted), and by name.
     exports: Vec<(u32, String)>,
     by_name: HashMap<String, u32>,
-    /// `dll` (lower case), name, and IAT slot RVA of each imported name.
+    /// `dll` (lower case), name, and IAT slot RVA of each imported name, delay-loaded ones included.
     imports: Vec<(String, String, u32)>,
     /// The fields the loader relocates.
     pub relocs: BTreeSet<u32>,
@@ -152,6 +153,7 @@ impl<'a> Pe<'a> {
         };
         pe.read_exports().ok_or("bad export table")?;
         pe.read_imports().ok_or("bad import table")?;
+        pe.read_delay_imports().ok_or("bad delay import table")?;
         pe.read_relocs()?;
         Ok(pe)
     }
@@ -247,6 +249,32 @@ impl<'a> Pe<'a> {
                 }
             }
             desc += 20;
+        }
+    }
+
+    /// Delay-loaded imports, whose slots a `jmp [slot]` stub calls through.
+    fn read_delay_imports(&mut self) -> Option<()> {
+        let (mut desc, _) = self.dir(DIR_DELAY_IMPORT);
+        if desc == 0 {
+            return Some(());
+        }
+        loop {
+            // Attributes, then RVAs (attribute bit 0) of the name, module handle, IAT, and name table.
+            let (name, iat, int) = (self.u32(desc + 4)?, self.u32(desc + 12)?, self.u32(desc + 16)?);
+            if name == 0 {
+                return Some(());
+            }
+            let dll = self.str(name)?.to_ascii_lowercase();
+            for i in 0.. {
+                let thunk = self.u32(int + 4 * i)?;
+                if thunk == 0 {
+                    break;
+                }
+                if thunk & 0x8000_0000 == 0 {
+                    self.imports.push((dll.clone(), self.str(thunk + 2)?, iat + 4 * i));
+                }
+            }
+            desc += 32;
         }
     }
 

@@ -1,11 +1,11 @@
 //! The rules every patch body keeps to, so a closed-source body can't reach the operating system on its own: it
 //! decodes as plain code that ends in a `jmp`, `ret`, `int3`, or `ud2`; its branches go into itself, back to the site,
 //! into its copy of the site's original instructions (at one of them), to the start of one of BYOND's own functions
-//! (not denied ones, see `deny.txt`), or to the checked Direct3D helper (`com.rs`); it calls other BYOND DLLs only
-//! through their existing import slots; it reads no import table; it has no system calls, interrupts, port I/O,
-//! privileged instructions, segment tricks, or other indirect branches; it only moves `esp` the ordinary ways; and
-//! every address in it is a declared fixup (its own functions' addresses are instruction starts). Its constants are
-//! in non-executable data.
+//! (not denied ones, see `deny.txt`), or to the checked Direct3D helper (`com.rs`); it calls other BYOND DLLs (FMOD
+//! included) only through their existing import slots or the image's own `jmp [slot]` stubs for them; it reads no
+//! import table; it has no system calls, interrupts, port I/O, privileged instructions, segment tricks, or other
+//! indirect branches; it only moves `esp` the ordinary ways; and every address in it is a declared fixup (its own
+//! functions' addresses are instruction starts). Its constants are in non-executable data.
 //!
 //! These are static rules on the bytes, and a determined body can get around them: it can compute an address from
 //! an allowed one (`[global + n]` reaching the import table) and jump there with `push` and `ret`, or overwrite a
@@ -24,8 +24,8 @@ use dmfast_format::manifest::{Class, Entry, Field, Fixup, Manifest};
 
 /// Names a body may not call, one case-insensitive substring per line (`#` starts a comment).
 const DENY: &str = include_str!("../deny.txt");
-/// The DLLs a body may call through import slots.
-const BYOND_DLLS: [&str; 3] = ["byondcore.dll", "byondwin.dll", "byondext.dll"];
+/// The DLLs a body may call through import slots: BYOND's own, and the FMOD it ships.
+const BYOND_DLLS: [&str; 4] = ["byondcore.dll", "byondwin.dll", "byondext.dll", "fmodex.dll"];
 
 fn denied(name: &str) -> Option<&'static str> {
     let name = name.to_ascii_lowercase();
@@ -235,7 +235,8 @@ impl Validator<'_> {
                 if !self.stock.is_code(to) || !self.sweep.starts_at(to) || !function {
                     self.problem(at, &format!("calls +{to:#x}, not the start of a function in the DLL's code"));
                 } else if self.stock.bytes(to, 2) == Some(&[0xFF, 0x25]) {
-                    self.problem(at, &format!("calls +{to:#x}, an import thunk"));
+                    self.thunk(to, at);
+                    return None;
                 } else if let Some(d) = self.stock.exports_at(to).find_map(denied) {
                     self.problem(at, &format!("calls {}, denied ({d})", self.name_of(to)));
                 }
@@ -273,26 +274,41 @@ impl Validator<'_> {
             Class::Global
                 if self.stock.section_of(to).is_some_and(|s| !s.exec())
                     && !self.stock.in_dir(DIR_IAT, to)
-                    && !self.stock.in_dir(DIR_IMPORT, to) =>
+                    && !self.stock.in_dir(DIR_IMPORT, to)
+                    && self.stock.import_at(to).is_none() =>
             {
                 let s = self.stock.section_of(to).unwrap();
                 let name = String::from_utf8_lossy(&s.name).trim_end_matches('\0').to_string();
                 self.reads.insert(format!("{name} +{to:#x}"));
             }
-            Class::Import if import_operand => match self.stock.import_at(to) {
-                Some((dll, name)) if BYOND_DLLS.contains(&dll) => {
-                    if let Some(d) = denied(name) {
-                        self.problem(at, &format!("calls {dll}!{name}, denied ({d})"));
-                    }
-                    self.calls.insert(format!("{dll}!{name}"));
-                }
-                Some((dll, name)) => self.problem(at, &format!("calls {dll}!{name}: not a BYOND DLL")),
-                None => self.problem(at, &format!("+{to:#x} isn't an import slot")),
-            },
+            Class::Import if import_operand => self.import(self.stock.import_at(to), to, at),
             _ => self.problem(
                 at,
                 "address that isn't its own data, constants, or code, BYOND's data, or an import slot operand",
             ),
+        }
+    }
+
+    /// A call to the image's `jmp [slot]` stub at `to`: allowed for a BYOND DLL's import, as a call through the slot.
+    fn thunk(&mut self, to: u32, at: u32) {
+        let slot = self.stock.bytes(to + 2, 4).and_then(|b| u32_at(b, 0)).map(|va| va.wrapping_sub(self.stock.base));
+        match slot.filter(|&s| self.stock.import_at(s).is_some()) {
+            Some(s) => self.import(self.stock.import_at(s), s, at),
+            None => self.problem(at, &format!("calls +{to:#x}, an import thunk")),
+        }
+    }
+
+    /// A call through import slot `slot`, which imports `import`.
+    fn import(&mut self, import: Option<(&str, &str)>, slot: u32, at: u32) {
+        match import {
+            Some((dll, name)) if BYOND_DLLS.contains(&dll) => {
+                if let Some(d) = denied(name) {
+                    self.problem(at, &format!("calls {dll}!{name}, denied ({d})"));
+                }
+                self.calls.insert(format!("{dll}!{name}"));
+            }
+            Some((dll, name)) => self.problem(at, &format!("calls {dll}!{name}: not a BYOND DLL")),
+            None => self.problem(at, &format!("+{slot:#x} isn't an import slot")),
         }
     }
 

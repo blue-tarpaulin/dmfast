@@ -423,7 +423,8 @@ mod tests {
     const EXE: ExeId = ExeId { timestamp: 0x1234_5678, image_size: 0xD_0000 };
 
     /// A small PE32 DLL: `.text` (exports `site`, `helper`, `?Login@X@@QAEXXZ`, `relocsite`, and `site2`, an import
-    /// thunk and a call to it, a jump into `site2`, and a `je` to the end of `test eax, eax ; je ; xor eax, eax`),
+    /// thunk for each import and a call to each, a jump into `site2`, and a `je` to the end of
+    /// `test eax, eax ; je ; xor eax, eax`),
     /// `.rdata` (imports `byondcore.dll!Foo` and `kernel32.dll!ExitProcess`, the export table, an exported `global`,
     /// and an exported `slot` in the IAT), and `.reloc`.
     fn dll() -> Vec<u8> {
@@ -470,6 +471,8 @@ mod tests {
         put(&mut d, text(0x1060), &[0xC7, 0x01, 0, 0, 0, 0, 0xC3]); // site2
         put(&mut d, text(0x1070), &[0xE8, 0xCB, 0xFF, 0xFF, 0xFF]); // call the thunk
         put(&mut d, text(0x1080), &[0x85, 0xC0, 0x74, 0x02, 0x31, 0xC0, 0xC3]); // test ; je +2 ; xor ; ret
+        put(&mut d, text(0x1090), &[0xFF, 0x25, 0xA8, 0x20, 0x00, 0x10]); // jmp [ExitProcess's slot]
+        put(&mut d, text(0x10A0), &[0xE8, 0xEB, 0xFF, 0xFF, 0xFF]); // call that thunk
         let rdata = |rva: u32| (rva - 0x2000 + 0x600) as usize;
         for (k, (ilt, name, iat)) in [(0x2080, 0x20C0, 0x20A0), (0x2088, 0x20D0, 0x20A8)].into_iter().enumerate() {
             for (o, v) in [(0, ilt), (12, name), (16, iat)] {
@@ -763,13 +766,14 @@ mod tests {
         let slot = |dll: &str, name: &str| [(2, Field::Abs32, Ref::Import { dll: dll.into(), name: name.into() })];
         let e8 = [0xE8, 0, 0, 0, 0];
         let ff15 = [0xFF, 0x15, 0, 0, 0, 0];
-        // Allowed: calling an exported function, an import slot of a BYOND DLL, and reading BYOND's data.
+        // Allowed: calling an exported function, an import slot of a BYOND DLL or its thunk, and reading BYOND's data.
         applied(jmp_orig(&e8, &call(Place::Export("helper".into()))));
         applied(jmp_orig(&ff15, &slot("byondcore.dll", "Foo")));
+        applied(jmp_orig(&e8, &call(Place::Pattern("FF 25 A0 20 00 10".into(), 0))));
         applied(jmp_orig(&[0xA1, 0, 0, 0, 0], &[(1, Field::Abs32, Ref::Global(Place::Export("global".into())))]));
         // Not allowed.
         skipped(jmp_orig(&e8, &call(Place::Export("?Login@X@@QAEXXZ".into()))), "denied (login)");
-        skipped(jmp_orig(&e8, &call(Place::Pattern("FF 25 A0 20 00 10".into(), 0))), "import thunk");
+        skipped(jmp_orig(&e8, &call(Place::Pattern("FF 25 A8 20 00 10".into(), 0))), "not a BYOND DLL");
         // helper+3 is an instruction, but not a function's start.
         skipped(jmp_orig(&e8, &call(Place::Pattern("55 8B EC".into(), 3))), "not the start of a function");
         skipped(
