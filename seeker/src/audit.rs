@@ -156,7 +156,7 @@ pub fn audit(installed: &[u8], stock_bytes: &[u8], dll: Dll, exe: ExeId) -> Resu
         };
         put(e.body, body, format!("{}'s body", e.name), &mut problem);
         let consts = pe.bytes(e.consts, e.consts_len);
-        let checked = validate::check(&stock, &sweep, &m, e, body);
+        let checked = validate::check(&stock, &sweep, &m, e, body, consts.unwrap_or_default());
         for p in checked.problems {
             problem(p);
         }

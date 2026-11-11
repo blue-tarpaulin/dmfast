@@ -109,8 +109,10 @@ pub struct Patch {
     pub fixups: Vec<Fixup>,
     /// Bytes of zero-filled data it owns.
     pub data: u32,
-    /// Read-only data it uses (strings, tables), placed after its body.
+    /// Read-only data it uses (strings, tables), in the DLL's data section.
     pub consts: Vec<u8>,
+    /// The addresses in [`consts`](Self::consts): each field's offset there, and the offset there it points at.
+    pub const_fixups: Vec<(u32, u32)>,
 }
 
 impl Patch {
@@ -143,6 +145,7 @@ mod tests {
             fixups: Vec::new(),
             data: 0,
             consts: Vec::new(),
+            const_fixups: Vec::new(),
         };
         let on = |p: &Patch, sel: &str| {
             p.wanted(&sel.split(',').filter(|s| !s.is_empty()).map(String::from).collect::<Vec<_>>())

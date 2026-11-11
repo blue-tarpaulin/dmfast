@@ -39,8 +39,9 @@ pub struct Checked {
     pub problems: Vec<String>,
 }
 
-/// Checks `e`'s body (`body`, its bytes as written in the patched DLL) against the stock DLL it was applied to.
-pub fn check(stock: &Pe, sweep: &Sweep, m: &Manifest, e: &Entry, body: &[u8]) -> Checked {
+/// Checks `e`'s body (`body`, its bytes as written in the patched DLL, and `consts`, its constants there) against the
+/// stock DLL it was applied to.
+pub fn check(stock: &Pe, sweep: &Sweep, m: &Manifest, e: &Entry, body: &[u8], consts: &[u8]) -> Checked {
     let mut v = Validator {
         stock,
         sweep,
@@ -93,16 +94,28 @@ pub fn check(stock: &Pe, sweep: &Sweep, m: &Manifest, e: &Entry, body: &[u8]) ->
             v.problem(at, &format!("takes the address +{to:#x}, not an instruction of the body"));
         }
     }
+    let in_consts = |rva: u32| (e.consts..e.consts + e.consts_len).contains(&rva);
     for f in &e.fixups {
-        if !v.claimed.contains(&f.field_rva) {
-            v.problem(f.field_rva, "fixup isn't an instruction's address field");
-        }
-        let at = (f.field_rva.wrapping_sub(e.body)) as usize;
+        // An address in the constants may only point into them.
+        let (bytes, at) = if in_consts(f.field_rva) {
+            if f.field != Field::Abs32
+                || f.class != Class::Const
+                || !(e.consts..=e.consts + e.consts_len).contains(&f.target)
+            {
+                v.problem(f.field_rva, "an address in the constants that doesn't point into them");
+            }
+            (consts, f.field_rva.wrapping_sub(e.consts))
+        } else {
+            if !v.claimed.contains(&f.field_rva) {
+                v.problem(f.field_rva, "fixup isn't an instruction's address field");
+            }
+            (body, f.field_rva.wrapping_sub(e.body))
+        };
         let want = match f.field {
             Field::Rel32 => f.target.wrapping_sub(f.field_rva + 4),
             Field::Abs32 => stock.base.wrapping_add(f.target),
         };
-        if u32_at(body, at) != Some(want) {
+        if u32_at(bytes, at as usize) != Some(want) {
             v.problem(f.field_rva, "field doesn't hold its fixup's address");
         }
     }

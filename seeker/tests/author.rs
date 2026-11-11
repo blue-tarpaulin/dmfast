@@ -37,6 +37,7 @@ fn compiled(name: &str) -> Vec<u8> {
 static COUNTER: LazyLock<Vec<u8>> = LazyLock::new(|| compiled("counter"));
 static EVERY: LazyLock<Vec<u8>> = LazyLock::new(|| compiled("every"));
 static MULTI: LazyLock<Vec<u8>> = LazyLock::new(|| compiled("multi"));
+static INDEX: LazyLock<Vec<u8>> = LazyLock::new(|| compiled("index"));
 
 /// The entry function's first `len` bytes, and the fixups in them with offsets (and `Body` targets) relative to the
 /// entry. The code's other fixups (the prelude's) point into the code.
@@ -79,6 +80,7 @@ fn counter_fixture() {
             fixups: Vec::new(),
             data: 4,
             consts: Vec::new(),
+            const_fixups: Vec::new(),
         }
     );
     // lock inc dword ptr [dmf_data]; jmp dmf_original
@@ -204,4 +206,23 @@ fn spec_errors() {
     assert!(error_at(obj, &no_data, 5).contains("dmf_data"));
     let not_a_function = PLAIN_SPEC.replace("body counter", "body dmf_data");
     assert!(error_at(obj, &not_a_function, 5).contains("dmf_data"));
+}
+
+#[test]
+fn only_reached_code_and_core_panics_trap() {
+    let spec = "patch index byondcore.dll\nabout test\ntier safe\nsite export x\ndisplace 5\nbody index\n";
+    let p = &from_object(INDEX.as_slice(), spec, "index").unwrap()[0];
+    // The prelude's memcpy and friends aren't reached, so they aren't in the code.
+    assert!(p.body.len() < 64, "{} bytes of code", p.body.len());
+    // The bounds check calls the trap: a `ud2` in the code.
+    let trap = p.fixups.iter().find_map(|f| match f.target {
+        Ref::Body(at) if at != p.entry => Some(at as usize),
+        _ => None,
+    });
+    assert_eq!(trap.map(|at| &p.body[at..at + 2]), Some(&[0x0F, 0x0B][..]));
+    // The panic's location is a constant with the address of its file name, named by its folder (`fixture`).
+    assert_eq!(p.const_fixups.len(), 1);
+    let (field, to) = p.const_fixups[0];
+    assert_eq!(&p.consts[field as usize..field as usize + 4], [0; 4]);
+    assert!(p.consts[to as usize..].starts_with(br"fixture\index.rs"), "{:?}", String::from_utf8_lossy(&p.consts));
 }

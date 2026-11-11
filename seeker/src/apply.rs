@@ -80,7 +80,8 @@ pub fn apply(stock_bytes: &[u8], dll: Dll, exe: ExeId, patches: &[Patch]) -> Res
             .enumerate()
             .filter_map(|(i, e)| {
                 let Some(body) = pe.bytes(e.body, e.body_len) else { return Some((i, "body unreadable".into())) };
-                let c = validate::check(&stock, &sweep, &m, e, body);
+                let consts = pe.bytes(e.consts, e.consts_len).unwrap_or_default();
+                let c = validate::check(&stock, &sweep, &m, e, body, consts);
                 (!c.problems.is_empty()).then(|| (i, c.problems.join("; ")))
             })
             .collect();
@@ -209,11 +210,35 @@ fn place<'a>(stock: &Pe, sweep: &Sweep, p: &'a Patch, site: u32, placed: &[Place
             Ok((f.at, f.field, t))
         })
         .collect::<Result<_, String>>()?;
+    let len = p.consts.len() as u32;
+    if let Some(&(at, to)) =
+        p.const_fixups.iter().find(|&&(at, to)| at.checked_add(4).is_none_or(|end| end > len) || to > len)
+    {
+        return Err(format!("the address at constant +{at:#x} (to +{to:#x}) is outside its {len} bytes"));
+    }
     Ok(Placed { p, site, refs })
 }
 
-/// The patched image and its manifest.
+/// The patched image and its manifest. The relocation table goes in the code section, before the data section whose
+/// constants it covers, so it is laid out until its length settles (once, unless it crosses a page).
 fn build(stock: &Pe, exe: ExeId, placed: &[Placed]) -> Result<(Vec<u8>, Manifest), String> {
+    let mut reloc_len = 0;
+    for _ in 0..4 {
+        match lay_out(stock, exe, placed, reloc_len)? {
+            Ok(built) => return Ok(built),
+            Err(len) => reloc_len = len,
+        }
+    }
+    Err("internal: the relocation table's length doesn't settle".into())
+}
+
+/// [`build`] with the relocation table `reloc_len` bytes long; `Err` with its real length if that's wrong.
+fn lay_out(
+    stock: &Pe,
+    exe: ExeId,
+    placed: &[Placed],
+    reloc_len: u32,
+) -> Result<Result<(Vec<u8>, Manifest), u32>, String> {
     let code_rva = stock.next_rva();
     let entries = placed
         .iter()
@@ -232,7 +257,9 @@ fn build(stock: &Pe, exe: ExeId, placed: &[Placed]) -> Result<(Vec<u8>, Manifest
             fixups: s
                 .refs
                 .iter()
-                .map(|&(_, field, _)| Fixup { field_rva: 0, field, class: Class::Body, target: 0 })
+                .map(|&(_, field, _)| (field, Class::Body))
+                .chain(s.p.const_fixups.iter().map(|_| (Field::Abs32, Class::Const)))
+                .map(|(field, class)| Fixup { field_rva: 0, field, class, target: 0 })
                 .collect(),
         })
         .collect();
@@ -254,16 +281,23 @@ fn build(stock: &Pe, exe: ExeId, placed: &[Placed]) -> Result<(Vec<u8>, Manifest
         off = align(off + com::LEN, CODE_ALIGN);
     }
     let reloc_off = off;
-    let relocs = pe::reloc_table(&relocations(stock, &m.entries));
-    let code_len = reloc_off + relocs.len() as u32;
+    let code_len = reloc_off + reloc_len;
 
-    // The data section: each patch's constants, then each patch's zero-filled data.
+    // The data section: each patch's constants (with their addresses), then each patch's zero-filled data.
     let data_rva = align(code_rva + code_len, stock.section_align);
     let mut consts = Vec::new();
     for (e, s) in m.entries.iter_mut().zip(placed) {
         consts.resize(consts.len().next_multiple_of(4), 0);
         e.consts = data_rva + consts.len() as u32;
         consts.extend_from_slice(&s.p.consts);
+        for (f, &(at, to)) in e.fixups[s.refs.len()..].iter_mut().zip(&s.p.const_fixups) {
+            *f = Fixup { field_rva: e.consts + at, field: Field::Abs32, class: Class::Const, target: e.consts + to };
+            put32(&mut consts, (f.field_rva - data_rva) as usize, stock.base.wrapping_add(f.target));
+        }
+    }
+    let relocs = pe::reloc_table(&relocations(stock, &m.entries));
+    if relocs.len() as u32 != reloc_len {
+        return Ok(Err(relocs.len() as u32));
     }
     consts.resize(consts.len().next_multiple_of(DATA_ALIGN as usize), 0);
     m.data_rva = data_rva + consts.len() as u32;
@@ -295,7 +329,7 @@ fn build(stock: &Pe, exe: ExeId, placed: &[Placed]) -> Result<(Vec<u8>, Manifest
         code[at(e.orig)..at(e.orig) + e.displace as usize + 5].copy_from_slice(&original(stock, e)?);
         let body = &mut code[at(e.body)..at(e.body) + e.body_len as usize];
         body.copy_from_slice(&s.p.body);
-        for f in &e.fixups {
+        for f in &e.fixups[..s.refs.len()] {
             let v = match f.field {
                 Field::Rel32 => f.target.wrapping_sub(f.field_rva + 4),
                 Field::Abs32 => stock.base.wrapping_add(f.target),
@@ -319,7 +353,7 @@ fn build(stock: &Pe, exe: ExeId, placed: &[Placed]) -> Result<(Vec<u8>, Manifest
     for e in &m.entries {
         write_site(stock, &mut image, e)?;
     }
-    Ok((image, m))
+    Ok(Ok((image, m)))
 }
 
 /// The data section's size in memory: the constants, the zero-filled data, and the Direct3D helper's cache (at least
@@ -465,6 +499,7 @@ mod tests {
                 .collect(),
             data: 4,
             consts: Vec::new(),
+            const_fixups: Vec::new(),
         }
     }
 
@@ -575,6 +610,34 @@ mod tests {
         assert!(!pe.is_code(m.entries[0].consts), "constants must not be executable");
         p.fixups[0].target = Ref::Const(3);
         skipped(p, "past its 3 bytes");
+    }
+
+    #[test]
+    fn addresses_in_constants() {
+        // push offset table ; pop eax ; jmp original, where the table holds the address of a string after it.
+        let mut p = patch(
+            "site",
+            6,
+            &[0x68, 0, 0, 0, 0, 0x58, 0xE9, 0, 0, 0, 0],
+            &[(1, Field::Abs32, Ref::Const(0)), (7, Field::Rel32, Ref::Original)],
+        );
+        p.consts = b"\0\0\0\0hi\0".to_vec();
+        p.const_fixups = vec![(0, 4)];
+        let stock = dll();
+        let image = applied(p.clone());
+        audit::audit(&image, &stock, Dll::Core, EXE).unwrap();
+        let pe = Pe::parse(&image).unwrap();
+        let e = &Manifest::parse(pe.section(&CODE_SECTION).unwrap().bytes(&image)).unwrap().entries[0];
+        assert_eq!(pe.bytes(e.consts, 4).unwrap(), (BASE + e.consts + 4).to_le_bytes());
+        assert!(pe.relocs.contains(&e.consts), "the address is relocated");
+        // An address in the constants that points out of them, or tampered with, fails.
+        let mut out = p.clone();
+        out.const_fixups = vec![(0, 8)];
+        skipped(out, "outside its 7 bytes");
+        let mut t = image.clone();
+        let at = pe.offset(e.consts).unwrap();
+        t[at] ^= 1;
+        assert!(audit::audit(&t, &stock, Dll::Core, EXE).unwrap_err().contains("doesn't hold its fixup's address"));
     }
 
     #[test]

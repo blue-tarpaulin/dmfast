@@ -29,7 +29,7 @@
 //! (which becomes the start of the patch's data, `data` after them, where `dmf_data` points), to a read-only
 //! `static` (whose bytes join the patch's constants), to a built-in, or to a `ref`.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -53,6 +53,8 @@ const ORIGINAL: &str = "dmf_original";
 const DATA: &str = "dmf_data";
 const COM: &str = "dmf_com";
 const COM_TAIL: &str = "dmf_com_tail";
+/// The prelude's trap, where core's panic paths go.
+const TRAP: &str = "dmf_trap";
 /// The most alignment the code or the data can give: each body and each patch's data start on this boundary.
 const MAX_ALIGN: u64 = 16;
 
@@ -64,10 +66,9 @@ pub fn from_object(obj: &[u8], spec: &str, key: &str) -> Result<Vec<Patch>, Stri
     if file.architecture() != Architecture::I386 {
         bail!("the object is for {:?}, not i686", file.architecture());
     }
-    let layout = Layout::new(&file)?;
     let mut patches = Vec::new();
     for (mut patch, source) in drafts {
-        read_code(&file, &layout, &source, &mut patch)
+        read_code(&file, &source, &mut patch)
             .map_err(|e| format!("line {}: patch {}: {e}", source.line, patch.name))?;
         for (i, site) in source.sites.into_iter().enumerate() {
             let name = if i == 0 { patch.name.clone() } else { format!("{}-{}", patch.name, i + 1) };
@@ -122,6 +123,7 @@ impl Draft {
             fixups: Vec::new(),
             data: data.unwrap_or(0),
             consts: Vec::new(),
+            const_fixups: Vec::new(),
         };
         Ok((patch, Source { line: body_line, symbol, refs, sites }))
     }
@@ -299,15 +301,17 @@ fn end_of(file: &CoffFile<'_>, section: SectionIndex, start: u64, size: u64, len
     }
 }
 
-/// Read-only data a body uses, gathered into the patch's constants: where each symbol's bytes went, and how many.
+/// Read-only data a body uses, gathered into the patch's constants: where each symbol's bytes went (and how many), and
+/// the addresses in them, which may only point at other constants (a panic's location points at its file name).
 #[derive(Default)]
 struct Consts {
     bytes: Vec<u8>,
     at: HashMap<SymbolIndex, (u32, u32)>,
+    fixups: Vec<(u32, u32)>,
 }
 
 impl Consts {
-    /// `symbol`'s bytes (a whole section, for a section symbol) in the constants.
+    /// `symbol`'s bytes (a whole section, for a section symbol) in the constants, with what its addresses point at.
     fn add<'data>(&mut self, file: &CoffFile<'data>, symbol: &impl ObjectSymbol<'data>) -> Result<(u32, u32), String> {
         if let Some(&at) = self.at.get(&symbol.index()) {
             return Ok(at);
@@ -316,9 +320,6 @@ impl Consts {
         let section = file.section_by_index(index).map_err(|e| e.to_string())?;
         if !matches!(section.kind(), SectionKind::ReadOnlyData | SectionKind::ReadOnlyString) {
             bail!("it is defined in the object outside the code, and not in read-only data");
-        }
-        if section.relocations().next().is_some() {
-            bail!("its section has relocations (constants can't hold addresses)");
         }
         let bytes = section.data().map_err(|e| e.to_string())?;
         let (start, end) = match symbol.kind() {
@@ -330,6 +331,22 @@ impl Consts {
         let at = (self.bytes.len() as u32, data.len() as u32);
         self.bytes.extend_from_slice(data);
         self.at.insert(symbol.index(), at);
+        for (pos, relocation) in section.relocations().filter(|(pos, _)| (start..end).contains(pos)) {
+            let field = (at.0 + (pos - start) as u32) as usize;
+            let RelocationTarget::Symbol(target) = relocation.target() else { bail!("an address without a symbol") };
+            if relocation.flags() != (RelocationFlags::Coff { typ: pe::IMAGE_REL_I386_DIR32 }) {
+                bail!("it holds a relocation that isn't an address");
+            }
+            let addend = self.bytes.get(field..field + 4).ok_or("an address past its end")?;
+            let addend = u32::from_le_bytes(addend.try_into().unwrap());
+            self.bytes[field..field + 4].fill(0);
+            let target = file.symbol_by_index(target).map_err(|e| e.to_string())?;
+            let (to, len) = self.add(file, &target).map_err(|e| format!("an address in it: {e}"))?;
+            if addend > len {
+                bail!("an address in it is past its target's {len} bytes");
+            }
+            self.fixups.push((field as u32, to + addend));
+        }
         Ok(at)
     }
 }
@@ -345,12 +362,19 @@ fn zero_filled<'data>(section: &impl ObjectSection<'data>) -> bool {
     }
 }
 
-/// The object's code, as every patch from it gets it (relocated fields not yet zeroed), and where the
-/// zero-initialised statics it uses go in a patch's data.
+/// Whether `name` (a symbol the object leaves undefined) is one of core's panic paths: in `core::panicking`, or one of
+/// core's `*_fail`/`*_failed` helpers (`slice_index_fail`, `unwrap_failed`, ...). They never return.
+fn core_panic(name: &str) -> bool {
+    name.contains("4core") && (name.contains("9panicking") || name.contains("_fail"))
+}
+
+/// A patch's code: the executable sections its entry reaches (relocated fields not yet zeroed), where
+/// [`TRAP`] is in it if core's panic paths go there, and where the zero-initialised statics it uses go in its data.
 struct Layout {
     code: Vec<u8>,
     /// Each executable section's offset in the code.
     text: HashMap<SectionIndex, u32>,
+    trap: Option<u32>,
     /// Each zero-initialised section the code uses, and its offset in the data.
     zero: HashMap<SectionIndex, u32>,
     /// Where the spec's `data` starts, after the statics.
@@ -358,27 +382,46 @@ struct Layout {
 }
 
 impl Layout {
-    fn new(file: &CoffFile<'_>) -> Result<Layout, String> {
+    fn new(file: &CoffFile<'_>, entry: SectionIndex) -> Result<Layout, String> {
+        let trap = file.symbols().find(|s| s.section_index().is_some() && plain(s) == Some(TRAP));
+        // The sections the entry's code reaches through its relocations.
+        let (mut reached, mut todo) = (HashSet::from([entry]), vec![entry]);
+        let (mut used, mut panics) = (BTreeSet::new(), false);
+        while let Some(index) = todo.pop() {
+            let section = file.section_by_index(index).map_err(|e| e.to_string())?;
+            for (_, relocation) in section.relocations() {
+                let RelocationTarget::Symbol(target) = relocation.target() else { continue };
+                let Ok(target) = file.symbol_by_index(target) else { continue };
+                let to = match target.section_index() {
+                    Some(to) => to,
+                    None if target.name().is_ok_and(core_panic) => {
+                        panics = true;
+                        let Some(to) = trap.as_ref().and_then(|t| t.section_index()) else { continue };
+                        to
+                    }
+                    None => continue,
+                };
+                let kind = file.section_by_index(to).map(|s| (s.kind(), zero_filled(&s))).map_err(|e| e.to_string())?;
+                match kind {
+                    (SectionKind::Text, _) if reached.insert(to) => todo.push(to),
+                    (_, true) => {
+                        used.insert(to.0);
+                    }
+                    _ => {}
+                }
+            }
+        }
         let (mut code, mut text) = (Vec::new(), HashMap::new());
-        for section in file.sections().filter(|s| s.kind() == SectionKind::Text && s.size() > 0) {
+        for section in file.sections().filter(|s| reached.contains(&s.index())) {
             let bytes = section.data().map_err(|e| format!("reading {}: {e}", section.name().unwrap_or("code")))?;
             code.resize(code.len().next_multiple_of(section.align().clamp(1, MAX_ALIGN) as usize), 0xCC);
             text.insert(section.index(), code.len() as u32);
             code.extend_from_slice(bytes);
         }
-        if code.is_empty() {
-            bail!("the object has no code");
-        }
-        let mut used = std::collections::BTreeSet::new();
-        for section in file.sections().filter(|s| text.contains_key(&s.index())) {
-            for (_, relocation) in section.relocations() {
-                let RelocationTarget::Symbol(index) = relocation.target() else { continue };
-                let Some(at) = file.symbol_by_index(index).ok().and_then(|s| s.section_index()) else { continue };
-                if file.section_by_index(at).is_ok_and(|s| zero_filled(&s)) {
-                    used.insert(at.0);
-                }
-            }
-        }
+        let trap = match trap {
+            Some(t) if panics => Some(text[&t.section_index().unwrap()] + t.address() as u32),
+            _ => None,
+        };
         let (mut zero, mut len) = (HashMap::new(), 0u64);
         for index in used {
             let section = file.section_by_index(SectionIndex(index)).map_err(|e| e.to_string())?;
@@ -391,7 +434,7 @@ impl Layout {
             len += section.size();
         }
         let zero_len = u32::try_from(len.next_multiple_of(MAX_ALIGN)).map_err(|_| "the statics are too big")?;
-        Ok(Layout { code, text, zero, zero_len })
+        Ok(Layout { code, text, trap, zero, zero_len })
     }
 }
 
@@ -408,8 +451,8 @@ fn place_of(file: &CoffFile<'_>, section: SectionIndex, section_name: &str, pos:
 }
 
 /// Reads `patch`'s code (fields zeroed), entry, fixups, constants, and data (its statics, then the spec's `data`)
-/// from the object.
-fn read_code(file: &CoffFile<'_>, layout: &Layout, source: &Source, patch: &mut Patch) -> Result<(), String> {
+/// from the object: only the functions its body reaches.
+fn read_code(file: &CoffFile<'_>, source: &Source, patch: &mut Patch) -> Result<(), String> {
     let name = source.symbol.as_str();
     let mut found = file
         .symbols()
@@ -418,9 +461,11 @@ fn read_code(file: &CoffFile<'_>, layout: &Layout, source: &Source, patch: &mut 
     if found.next().is_some() {
         bail!("more than one symbol is named {name}");
     }
-    let Some(&start) = symbol.section_index().and_then(|s| layout.text.get(&s)) else {
-        bail!("{name} isn't a function");
-    };
+    let section =
+        symbol.section_index().filter(|&s| file.section_by_index(s).is_ok_and(|s| s.kind() == SectionKind::Text));
+    let Some(section) = section else { bail!("{name} isn't a function") };
+    let layout = Layout::new(file, section)?;
+    let start = layout.text[&section];
     let spec_data = patch.data;
     let mut code = layout.code.clone();
     let (mut fixups, mut consts) = (Vec::new(), Consts::default());
@@ -448,7 +493,7 @@ fn read_code(file: &CoffFile<'_>, layout: &Layout, source: &Source, patch: &mut 
             };
             let target = file.symbol_by_index(index).map_err(|e| e.to_string())?;
             let target_name = target.name().unwrap_or("(unnamed)");
-            let target = resolve(file, layout, &mut consts, &target, addend, field, source, spec_data)
+            let target = resolve(file, &layout, &mut consts, &target, addend, field, source, spec_data)
                 .map_err(|e| format!("the relocation at {place} to {target_name}: {e}"))?;
             fixups.push(Fixup { at: at as u32, field, target });
         }
@@ -456,7 +501,7 @@ fn read_code(file: &CoffFile<'_>, layout: &Layout, source: &Source, patch: &mut 
     fixups.sort_by_key(|f| f.at);
     patch.entry = start + symbol.address() as u32;
     patch.data = layout.zero_len + spec_data;
-    (patch.body, patch.fixups, patch.consts) = (code, fixups, consts.bytes);
+    (patch.body, patch.fixups, patch.consts, patch.const_fixups) = (code, fixups, consts.bytes, consts.fixups);
     Ok(())
 }
 
@@ -516,6 +561,9 @@ fn resolve<'data>(
     if !target.is_undefined() {
         bail!("it isn't in a section");
     }
+    if let Some(trap) = layout.trap.filter(|_| target.name().is_ok_and(core_panic)) {
+        return Ok(Ref::Body(trap));
+    }
     // LLVM writes REL32 as `S + A - (P + 4)`, counting from the field's end like x86, so its addend is 0.
     if field == Field::Rel32 && addend != 0 {
         bail!("REL32 addend {addend}, not 0");
@@ -561,7 +609,11 @@ pub fn compile(rustc: &str, patch: &Path, out_dir: &Path, version: &str) -> Resu
         .args(["--edition", "2024", "--crate-type", "lib", "--crate-name", "seeker_patch", "--emit", "obj"])
         .args(["-C", "opt-level=2", "-C", "panic=abort", "-C", "codegen-units=1"])
         // No jump tables: they are indirect branches.
-        .args(["-C", "llvm-args=-min-jump-table-entries=1000000", "--target", "i686-pc-windows-msvc", "-o"])
+        .args(["-C", "llvm-args=-min-jump-table-entries=1000000", "--target", "i686-pc-windows-msvc"])
+        // A panic's location names its file: by the patch's key, not this machine's paths.
+        .arg(format!("--remap-path-prefix={}={key}", patch.parent().unwrap().display()))
+        .arg(format!("--remap-path-prefix={}=seeker", out_dir.display()))
+        .arg("-o")
         .arg(&obj)
         .arg(&root)
         .env("DMFAST_VERSION", version)

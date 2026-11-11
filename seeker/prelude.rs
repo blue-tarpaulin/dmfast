@@ -28,6 +28,13 @@ unsafe extern "C" {
 /// Panics stop DreamSeeker at once.
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
+    dmf_trap()
+}
+
+/// Where `author` points core's panic paths (a failed bounds check, `unwrap` of `None`, ...), which a lone object
+/// leaves undefined: stops DreamSeeker at once, as [`panic`] does.
+#[unsafe(no_mangle)]
+pub extern "C" fn dmf_trap() -> ! {
     unsafe { asm!("ud2", options(noreturn, nomem, nostack)) }
 }
 
