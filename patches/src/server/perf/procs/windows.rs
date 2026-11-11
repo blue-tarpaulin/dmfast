@@ -1,9 +1,11 @@
-//! `procs`, Windows: byondcore's find-or-add hooked, its append entered by [`append`].
+//! `procs`, Windows: byondcore's calls to its find-or-add redirected, its append entered by [`append`]. The function
+//! itself stays as it is, so tools that find it by its bytes (auxtools' hot reload) still do; their calls go to it,
+//! and the index rebuilds when it sees the count they changed.
 
 use std::arch::naked_asm;
 
 use super::{FindFn, Globals, find_or_add, init};
-use crate::base::code::{Addr, trampoline};
+use crate::base::code::Addr;
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
 
@@ -23,9 +25,6 @@ const COMPARE: &str = "55 8B EC 8B 45 08 8B 55 0C 8B 08 2B 0A 74 ?? 8B C1 5D C3 
                        75 ?? 0F BE 4A 1A 56 0F BE 70 1A 2B F1 75 ?? 8B 48 04 2B 4A 04 75 ?? 8B 48 08 2B 4A 08 75 ?? \
                        8B 48 0C 2B 4A 0C 75 ?? 0F BE 70 18 0F BE 4A 18 2B F1 75 ?? 0F B6 70 19 0F B6 4A 19 2B F1 74 ?? \
                        8B C6 5E 5D C3 8B 48 20 2B 4A 20 74 ?? 8B C1 5E 5D C3 8B 40 24 2B 42 24 5E 5D C3";
-/// Its first instructions, moved into the trampoline: push ebp ; mov ebp,esp ; mov eax,[count]. Not `Image::hook`:
-/// `[count]` is relocated, which `untouched` refuses; nothing branches into them.
-const ENTRY: usize = 8;
 
 /// Enters the original after its scan loop, as if the scan had found nothing.
 ///
@@ -58,8 +57,11 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
     ensure!(core.call_target(f + 0x1F)? == cmp, "proc-table find-or-add: unexpected comparator");
     COUNT.set(count);
     APPEND_AT.set(f + 0x38);
-    let original = trampoline(core.bytes(f, ENTRY)?, f + ENTRY)?;
-    core.jump(f, 5, find_or_add as FindFn)?;
-    init(Globals { count, array, original, append: append as FindFn as usize })?;
-    Ok(core.report(&[f]))
+    let calls = core.calls_to(f)?;
+    ensure!(!calls.is_empty(), "proc-table find-or-add: no callers");
+    for &c in calls.iter() {
+        core.retarget(c + 1, find_or_add as FindFn)?;
+    }
+    init(Globals { count, array, original: f, append: append as FindFn as usize })?;
+    Ok(core.report(calls.as_slice()))
 }

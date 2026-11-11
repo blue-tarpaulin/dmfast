@@ -1,4 +1,6 @@
-//! `procs`, Linux: libbyond's find-or-add hooked, its append entered by [`append`].
+//! `procs`, Linux: libbyond's calls to its find-or-add redirected, its append entered by [`append`]. The function
+//! itself stays as it is, so tools that find it by its bytes (auxtools' hot reload) still do; their calls go to it,
+//! and the index rebuilds when it sees the count they changed.
 
 use std::arch::naked_asm;
 
@@ -25,8 +27,6 @@ const COMPARE: &str = "53 8B 4C 24 08 8B 54 24 0C 8B 01 2B 02 75 ?? 8B 41 1C 2B 
                        0F BE 41 1A 0F BE 5A 1A 29 D8 75 ?? 8B 41 04 2B 42 04 75 ?? 8B 41 08 2B 42 08 75 ?? \
                        8B 41 0C 2B 42 0C 75 ?? 0F BE 41 18 0F BE 5A 18 29 D8 75 ?? 0F B6 41 19 0F B6 5A 19 29 D8 75 ?? \
                        8B 41 20 2B 42 20 75 ?? 8B 41 24 2B 42 24 5B C3";
-/// Its first instructions, moved by the hook: push edi ; push esi ; push ebx ; sub esp,10h.
-const ENTRY: usize = 6;
 
 /// Enters the original after its scan loop, as if the scan had found nothing.
 ///
@@ -58,7 +58,11 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
     ensure!(core.call_target(f + 0x3B)? == cmp, "proc-table find-or-add: unexpected comparator");
     COUNT.set(count);
     APPEND_AT.set(f + 0x50);
-    let original = core.hook(f, ENTRY, find_or_add as FindFn)?;
-    init(Globals { count, array, original, append: append as FindFn as usize })?;
-    Ok(core.report(&[f]))
+    let calls = core.calls_to(f)?;
+    ensure!(!calls.is_empty(), "proc-table find-or-add: no callers");
+    for &c in calls.iter() {
+        core.retarget(c + 1, find_or_add as FindFn)?;
+    }
+    init(Globals { count, array, original: f, append: append as FindFn as usize })?;
+    Ok(core.report(calls.as_slice()))
 }
