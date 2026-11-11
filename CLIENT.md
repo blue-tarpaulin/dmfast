@@ -25,4 +25,5 @@ E.g. `--client --fixes extended`.
 | Icon chains | `chainmem` | safe | A runtime icon rebuilt from its own icon many times (a chain) is drawn 13 links at a time, so DreamSeeker no longer holds every link in memory at once. The server's `iconchain` [bug fix](BUGFIXES.md) keeps chains short. | - |
 | Stray DreamSeekers | `commandlinks` | safe | A DreamSeeker started only for a page's `byond://winset/get` link (one that escaped its page) exits at once instead of opening the pager and staying open and idle. | [2914968](https://www.byond.com/forum/post/2914968) |
 | Echo in stereo | `echostereo` | safe | A sound with `echo` or `environment` but no position keeps its stereo, instead of being downmixed to mono. | [2963783](https://www.byond.com/forum/post/2963783) |
+| Smooth pitch changes | `pitchretune` | safe | Updating a playing sound's `pitch` (`SOUND_UPDATE`) retunes its pitch filters instead of restarting them, so a changing pitch no longer stutters. | [2953774](https://www.byond.com/forum/post/2953774) |
 
