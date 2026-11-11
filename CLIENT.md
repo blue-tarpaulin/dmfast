@@ -19,3 +19,4 @@ E.g. `--client --fixes extended`.
 |---|---|---|---|---|
 | dmfast banner | `version` | safe | Options and Messages says the dmfast version | - |
 | Particle drawing | `particles` | safe | A set of more than 10,922 icon particles of one icon no longer writes past the end of BYOND's index buffer, and the depth buffer covers the whole render target. | - |
+| `preload_rsc` downloads | `rscdownload` | safe | Fast `preload_rsc` downloads are no longer cancelled midway. DreamDaemon's `world.Export()` has the same bug: the `httpexport` [bug fix](BUGFIXES.md). | [2992012](https://www.byond.com/forum/post/2992012) |
