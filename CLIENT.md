@@ -22,4 +22,5 @@ E.g. `--client --fixes extended`.
 | `preload_rsc` downloads | `rscdownload` | safe | Fast `preload_rsc` downloads are no longer cancelled midway. DreamDaemon's `world.Export()` has the same bug: the `httpexport` [bug fix](BUGFIXES.md). | [2992012](https://www.byond.com/forum/post/2992012) |
 | More sounds at once | `voices` | safe | Mixes up to 128 sounds at once instead of 32, so many effects no longer silence background sounds. | - |
 | Sound priority | `soundpriority` | extended | A higher priority (per the ref) keeps its channel instead of being the first silenced. Sounds left at the default 0 are now the first silenced. | - |
+| Icon chains | `chainmem` | safe | A runtime icon rebuilt from its own icon many times (a chain) is drawn 13 links at a time, so DreamSeeker no longer holds every link in memory at once. The server's `iconchain` [bug fix](BUGFIXES.md) keeps chains short. | - |
 

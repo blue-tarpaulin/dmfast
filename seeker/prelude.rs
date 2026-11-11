@@ -166,3 +166,9 @@ pub const fn with_nul<const N: usize>(text: &str) -> [u8; N] {
     }
     out
 }
+
+/// A patch's `static mut` state as a reference (`borrow(&raw mut STATE)`), as the edition guide borrows one
+/// (`&mut STATE` is an error). The caller makes sure nothing else borrows it meanwhile.
+pub unsafe fn borrow<T>(ptr: *mut T) -> &'static mut T {
+    unsafe { &mut *ptr }
+}
