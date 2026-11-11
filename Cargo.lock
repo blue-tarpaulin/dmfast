@@ -52,7 +52,7 @@ dependencies = [
 name = "dmfast-base"
 version = "7.0.0"
 dependencies = [
- "dmfast-seeker",
+ "dmfast-format",
  "libc",
  "libmimalloc-sys",
  "memchr",
@@ -61,9 +61,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dmfast-format"
+version = "7.0.0"
+
+[[package]]
 name = "dmfast-install"
 version = "7.0.0"
 dependencies = [
+ "dmfast-format",
  "dmfast-seeker",
  "object",
  "windows-sys",
@@ -91,6 +96,7 @@ dependencies = [
 name = "dmfast-seeker"
 version = "7.0.0"
 dependencies = [
+ "dmfast-format",
  "iced-x86",
  "object",
 ]

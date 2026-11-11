@@ -5,9 +5,10 @@
 //! All numbers are little-endian `u32`s; addresses are RVAs. Layout:
 //! - header: [`MAGIC`], the gate's program identity (dreamseeker.exe's `TimeDateStamp` and `SizeOfImage`), the
 //!   entry count, then the offsets (from the section start) of the entries, fixups, and strings, the fixup count,
-//!   and the patches' data area (RVA, length);
+//!   the patches' data area (RVA, length), and the Direct3D helper and its cache (RVAs, 0 without them);
 //! - entries, [`ENTRY_LEN`] bytes each: site, displaced length, gate, original instructions, body, body length, first
-//!   fixup, fixup count, name, and description (offsets into the strings), and constants and their length;
+//!   fixup, fixup count, name, and description (offsets into the strings), constants and their length, and the
+//!   entry (where in the body the gate jumps to);
 //! - fixups, [`FIXUP_LEN`] bytes each: the field's RVA, its [`Field`] and [`Class`] (one byte each, then two zero
 //!   bytes), and the target's RVA (an import's: its IAT slot);
 //! - strings, NUL-terminated UTF-8.
@@ -17,9 +18,9 @@
 pub const CODE_SECTION: [u8; 8] = *b".dmfsk\0\0";
 /// The patches' zero-filled data (read and write).
 pub const DATA_SECTION: [u8; 8] = *b".dmfskd\0";
-const MAGIC: [u8; 8] = *b"DMFSEEK\x01";
-const HEADER_LEN: usize = 44;
-const ENTRY_LEN: usize = 48;
+const MAGIC: [u8; 8] = *b"DMFSEEK\x02";
+const HEADER_LEN: usize = 52;
+const ENTRY_LEN: usize = 52;
 const FIXUP_LEN: usize = 12;
 
 /// The program whose gates are open: dreamseeker.exe, by its PE header's `TimeDateStamp` and `SizeOfImage`.
@@ -57,6 +58,10 @@ pub enum Class {
     Import = 6,
     /// The patch's own read-only constants.
     Const = 7,
+    /// The Direct3D helper's `dmf_com` (`com.rs`).
+    Com = 8,
+    /// The Direct3D helper's `dmf_com_tail`.
+    ComTail = 9,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -78,6 +83,8 @@ pub struct Entry {
     /// A copy of the site's `displace` original bytes, then a `jmp` back to `site + displace`.
     pub orig: u32,
     pub body: u32,
+    /// Where the gate jumps to, in the body.
+    pub entry: u32,
     pub body_len: u32,
     /// The patch's read-only constants (data, never run), after its body.
     pub consts: u32,
@@ -90,10 +97,13 @@ pub struct Manifest {
     pub exe: ExeId,
     pub data_rva: u32,
     pub data_len: u32,
+    /// The Direct3D helper (`com.rs`) and its cache; 0 when no patch uses it.
+    pub com: u32,
+    pub com_cache: u32,
     pub entries: Vec<Entry>,
 }
 
-pub(crate) fn u32_at(d: &[u8], o: usize) -> Option<u32> {
+fn u32_at(d: &[u8], o: usize) -> Option<u32> {
     Some(u32::from_le_bytes(d.get(o..o.checked_add(4)?)?.try_into().ok()?))
 }
 
@@ -124,6 +134,8 @@ impl Class {
             5 => Class::Global,
             6 => Class::Import,
             7 => Class::Const,
+            8 => Class::Com,
+            9 => Class::ComTail,
             _ => return None,
         })
     }
@@ -161,7 +173,7 @@ impl Manifest {
         let h = |i: usize| u32_at(section, 8 + 4 * i);
         let (timestamp, image_size, count) = (h(0)?, h(1)?, h(2)? as usize);
         let (entries, fixups, strings, fixup_count) = (h(3)? as usize, h(4)? as usize, h(5)? as usize, h(6)? as usize);
-        let (data_rva, data_len) = (h(7)?, h(8)?);
+        let (data_rva, data_len, com, com_cache) = (h(7)?, h(8)?, h(9)?, h(10)?);
         let fixup = |i: usize| -> Option<Fixup> {
             let o = fixups.checked_add(i.checked_mul(FIXUP_LEN)?)?;
             let (field, class, pad) = (*section.get(o + 4)?, *section.get(o + 5)?, u32_at(section, o + 4)? >> 16);
@@ -187,6 +199,7 @@ impl Manifest {
                 gate: e(2)?,
                 orig: e(3)?,
                 body: e(4)?,
+                entry: e(12)?,
                 body_len: e(5)?,
                 consts: e(10)?,
                 consts_len: e(11)?,
@@ -195,7 +208,7 @@ impl Manifest {
                 about: str_at(section, strings.checked_add(e(9)? as usize)?)?,
             });
         }
-        Some(Manifest { exe: ExeId { timestamp, image_size }, data_rva, data_len, entries: out })
+        Some(Manifest { exe: ExeId { timestamp, image_size }, data_rva, data_len, com, com_cache, entries: out })
     }
 
     /// The manifest's bytes, for the start of the [`CODE_SECTION`].
@@ -211,7 +224,7 @@ impl Manifest {
         {
             d.extend_from_slice(&v.to_le_bytes());
         }
-        for v in [fixup_count as u32, self.data_rva, self.data_len] {
+        for v in [fixup_count as u32, self.data_rva, self.data_len, self.com, self.com_cache] {
             d.extend_from_slice(&v.to_le_bytes());
         }
         let mut text = Vec::new();
@@ -237,6 +250,7 @@ impl Manifest {
                 about,
                 e.consts,
                 e.consts_len,
+                e.entry,
             ] {
                 d.extend_from_slice(&v.to_le_bytes());
             }
@@ -262,6 +276,8 @@ mod tests {
             exe: ExeId { timestamp: 0x1234_5678, image_size: 0xD_0000 },
             data_rva: 0x50_0000,
             data_len: 8,
+            com: 0x40_0300,
+            com_cache: 0x50_0008,
             entries: vec![
                 Entry {
                     name: "one".into(),
@@ -271,6 +287,7 @@ mod tests {
                     gate: 0x40_0100,
                     orig: 0x40_0140,
                     body: 0x40_0150,
+                    entry: 0x40_0158,
                     body_len: 20,
                     consts: 0x40_0170,
                     consts_len: 3,
@@ -289,14 +306,15 @@ mod tests {
                     gate: 0x40_0200,
                     orig: 0x40_0240,
                     body: 0x40_0250,
+                    entry: 0x40_0250,
                     body_len: 5,
                     consts: 0,
                     consts_len: 0,
                     fixups: vec![Fixup {
                         field_rva: 0x40_0251,
                         field: Field::Rel32,
-                        class: Class::Original,
-                        target: 0x40_0240,
+                        class: Class::ComTail,
+                        target: 0x40_0304,
                     }],
                 },
             ],
@@ -304,6 +322,6 @@ mod tests {
         let bytes = m.encode();
         assert_eq!(Manifest::parse(&bytes), Some(m));
         assert_eq!(Manifest::parse(&bytes[..bytes.len() - 1]), None, "a cut string is not a manifest");
-        assert_eq!(Manifest::parse(b"DMFSEEK\x02"), None);
+        assert_eq!(Manifest::parse(b"DMFSEEK\x01"), None, "an older manifest");
     }
 }

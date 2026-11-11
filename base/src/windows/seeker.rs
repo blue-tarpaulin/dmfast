@@ -2,7 +2,7 @@
 //! so servers and the compiler run stock code and dmfast's patterns match. It writes shipped bytes, so it is outside
 //! [`crate::ledger`]. A site that doesn't match the manifest is left alone, with a warning.
 
-use dmfast_seeker::format::{CODE_SECTION, Entry, JMP_LEN, Manifest};
+use dmfast_format::manifest::{CODE_SECTION, Entry, JMP_LEN, Manifest};
 
 use super::CORE_NAME;
 use crate::image::Image;
