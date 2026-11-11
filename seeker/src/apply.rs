@@ -32,7 +32,7 @@ enum Target {
     Body(u32),
     Data(u32),
     Const(u32),
-    Original,
+    Original(u32),
     Com,
     ComTail,
 }
@@ -120,8 +120,9 @@ fn resolve(stock: &Pe, place: &Place) -> Result<u32, String> {
 }
 
 /// Checks that `displace` bytes at `site` can become a jump to a gate and run elsewhere unchanged: at least 5 bytes
-/// of whole instructions in the code, starting on one, none relative, no relocated address across their edges, and
-/// nothing found branching into them.
+/// of whole instructions in the code, starting on one, relative branches only to their end (in the copy of the
+/// original instructions, that's the jump back), no relocated address across their edges, and nothing found
+/// branching into them.
 pub(crate) fn check_site(stock: &Pe, sweep: &Sweep, site: u32, displace: u32) -> Result<(), String> {
     if displace < JMP_LEN {
         return Err(format!("displace {displace} is less than a jmp's 5 bytes"));
@@ -143,10 +144,12 @@ pub(crate) fn check_site(stock: &Pe, sweep: &Sweep, site: u32, displace: u32) ->
         if ins.is_invalid() {
             return Err(format!("site +{site:#x} doesn't decode"));
         }
-        if ins.op_kinds().any(|k| {
+        let branch = ins.op_kinds().any(|k| {
             matches!(k, OpKind::NearBranch16 | OpKind::NearBranch32 | OpKind::FarBranch16 | OpKind::FarBranch32)
-        }) {
-            return Err(format!("site +{:#x} has a relative branch", ins.ip32()));
+        });
+        // A jump to the site's end lands, in the copy of its original instructions, on the jump back.
+        if branch && (ins.is_call_near() || ins.near_branch_target() != u64::from(site + displace)) {
+            return Err(format!("site +{:#x} has a relative branch out of the site", ins.ip32()));
         }
         len += ins.len() as u32;
     }
@@ -197,7 +200,8 @@ fn place<'a>(stock: &Pe, sweep: &Sweep, p: &'a Patch, site: u32, placed: &[Place
                 Ref::Const(o) if (*o as usize) < p.consts.len() => Target::Const(*o),
                 Ref::Const(o) => return Err(format!("constant offset {o:#x} is past its {} bytes", p.consts.len())),
                 Ref::Resume => Target::Fixed(Class::Resume, site + p.displace),
-                Ref::Original => Target::Original,
+                Ref::Original(o) if *o < p.displace => Target::Original(*o),
+                Ref::Original(o) => return Err(format!("original offset {o} is past its {} bytes", p.displace)),
                 Ref::Code(place) => Target::Fixed(Class::Code, resolve(stock, place)?),
                 Ref::Global(place) => Target::Fixed(Class::Global, resolve(stock, place)?),
                 Ref::Import { dll, name } => Target::Fixed(
@@ -318,7 +322,7 @@ fn lay_out(
                 Target::Body(o) => (Class::Body, e.body + o),
                 Target::Data(o) => (Class::Data, m.data_rva + data_off + o),
                 Target::Const(o) => (Class::Const, e.consts + o),
-                Target::Original => (Class::Original, e.orig),
+                Target::Original(o) => (Class::Original, e.orig + o),
                 Target::Com => (Class::Com, m.com),
                 Target::ComTail => (Class::ComTail, m.com + com::TAIL),
             };
@@ -399,9 +403,9 @@ mod tests {
     const EXE: ExeId = ExeId { timestamp: 0x1234_5678, image_size: 0xD_0000 };
 
     /// A small PE32 DLL: `.text` (exports `site`, `helper`, `?Login@X@@QAEXXZ`, `relocsite`, and `site2`, an import
-    /// thunk and a call to it, and a jump into `site2`), `.rdata` (imports `byondcore.dll!Foo` and
-    /// `kernel32.dll!ExitProcess`, the export table, an exported `global`, and an exported `slot` in the IAT), and
-    /// `.reloc`.
+    /// thunk and a call to it, a jump into `site2`, and a `je` to the end of `test eax, eax ; je ; xor eax, eax`),
+    /// `.rdata` (imports `byondcore.dll!Foo` and `kernel32.dll!ExitProcess`, the export table, an exported `global`,
+    /// and an exported `slot` in the IAT), and `.reloc`.
     fn dll() -> Vec<u8> {
         let mut d = vec![0u8; 0xA00];
         let put = |d: &mut Vec<u8>, o: usize, b: &[u8]| d[o..o + b.len()].copy_from_slice(b);
@@ -445,6 +449,7 @@ mod tests {
         put(&mut d, text(0x1050), &[0xE9, 0x0D, 0, 0, 0]); // jmp site2+2
         put(&mut d, text(0x1060), &[0xC7, 0x01, 0, 0, 0, 0, 0xC3]); // site2
         put(&mut d, text(0x1070), &[0xE8, 0xCB, 0xFF, 0xFF, 0xFF]); // call the thunk
+        put(&mut d, text(0x1080), &[0x85, 0xC0, 0x74, 0x02, 0x31, 0xC0, 0xC3]); // test ; je +2 ; xor ; ret
         let rdata = |rva: u32| (rva - 0x2000 + 0x600) as usize;
         for (k, (ilt, name, iat)) in [(0x2080, 0x20C0, 0x20A0), (0x2088, 0x20D0, 0x20A8)].into_iter().enumerate() {
             for (o, v) in [(0, ilt), (12, name), (16, iat)] {
@@ -509,7 +514,7 @@ mod tests {
             "site",
             6,
             &[0xF0, 0xFF, 0x05, 0, 0, 0, 0, 0xE9, 0, 0, 0, 0],
-            &[(3, Field::Abs32, Ref::Data(0)), (8, Field::Rel32, Ref::Original)],
+            &[(3, Field::Abs32, Ref::Data(0)), (8, Field::Rel32, Ref::Original(0))],
         )
     }
 
@@ -552,7 +557,7 @@ mod tests {
     #[test]
     fn site_with_a_relocated_address() {
         let stock = dll();
-        let image = applied(patch("relocsite", 5, &[0xE9, 0, 0, 0, 0], &[(1, Field::Rel32, Ref::Original)]));
+        let image = applied(patch("relocsite", 5, &[0xE9, 0, 0, 0, 0], &[(1, Field::Rel32, Ref::Original(0))]));
         let pe = Pe::parse(&image).unwrap();
         let m = Manifest::parse(pe.section(&CODE_SECTION).unwrap().bytes(&image)).unwrap();
         let orig = m.entries[0].orig;
@@ -572,13 +577,32 @@ mod tests {
         let bytes = Pe::parse(&stock).unwrap().bytes(0x1030, 6).unwrap().to_vec();
         let hash = dmfast_format::fingerprint::fnv1a(&bytes, &[(1, 4)]);
         let at = |hash| {
-            let mut p = patch("site", 5, &[0xE9, 0, 0, 0, 0], &[(1, Field::Rel32, Ref::Original)]);
+            let mut p = patch("site", 5, &[0xE9, 0, 0, 0, 0], &[(1, Field::Rel32, Ref::Original(0))]);
             p.site = Place::Fingerprint { prefix: "A1 ?? ?? ?? ?? C3".into(), len: 6, hash };
             p
         };
         let a = apply(&stock, Dll::Core, EXE, &[at(hash)]).unwrap();
         assert_eq!(a.lines, ["p: applied at +0x1030"]);
         skipped(at(hash ^ 1), &format!("(+0x1030: {hash:#x})"));
+    }
+
+    #[test]
+    fn site_branch_to_its_end_and_original_offset() {
+        // jmp to the copy's `je` (offset 2), skipping its `test eax, eax`.
+        let mut p = patch("site", 6, &[0xE9, 0, 0, 0, 0], &[(1, Field::Rel32, Ref::Original(2))]);
+        p.site = Place::Pattern("85 C0 74 02 31 C0".into(), 0);
+        let image = applied(p.clone());
+        audit::audit(&image, &dll(), Dll::Core, EXE).unwrap();
+        let pe = Pe::parse(&image).unwrap();
+        let e = &Manifest::parse(pe.section(&CODE_SECTION).unwrap().bytes(&image)).unwrap().entries[0];
+        // The copy keeps the `je`, which lands on the jump back.
+        assert_eq!(pe.bytes(e.orig, 11).unwrap(), [&[0x85, 0xC0, 0x74, 0x02, 0x31, 0xC0][..], &e.jump_back()].concat());
+        let mut mid = p.clone();
+        mid.fixups[0].target = Ref::Original(3);
+        skipped(mid, "branch fixup to something that isn't code");
+        let mut out = p;
+        out.displace = 7;
+        skipped(out, "relative branch out of the site");
     }
 
     #[test]
@@ -598,7 +622,7 @@ mod tests {
             "site",
             6,
             &[0x68, 0, 0, 0, 0, 0x58, 0xE9, 0, 0, 0, 0],
-            &[(1, Field::Abs32, Ref::Const(0)), (7, Field::Rel32, Ref::Original)],
+            &[(1, Field::Abs32, Ref::Const(0)), (7, Field::Rel32, Ref::Original(0))],
         );
         p.consts = b"hi\0".to_vec();
         let image = applied(p.clone());
@@ -619,7 +643,7 @@ mod tests {
             "site",
             6,
             &[0x68, 0, 0, 0, 0, 0x58, 0xE9, 0, 0, 0, 0],
-            &[(1, Field::Abs32, Ref::Const(0)), (7, Field::Rel32, Ref::Original)],
+            &[(1, Field::Abs32, Ref::Const(0)), (7, Field::Rel32, Ref::Original(0))],
         );
         p.consts = b"\0\0\0\0hi\0".to_vec();
         p.const_fixups = vec![(0, 4)];
@@ -677,7 +701,7 @@ mod tests {
             let mut body = prefix.to_vec();
             body.extend_from_slice(&[0xE9, 0, 0, 0, 0]);
             let mut f = fixups.to_vec();
-            f.push((prefix.len() as u32 + 1, Field::Rel32, Ref::Original));
+            f.push((prefix.len() as u32 + 1, Field::Rel32, Ref::Original(0)));
             patch("site", 6, &body, &f)
         };
         let call = |place: Place| [(1, Field::Rel32, Ref::Code(place))];
@@ -724,7 +748,7 @@ mod tests {
             "site",
             6,
             &body,
-            &[(1, Field::Abs32, Ref::Body(0)), (17, Field::Rel32, Ref::Body(0)), (22, Field::Rel32, Ref::Original)],
+            &[(1, Field::Abs32, Ref::Body(0)), (17, Field::Rel32, Ref::Body(0)), (22, Field::Rel32, Ref::Original(0))],
         );
         p.entry = 16;
         p
@@ -765,7 +789,7 @@ mod tests {
             "site",
             6,
             &[0x6A, 3, 0x6A, 2, 0x6A, 1, 0x51, 0x6A, 17, 0xE8, 0, 0, 0, 0, 0xE9, 0, 0, 0, 0],
-            &[(10, Field::Rel32, Ref::Com), (15, Field::Rel32, Ref::Original)],
+            &[(10, Field::Rel32, Ref::Com), (15, Field::Rel32, Ref::Original(0))],
         );
         let image = applied(calls);
         let report = audit::audit(&image, &stock, Dll::Core, EXE).unwrap();

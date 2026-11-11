@@ -68,8 +68,8 @@ pub enum Ref {
     Const(u32),
     /// The instruction after the site.
     Resume,
-    /// The site's original instructions (then the instruction after the site).
-    Original,
+    /// The site's original instructions from this offset (an instruction start), then the instruction after the site.
+    Original(u32),
     /// A function in the same DLL.
     Code(Place),
     /// BYOND's data in the same DLL (an `Abs32` field).
@@ -99,7 +99,8 @@ pub struct Patch {
     /// What it fixes, for the audit's report.
     pub about: String,
     pub dll: Dll,
-    /// Where it hooks: these `displace` bytes (whole instructions, no relative branches) become a `jmp` to its gate.
+    /// Where it hooks: these `displace` bytes (whole instructions; a relative branch only to the site's end) become a
+    /// `jmp` to its gate.
     pub site: Place,
     pub displace: u32,
     /// Its code: every function of its object, in order. Entered at `entry` in DreamSeeker in place of the site's

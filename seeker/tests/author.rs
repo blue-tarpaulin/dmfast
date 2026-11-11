@@ -90,7 +90,7 @@ fn counter_fixture() {
         fixups,
         [
             Fixup { at: 3, field: Field::Abs32, target: Ref::Data(0) },
-            Fixup { at: 8, field: Field::Rel32, target: Ref::Original },
+            Fixup { at: 8, field: Field::Rel32, target: Ref::Original(0) },
         ]
     );
 }

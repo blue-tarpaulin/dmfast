@@ -20,8 +20,8 @@
 //! hex. `site` may repeat: the same code at several sites (patches `<name>`, `<name>-2`, ...). A fingerprint names a
 //! whole function without its bytes ([`Place::Fingerprint`]): the bytes are only how it starts, and an install that
 //! finds no match says what each function starting that way hashes to. `dmf_resume`, `dmf_original`, `dmf_data`,
-//! `dmf_com`, and `dmf_com_tail` need no `ref`. Names are matched without the `_` (and a stdcall `@<bytes>`) i686
-//! Windows puts on C names.
+//! `dmf_com`, and `dmf_com_tail` need no `ref`; `jmp dmf_original + n` runs the original instructions from offset
+//! `n`. Names are matched without the `_` (and a stdcall `@<bytes>`) i686 Windows puts on C names.
 //!
 //! A patch's code is every function of the object, in order, each aligned as its section says with `int3`s between;
 //! the gate enters it at the `body` function. Its relocations become fixups (`DIR32`: `Abs32`, `REL32`: `Rel32`), the
@@ -269,7 +269,7 @@ fn offset(text: &str) -> Result<i32, String> {
 fn builtin(name: &str) -> Option<Ref> {
     match name {
         RESUME => Some(Ref::Resume),
-        ORIGINAL => Some(Ref::Original),
+        ORIGINAL => Some(Ref::Original(0)),
         DATA => Some(Ref::Data(0)),
         COM => Some(Ref::Com),
         COM_TAIL => Some(Ref::ComTail),
@@ -564,14 +564,15 @@ fn resolve<'data>(
     if let Some(trap) = layout.trap.filter(|_| target.name().is_ok_and(core_panic)) {
         return Ok(Ref::Body(trap));
     }
-    // LLVM writes REL32 as `S + A - (P + 4)`, counting from the field's end like x86, so its addend is 0.
-    if field == Field::Rel32 && addend != 0 {
-        bail!("REL32 addend {addend}, not 0");
-    }
     let name = plain(target).unwrap_or_default();
     let Some(base) = builtin(name).or_else(|| source.refs.get(name).cloned()) else {
         bail!("not a built-in and no `ref` names it");
     };
+    // LLVM writes REL32 as `S + A - (P + 4)`, counting from the field's end like x86, so `jmp sym` has addend 0 and
+    // `jmp sym+n` addend n, which only `dmf_original` takes (its instructions from offset n).
+    if field == Field::Rel32 && addend != 0 && !matches!(base, Ref::Original(_)) {
+        bail!("REL32 addend {addend}, not 0");
+    }
     let shift = |offset: i32| offset.checked_add(addend).ok_or_else(|| format!("offset {offset} + {addend} overflows"));
     Ok(match base {
         Ref::Data(_) => match u32::try_from(addend) {
@@ -583,6 +584,10 @@ fn resolve<'data>(
         }
         Ref::Code(Place::Pattern(bytes, offset)) => Ref::Code(Place::Pattern(bytes, shift(offset)?)),
         Ref::Global(Place::Pattern(bytes, offset)) => Ref::Global(Place::Pattern(bytes, shift(offset)?)),
+        Ref::Original(_) => match u32::try_from(addend) {
+            Ok(offset) => Ref::Original(offset),
+            Err(_) => bail!("offset {addend} is before the original instructions"),
+        },
         _ if addend != 0 => bail!("addend {addend} on a target that takes none"),
         base => base,
     })

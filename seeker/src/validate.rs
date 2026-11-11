@@ -1,10 +1,11 @@
 //! The rules every patch body keeps to, so a closed-source body can't reach the operating system on its own: it
 //! decodes as plain code that ends in a `jmp`, `ret`, `int3`, or `ud2`; its branches go into itself, back to the site,
-//! to the start of one of BYOND's own functions (not denied ones, see `deny.txt`), or to the checked Direct3D helper
-//! (`com.rs`); it calls other BYOND DLLs only through their existing import slots; it reads no import table; it has
-//! no system calls, interrupts, port I/O, privileged instructions, segment tricks, or other indirect branches; it only
-//! moves `esp` the ordinary ways; and every address in it is a declared fixup (its own functions' addresses are
-//! instruction starts). Its constants are in non-executable data.
+//! into its copy of the site's original instructions (at one of them), to the start of one of BYOND's own functions
+//! (not denied ones, see `deny.txt`), or to the checked Direct3D helper (`com.rs`); it calls other BYOND DLLs only
+//! through their existing import slots; it reads no import table; it has no system calls, interrupts, port I/O,
+//! privileged instructions, segment tricks, or other indirect branches; it only moves `esp` the ordinary ways; and
+//! every address in it is a declared fixup (its own functions' addresses are instruction starts). Its constants are
+//! in non-executable data.
 //!
 //! These are static rules on the bytes, and a determined body can get around them: it can compute an address from
 //! an allowed one (`[global + n]` reaching the import table) and jump there with `push` and `ret`, or overwrite a
@@ -224,7 +225,10 @@ impl Validator<'_> {
         match f.class {
             Class::Body => return Some(f.target),
             Class::Resume if f.target == self.e.site + self.e.displace => {}
-            Class::Original if f.target == self.e.orig => {}
+            Class::Original
+                if f.target
+                    .checked_sub(self.e.orig)
+                    .is_some_and(|k| k < self.e.displace && self.sweep.starts_at(self.e.site + k)) => {}
             Class::Code => {
                 let to = f.target;
                 let function = self.stock.exports_at(to).next().is_some() || self.sweep.called(to);
