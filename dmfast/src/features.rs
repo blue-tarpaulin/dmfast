@@ -86,6 +86,7 @@ pub static SERVER_FIXES: &[&Feature] = &[
     &public::server::fixes::rscid::RSCID,
     &public::server::fixes::profself::PROFSELF,
     &public::server::fixes::iconwrap::ICONWRAP,
+    &public::server::fixes::iconchain::ICONCHAIN,
     &public::server::fixes::profcpu::PROFCPU,
     &public::server::fixes::filtername::FILTERNAME,
     &public::server::fixes::httpexport::HTTPEXPORT,

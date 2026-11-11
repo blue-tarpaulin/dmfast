@@ -1,0 +1,30 @@
+// iconchain: an icon rebuilt from its own runtime icon is stored as an operation list that loads the one before by
+// resource id (D below: "DDMI"). Stock stores every link that way, so a client loads a chain as long as the loop;
+// with the fix every 13th link is stored as pixels (P) and the chain starts over. Each link loads the one before
+// twice, as a copy blended with a recoloured copy does. The pixels come out the same either way.
+/obj/holder
+
+/proc/kind(r)
+	return copytext(file2text(r), 1, 5) == "DDMI" ? "D" : "P"
+
+/world/New()
+	..()
+	var/obj/holder/h = new
+	h.icon = icon('iconchain.dmi', "test")
+	var/kinds = ""
+	for(var/i in 1 to 14)
+		var/icon/tint = icon(h.icon)
+		tint.Flip(EAST)
+		tint.SetIntensity(0.6)
+		var/icon/b = icon(h.icon)
+		b.DrawBox(rgb(i * 8, 255 - i * 8, i), i, i)
+		b.Blend(tint, ICON_ADD)
+		h.icon = b
+		kinds += kind(h.icon)
+	world.log << "links: [kinds]"
+	var/icon/last = icon(h.icon)
+	var/pixels = ""
+	for(var/i in 1 to 32 step 3)
+		pixels += "[last.GetPixel(i, i)] "
+	world.log << "pixels: [pixels]"
+	shutdown()

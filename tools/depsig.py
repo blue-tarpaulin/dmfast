@@ -162,6 +162,13 @@ MANIFEST = [
     ("win", ("locidx",), "loc list unique append", 0x10184310, {"globals": False, "callers": True}),
     ("lin", ("locidx",), "loc list append", 0x2C6A50, {"globals": False}),
     ("lin", ("locidx",), "turf/area gatherer", 0x2C6F20, {"globals": False, "callers": True}),
+    # iconchain walks stored icon operation lists through BYOND's walker for the resources they load and, while it
+    # draws, answers the server icon context's look-up with its own copies (the look-up: what it caches, at which
+    # nesting, and hands out)
+    ("win", ("iconchain",), "icon operation walker", 0x100A3440, {}),
+    ("win", ("iconchain",), "server icon look-up", 0x101264C0, {}),
+    ("lin", ("iconchain",), "icon operation walker", 0x572BE0, {}),
+    ("lin", ("iconchain",), "server icon look-up", 0x425BF0, {}),
 ]
 
 # A unique pattern inside a function whose leading bytes vary between builds, to find it in a build no known
