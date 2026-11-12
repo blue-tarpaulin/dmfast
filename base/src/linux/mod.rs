@@ -1,5 +1,5 @@
 //! Linux: `libdmfast.so` is loaded via `LD_PRELOAD` (the installer wraps each program in a script running the
-//! stock `<name>_orig`) and patches libbyond.so from its constructor ([`init`]), before any thread runs it.
+//! stock one in `bin/backup/`) and patches libbyond.so from its constructor ([`init`]), before any thread runs it.
 
 pub mod alloc;
 pub mod glibc;

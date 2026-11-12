@@ -38,7 +38,7 @@ dmfast-install.exe --uninstall "C:\Program Files (x86)\BYOND"
 sh dmfast-install.exe --uninstall ~/byond
 ```
 
-You can also delete each modified program and rename its `_orig` copy back.
+You can also move each file in `bin/backup/` back over the modified one.
 
 ## Check it's working
 

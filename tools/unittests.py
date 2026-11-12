@@ -14,7 +14,7 @@ older forks; tgstation and its forks); without, the world runs in <work>/src. --
 that (config edits, a map file). data/ and config/ are then saved so every run starts the same.
 
 run runs the world once per mode, one after another, each from the saved state:
-  stock     the _orig DreamDaemon beside dmfast
+  stock     the stock DreamDaemon in backup/ beside dmfast
   default   dmfast, no fixes
   safe | extended | breaking   dmfast with DMFAST_FIXES=<tier>
   LABEL:VAR=VAL[:VAR=VAL]       dmfast with that environment (e.g. nojit:DMFAST_DISABLE=foo)
@@ -172,7 +172,7 @@ def mode_env(spec, bin_dir):
     label, *kv = spec.split(":")
     fast_dd = bin_dir / byond.DD
     if label == "stock":
-        return label, bin_dir / byond.DD_ORIG, {}
+        return label, bin_dir / byond.BACKUP / byond.DD, {}
     if label in TIERS:
         return label, fast_dd, {"DMFAST_FIXES": label}
     return label, fast_dd, dict(x.split("=", 1) for x in kv)

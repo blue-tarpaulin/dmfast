@@ -6,16 +6,22 @@ ROOT = Path(__file__).resolve().parent.parent
 WIN = platform.system() == "Windows"
 OS = "windows" if WIN else "linux"
 DM, DD = ("dm.exe", "dd.exe") if WIN else ("DreamMaker", "DreamDaemon")
-DM_ORIG, DD_ORIG = ("dm_orig.exe", "dd_orig.exe") if WIN else ("DreamMaker_orig", "DreamDaemon_orig")
+BACKUP = "backup"  # where the installer keeps the stock programs, in the BYOND build's bin
 TIMEOUT = 124  # exit code of a run that hit its time limit (as timeout(1))
 
 
 def env(bin_dir, **vars):
-    """The environment for a program of the BYOND build in bin_dir: DMFAST_FIXES only when given, and no
-    RUST_MIN_STACK (a Rust build setting; inherited, it sets the stack of every thread a world's Rust library
-    starts, and 8 MiB stacks run a 32-bit DreamDaemon out of address space when rust-g runs hundreds of jobs)."""
+    """The environment for a program of the BYOND build in bin_dir (or a stock one in its backup/): DMFAST_FIXES only
+    when given, and no RUST_MIN_STACK (a Rust build setting; inherited, it sets the stack of every thread a world's
+    Rust library starts, and 8 MiB stacks run a 32-bit DreamDaemon out of address space when rust-g runs hundreds of
+    jobs). The build's libraries are on the search path, for a program in backup/ too."""
+    bin_dir = Path(bin_dir)
+    if bin_dir.name == BACKUP:
+        bin_dir = bin_dir.parent
     e = {k: v for k, v in os.environ.items() if k not in ("DMFAST_FIXES", "RUST_MIN_STACK")}
-    if not WIN:
+    if WIN:
+        e["PATH"] = str(bin_dir) + os.pathsep + e.get("PATH", "")
+    else:
         e["LD_LIBRARY_PATH"] = str(bin_dir)
     e.update(vars)
     return e
@@ -59,12 +65,12 @@ def sha16(path):
 
 
 def bins(fast, stock=None):
-    """(fast dm, fast dd, stock dm, stock dd); stock defaults to the _orig programs beside dmfast."""
+    """(fast dm, fast dd, stock dm, stock dd); stock defaults to the stock programs in backup/ beside dmfast."""
     fast = Path(fast).resolve()
     if stock:
         stock = Path(stock).resolve()
         return fast / DM, fast / DD, stock / DM, stock / DD
-    return fast / DM, fast / DD, fast / DM_ORIG, fast / DD_ORIG
+    return fast / DM, fast / DD, fast / BACKUP / DM, fast / BACKUP / DD
 
 
 def bash():

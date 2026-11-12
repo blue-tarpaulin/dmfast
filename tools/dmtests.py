@@ -5,7 +5,7 @@ usage: dmtests.py [-s <stock bin dir>] [-f <fixes>] [-j <jobs>] [-c <cache dir>]
 
 Verdicts: pass, compile, runtime, crash, expected-*, skip. Fails on a verdict difference, a .dmb difference with
 -f none (default), or a stock crash dmfast hides whose cause isn't known. -c caches stock's verdicts per test.
-Stock defaults to the _orig binaries.
+Stock defaults to the stock programs in backup/ beside dmfast.
 """
 import argparse, os, queue, re, shutil, sys, tempfile, threading
 from concurrent.futures import ThreadPoolExecutor

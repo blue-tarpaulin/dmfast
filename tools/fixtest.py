@@ -6,7 +6,7 @@ usage: fixtest.py [-s <stock bin dir>] <dmfast bin dir> [key...]
 tests/fixes/<key>.dme must print <key>.expected with DMFAST_FIXES=<key> and =breaking, and not on stock. Each
 tests/fixes/<key>-<name>.dme beside it is only compiled; its errors and warnings follow, as "dm <key>-<name>: ...".
 tests/fixes/keep/*.dme must print the same on stock, safe and extended. A fix that didn't install is n/a.
-Stock defaults to the _orig binaries beside dmfast. Exits non-zero on a failure.
+Stock defaults to the stock programs in backup/ beside dmfast. Exits non-zero on a failure.
 """
 import argparse, contextlib, difflib, os, re, shutil, subprocess, sys, tempfile
 from pathlib import Path

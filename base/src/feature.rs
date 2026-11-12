@@ -28,11 +28,10 @@ impl Host {
     #[cfg(any(test, feature = "validate"))]
     pub(crate) const ALL: [Host; 2] = [Host::Compiler, Host::Server];
 
-    /// Classify the executable by file name (case-insensitive; `.exe` and the installer's `_orig` stripped).
+    /// Classify the executable by file name (case-insensitive, `.exe` stripped).
     fn from_exe_name(name: &str) -> Option<Host> {
         let name = name.to_ascii_lowercase();
         let stem = name.strip_suffix(".exe").unwrap_or(&name);
-        let stem = stem.strip_suffix("_orig").unwrap_or(stem);
         match stem {
             "dm" | "dreammaker" => Some(Host::Compiler),
             "dd" | "dreamdaemon" => Some(Host::Server),

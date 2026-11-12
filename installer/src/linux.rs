@@ -1,5 +1,5 @@
 //! Linux: write `libdmfast.so` and replace BYOND programs with a small sh wrapper that runs the stock
-//! binary (kept as `<name>_orig`) with the library in `LD_PRELOAD`. `DreamMaker` is wrapped unless `--no-compiler`
+//! binary (kept in `bin/backup/`) with the library in `LD_PRELOAD`. `DreamMaker` is wrapped unless `--no-compiler`
 //! is given, and `DreamDaemon` unless `--no-server` is. libbyond.so and every other program stay stock. BYOND's own
 //! `byondexec` launcher runs the wrappers like any program.
 
@@ -21,16 +21,60 @@ const PROGRAMS: [&str; 2] = [COMPILER, RUNTIME[0]];
 /// First lines of the wrapper; how an installed program is recognised.
 const WRAPPER_TAG: &str = "#!/bin/sh\n# dmfast:";
 
+/// The folder in `bin` holding the stock copy of every program dmfast wraps (and nothing else).
+const BACKUP: &str = "backup";
+
 fn backup_of(dir: &Path, exe: &str) -> PathBuf {
+    dir.join(BACKUP).join(exe)
+}
+
+/// Where earlier builds kept a program's stock copy; [`migrate`] moves it to `backup/`.
+fn old_backup_of(dir: &Path, exe: &str) -> PathBuf {
     dir.join(format!("{exe}_orig"))
+}
+
+fn has_stock_copy(dir: &Path, exe: &str) -> bool {
+    backup_of(dir, exe).is_file() || old_backup_of(dir, exe).is_file()
+}
+
+fn make_backup_dir(dir: &Path) -> Result<(), Failure> {
+    let folder = dir.join(BACKUP);
+    fs::create_dir_all(&folder).map_err(|e| io_err("cannot create", &folder, e))
+}
+
+/// Moves each stock copy from where earlier builds kept it into `backup/`.
+fn migrate(dir: &Path) -> Result<(), Failure> {
+    for name in PROGRAMS {
+        let old = old_backup_of(dir, name);
+        if !old.is_file() {
+            continue;
+        }
+        let backup = backup_of(dir, name);
+        if backup.is_file() {
+            fs::remove_file(&old).map_err(|e| io_err("cannot remove", &old, e))?;
+        } else {
+            make_backup_dir(dir)?;
+            rename_retry(&old, &backup).map_err(|e| io_err("cannot move", &old, e))?;
+        }
+    }
+    Ok(())
+}
+
+/// Removes `backup/` once nothing is left in it.
+fn drop_empty_backup_dir(dir: &Path) -> Result<(), Failure> {
+    let folder = dir.join(BACKUP);
+    if fs::read_dir(&folder).is_ok_and(|mut d| d.next().is_none()) {
+        fs::remove_dir(&folder).map_err(|e| io_err("cannot remove", &folder, e))?;
+    }
+    Ok(())
 }
 
 fn wrapper(version: &str, exe: &str) -> String {
     format!(
-        "{WRAPPER_TAG} {version} runs the stock {exe} ({exe}_orig) with {LIB} preloaded.\n\
+        "{WRAPPER_TAG} {version} runs the stock {exe} ({BACKUP}/{exe}) with {LIB} preloaded.\n\
          # Remove with: dmfast-install --uninstall <this folder>\n\
          dir=$(dirname \"$(readlink -f \"$0\")\")\n\
-         LD_PRELOAD=\"$dir/{LIB}${{LD_PRELOAD:+ $LD_PRELOAD}}\" exec \"$dir/{exe}_orig\" \"$@\"\n"
+         LD_PRELOAD=\"$dir/{LIB}${{LD_PRELOAD:+ $LD_PRELOAD}}\" exec \"$dir/{BACKUP}/{exe}\" \"$@\"\n"
     )
 }
 
@@ -54,7 +98,7 @@ fn is_wrapper(data: &[u8]) -> bool {
 
 /// For the guided install: what of dmfast `dir` has now.
 pub fn state(dir: &Path) -> Installed {
-    let wrapped = |exe: &str| backup_of(dir, exe).is_file();
+    let wrapped = |exe: &str| has_stock_copy(dir, exe);
     Installed {
         any: dir.join(LIB).is_file(),
         compiler: wrapped(COMPILER),
@@ -68,9 +112,9 @@ pub fn byond_dirs() -> Vec<PathBuf> {
     home.into_iter().chain([PathBuf::from("/usr/local/byond")]).filter(|d| bin_dir(d).is_ok()).collect()
 }
 
-/// Whether `dir` holds the compiler: the program, or only its `_orig` backup when the wrapper was deleted.
+/// Whether `dir` holds the compiler: the program, or only its stock copy when the wrapper was deleted.
 fn has_compiler(dir: &Path) -> bool {
-    dir.join(COMPILER).is_file() || backup_of(dir, COMPILER).is_file()
+    dir.join(COMPILER).is_file() || has_stock_copy(dir, COMPILER)
 }
 
 pub fn bin_dir(target: &Path) -> Result<PathBuf, Failure> {
@@ -96,13 +140,13 @@ enum Before {
 /// Reads everything [`wrap`] needs, so a program that can't be read stops the install before anything changes.
 fn check(dir: &Path, name: &str) -> Result<Before, Failure> {
     let exe = dir.join(name);
-    let backup = backup_of(dir, name);
     if exe.is_file() {
         let data = read(&exe)?;
         if !is_wrapper(&data) {
             return Ok(Before::Stock(data));
         }
     }
+    let backup = backup_of(dir, name);
     if !backup.is_file() {
         return Err(missing_backup(name));
     }
@@ -110,14 +154,16 @@ fn check(dir: &Path, name: &str) -> Result<Before, Failure> {
     Ok(Before::Wrapped)
 }
 
-/// Wrap one program, keeping the stock binary as its `_orig` backup. Returns what was there before.
+/// Wrap one program, keeping the stock binary in `backup/`. Returns what was there before.
 fn wrap(dir: &Path, name: &str, state: Before, ours: &str, installed: &Option<String>) -> Result<String, Failure> {
     let before = match state {
         Before::Wrapped => installed.clone().unwrap_or_else(|| "dmfast (unknown version)".into()),
         // Stock (fresh install, or BYOND updated over us): it becomes the backup.
         Before::Stock(data) => {
-            let before = if backup_of(dir, name).is_file() { "stock (BYOND was updated)" } else { "stock" };
-            write_executable(&backup_of(dir, name), &data)?;
+            let backup = backup_of(dir, name);
+            let before = if backup.is_file() { "stock (BYOND was updated)" } else { "stock" };
+            make_backup_dir(dir)?;
+            write_executable(&backup, &data)?;
             before.to_string()
         }
     };
@@ -126,7 +172,7 @@ fn wrap(dir: &Path, name: &str, state: Before, ours: &str, installed: &Option<St
 }
 
 fn missing_backup(name: &str) -> Failure {
-    format!("{name} is the dmfast wrapper but {name}_orig is missing; reinstall BYOND").into()
+    format!("{name} is the dmfast wrapper but {BACKUP}/{name} is missing; reinstall BYOND").into()
 }
 
 /// What [`unwrap`] would do to a program.
@@ -167,6 +213,7 @@ pub fn install(dir: &Path, compiler: bool, server: bool) -> Result<String, Failu
     if names.is_empty() {
         return Err(format!("nothing to install in {}: no {}", dir.display(), RUNTIME.join(" or ")).into());
     }
+    migrate(dir)?;
     // A program left out is put back (re-running without it means "not this one").
     let mut left_out = Vec::new();
     for name in PROGRAMS.into_iter().filter(|n| !names.contains(n)) {
@@ -190,6 +237,7 @@ pub fn install(dir: &Path, compiler: bool, server: bool) -> Result<String, Failu
     for name in &left_out {
         unwrap(dir, name)?;
     }
+    drop_empty_backup_dir(dir)?;
     let before = before.unwrap_or_default();
     let mut msg = format!("installed {ours} in {} (was {before}) for {}", dir.display(), names.join(", "));
     if !left_out.is_empty() {
@@ -203,6 +251,7 @@ pub fn uninstall(dir: &Path) -> Result<Option<String>, Failure> {
     let lib = dir.join(LIB);
     // Only for the message: an unreadable library must not block removing it.
     let ver = installed_canary(&lib).ok().flatten();
+    migrate(dir)?;
     let (mut restored, mut lost) = (Vec::new(), Vec::new());
     for name in PROGRAMS {
         match unwrap_check(dir, name)? {
@@ -225,12 +274,13 @@ pub fn uninstall(dir: &Path) -> Result<Option<String>, Failure> {
     if lib.is_file() {
         fs::remove_file(&lib).map_err(|e| io_err("cannot remove", &lib, e))?;
     }
+    drop_empty_backup_dir(dir)?;
     let mut msg = format!("removed {} from {}", ver.unwrap_or_else(|| "dmfast".into()), dir.display());
     if !restored.is_empty() {
         msg += &format!(" (restored {})", restored.join(", "));
     }
     for name in lost {
-        msg += &format!("\nwarning: {name}_orig was missing, so {name} is gone; reinstall BYOND to get it back");
+        msg += &format!("\nwarning: {BACKUP}/{name} was missing, so {name} is gone; reinstall BYOND to get it back");
     }
     Ok(Some(msg))
 }

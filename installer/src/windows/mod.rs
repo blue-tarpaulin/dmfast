@@ -1,9 +1,9 @@
 //! Windows: give BYOND programs an extra import, `dmfast.dll`, which patches byondcore.dll in memory and
 //! pulls in `mimalloc.dll`, dmfast's allocator (mimalloc for small blocks, the process heap for large
 //! ones; source in `vendor/mimalloc-x86`). It goes into the compiler (`dm.exe`) unless `--no-compiler` is given, and
-//! DreamDaemon (`dreamdaemon.exe`, `dd.exe`) unless `--no-server` is; each patched program's original is kept as
-//! `<name>_orig.exe`, and every other program stays stock. With `--client`, byondcore.dll and byondwin.dll also get
-//! the DreamSeeker patches the fix selection picks, on disk (`seeker`), with the stock DLLs in `bin/backup/`.
+//! DreamDaemon (`dreamdaemon.exe`, `dd.exe`) unless `--no-server` is, and every other program stays stock. With
+//! `--client`, byondcore.dll and byondwin.dll also get the DreamSeeker patches the fix selection picks, on disk
+//! (`seeker`). The stock copy of every file dmfast changes is kept in `bin/backup/`.
 
 mod elevate;
 mod pe;
@@ -31,8 +31,43 @@ const RUNTIME: [&str; 2] = ["dreamdaemon.exe", "dd.exe"];
 /// Every program `dmfast.dll` may go into.
 const PROGRAMS: [&str; 3] = [COMPILER, RUNTIME[0], RUNTIME[1]];
 
+/// The folder in `bin` holding the stock copy of every file dmfast changed (and nothing else).
+const BACKUP: &str = "backup";
+
 fn backup_of(dir: &Path, exe: &str) -> PathBuf {
+    dir.join(BACKUP).join(exe)
+}
+
+/// Where earlier builds kept a program's stock copy; [`migrate`] moves it to `backup/`.
+fn old_backup_of(dir: &Path, exe: &str) -> PathBuf {
     dir.join(format!("{}_orig.exe", exe.trim_end_matches(".exe")))
+}
+
+fn has_stock_copy(dir: &Path, exe: &str) -> bool {
+    backup_of(dir, exe).is_file() || old_backup_of(dir, exe).is_file()
+}
+
+fn make_backup_dir(dir: &Path) -> Result<(), Failure> {
+    let folder = dir.join(BACKUP);
+    fs::create_dir_all(&folder).map_err(|e| io_err("cannot create", &folder, e))
+}
+
+/// Moves each program's stock copy from where earlier builds kept it into `backup/`.
+fn migrate(dir: &Path) -> Result<(), Failure> {
+    for name in PROGRAMS {
+        let old = old_backup_of(dir, name);
+        if !old.is_file() {
+            continue;
+        }
+        let backup = backup_of(dir, name);
+        if backup.is_file() {
+            fs::remove_file(&old).map_err(|e| io_err("cannot remove", &old, e))?;
+        } else {
+            make_backup_dir(dir)?;
+            rename_retry(&old, &backup).map_err(|e| io_err("cannot move", &old, e))?;
+        }
+    }
+    Ok(())
 }
 
 /// Fails if the program (or a BYOND program using byondcore.dll) is running: images cannot be opened
@@ -58,7 +93,7 @@ fn missing_backup(dir: &Path, name: &str) -> Failure {
 
 /// For the guided install: what of dmfast `dir` has now.
 pub fn state(dir: &Path) -> Installed {
-    let patched = |exe: &str| backup_of(dir, exe).is_file();
+    let patched = |exe: &str| has_stock_copy(dir, exe);
     let client = seeker::client_patched(dir);
     Installed {
         any: dir.join(DLL).is_file() || client,
@@ -104,9 +139,9 @@ pub fn byond_dirs() -> Vec<PathBuf> {
     dirs
 }
 
-/// Whether `dir` holds the compiler: the program, or only its `_orig` backup when the patched one was deleted.
+/// Whether `dir` holds the compiler: the program, or only its stock copy when the patched one was deleted.
 fn has_compiler(dir: &Path) -> bool {
-    dir.join(COMPILER).is_file() || backup_of(dir, COMPILER).is_file()
+    dir.join(COMPILER).is_file() || has_stock_copy(dir, COMPILER)
 }
 
 pub fn bin_dir(target: &Path) -> Result<PathBuf, Failure> {
@@ -138,20 +173,20 @@ enum Before {
 /// Reads everything [`patch`] needs, so a program that can't be read stops the install before anything changes.
 fn check(dir: &Path, name: &str) -> Result<Before, Failure> {
     let exe = dir.join(name);
-    let backup = backup_of(dir, name);
     if exe.is_file() {
         let data = read(&exe)?;
         if !pe::imports(&data, DLL)? {
             return Ok(Before::Stock(data));
         }
     }
+    let backup = backup_of(dir, name);
     if !backup.is_file() {
         return Err(missing_backup(dir, name));
     }
     Ok(Before::Patched(read(&backup)?))
 }
 
-/// Rewrite one program to import dmfast.dll first, keeping the stock one as its `_orig` backup.
+/// Rewrite one program to import dmfast.dll first, keeping the stock one in `backup/`.
 /// Returns what was there before (`stock`, or the dmfast version it had).
 fn patch(dir: &Path, name: &str, state: Before, installed: &Option<String>) -> Result<String, Failure> {
     let backup = backup_of(dir, name);
@@ -160,6 +195,7 @@ fn patch(dir: &Path, name: &str, state: Before, installed: &Option<String>) -> R
         // Stock (fresh install, or BYOND updated over us): it becomes the backup.
         Before::Stock(data) => {
             let before = if backup.is_file() { "stock (BYOND was updated)" } else { "stock" };
+            make_backup_dir(dir)?;
             write(&backup, &data)?;
             (data, before.to_string())
         }
@@ -198,6 +234,7 @@ fn restore(dir: &Path, name: &str) -> Result<(), Failure> {
 
 pub fn install(dir: &Path, compiler: bool, server: bool, client: bool) -> Result<String, Failure> {
     let names = targets(dir, compiler, server);
+    migrate(dir)?;
     // A program left out is put back (re-running without it means "not this one").
     let mut left_out = Vec::new();
     for name in PROGRAMS.into_iter().filter(|n| !names.contains(n)) {
@@ -280,6 +317,7 @@ pub use seeker::{audit, client_list, has_client_patches};
 pub fn uninstall(dir: &Path) -> Result<Option<String>, Failure> {
     let dll = dir.join(DLL);
     ensure_none_in_use(dir, &PROGRAMS)?;
+    migrate(dir)?;
     let seeker = seeker::plan_uninstall(dir)?;
     // Only for the message: an unreadable DLL must not block removing it.
     let ver = dll.is_file().then(|| read(&dll).ok()).flatten().and_then(|d| pe::canary(&d));

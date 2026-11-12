@@ -13,7 +13,7 @@ use dmfast_format::manifest::CODE_SECTION;
 use dmfast_seeker::patch::{Module, Patch};
 use dmfast_seeker::{apply, audit, author};
 
-use super::{ensure_not_in_use, pe};
+use super::{BACKUP, ensure_not_in_use, pe};
 use crate::files::{Failure, io_err, read, rename_retry, write};
 use crate::fixes;
 
@@ -21,8 +21,6 @@ use crate::fixes;
 const CLIENT: &[(&str, &[u8], &str)] = include!(concat!(env!("OUT_DIR"), "/client.rs"));
 /// The program the patches run in. Every gate checks for its PE identity after patching.
 const EXE: &str = "dreamseeker.exe";
-/// The folder in `bin` holding the stock files (and nothing else).
-const BACKUP: &str = "backup";
 
 fn backup_of(dir: &Path, module: Module) -> PathBuf {
     dir.join(BACKUP).join(module.file())

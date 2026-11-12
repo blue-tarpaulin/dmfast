@@ -17,6 +17,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **Changed:** `--no-runtime` is now `--no-server`, `--runtime` is gone, and `--uninstall` takes no other option.
 - **New:** `--no-compiler` leaves the compiler stock.
 - **New fix:** `iconchain` (extended): an icon rebuilt over and over from an atom's own runtime icon is stored as pixels every 13 rebuilds, so clients no longer load a chain of icons as long as the number of rebuilds (minutes, gigabytes, crashes).
+- **Changed:** the installer keeps the stock programs in `bin/backup/` instead of as `<name>_orig`.
 
 ## 7.0.0
 

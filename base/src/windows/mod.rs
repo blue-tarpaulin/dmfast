@@ -1,4 +1,4 @@
-//! Windows: the installer adds a `dmfast.dll` import to dm.exe (original kept as dm_orig.exe) unless `--no-compiler`,
+//! Windows: the installer adds a `dmfast.dll` import to dm.exe (original kept in `bin/backup/`) unless `--no-compiler`,
 //! and to dreamdaemon.exe and dd.exe unless `--no-server`. byondcore.dll is patched in memory from [`dll_main`] with the
 //! loading program's features ([`crate::feature::Host`], [`crate::driver`]).
 
