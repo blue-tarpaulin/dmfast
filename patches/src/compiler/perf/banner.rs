@@ -23,7 +23,7 @@ static BANNER_BUFS: [[AtomicU8; 128]; 2] = [const { [const { AtomicU8::new(0) };
 /// `  dmfast <version> (<counts>) - Greytide Worldwide 2026`
 fn write_banners(counts: &str) {
     let first: &[u8] = b"DM compiler version %ld.%ld\n";
-    let line = format!("  dmfast {} ({counts}) - Greytide Worldwide 2026\n", env!("CARGO_PKG_VERSION"));
+    let line = format!("  dmfast {} ({counts})\n", env!("CARGO_PKG_VERSION"));
     for (orig, buf) in BANNERS.into_iter().zip(&BANNER_BUFS) {
         let text = [first, line.as_bytes(), &orig[first.len()..]].concat();
         // ~90 bytes; the original's NUL stays at the end.
