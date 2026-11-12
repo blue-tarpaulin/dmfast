@@ -163,7 +163,10 @@ def check(fast, stock=None, fixes="none", jobs=None, cache=None, filter=""):
     db = ("Open()/Close() free /database's query array but keep using it: use-after-free write and double free, "
           "silent heap corruption under dmfast (fixed in BYOND 516.1670; the dbclose fix backports it)")
     gp = "GetPixel() with an invalid dir reads frames[-1]: out-of-bounds read only (fixed in BYOND 516.1683)"
-    causes = {"Tests/Database/open_and_open.dm": db, "Tests/Database/read.dm": db, "Tests/Icon/GetPixelBadArgs.dm": gp}
+    ft = ("reading a layer filter's transform on Linux writes past a heap block: silent heap corruption under "
+          "dmfast (fixed in BYOND 516.1663)")
+    causes = {"Tests/Database/open_and_open.dm": db, "Tests/Database/read.dm": db, "Tests/Icon/GetPixelBadArgs.dm": gp,
+              "Tests/Builtins/Filter/filter_vars_read.dm": ft}
     masked = [(rel, f.verdict, causes.get(rel)) for rel, s, f in rows if s.verdict == "crash" and f.verdict != "crash"]
     unknown = [m for m in masked if not m[2]]
     dmbdiff = [rel for rel, s, f in rows if "-" not in (s.dmb, f.dmb) and s.dmb != f.dmb]

@@ -14,7 +14,8 @@ while ((Get-Date) -lt $idle) {
     try {
         $head = [Text.Encoding]::ASCII.GetBytes("HTTP/1.1 200 OK`r`nContent-Length: $size`r`nConnection: close`r`n`r`n")
         $net.Write($head, 0, $head.Length)
-        $file = [IO.File]::OpenRead($path)
+        # Delete sharing: a transfer still running (DreamDaemon killed mid-download) mustn't stop the test's cleanup.
+        $file = [IO.File]::Open($path, 'Open', 'Read', 'Read, Delete')
         while (($n = $file.Read($buf, 0, $buf.Length)) -gt 0) { $net.Write($buf, 0, $n) }
     } catch {
     } finally {
