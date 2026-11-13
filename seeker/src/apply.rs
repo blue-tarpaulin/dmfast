@@ -101,7 +101,7 @@ pub fn apply(
             .filter_map(|(i, e)| {
                 let Some(body) = pe.bytes(e.body, e.body_len) else { return Some((i, "body unreadable".into())) };
                 let consts = pe.bytes(e.consts, e.consts_len).unwrap_or_default();
-                let c = validate::check(&stock, &sweep, &m, e, body, consts);
+                let c = validate::check(&stock, &sweep, module, &m, e, body, consts);
                 (!c.problems.is_empty()).then(|| (i, c.problems.join("; ")))
             })
             .collect();

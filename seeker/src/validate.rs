@@ -2,10 +2,11 @@
 //! decodes as plain code that ends in a `jmp`, `ret`, `int3`, or `ud2`; its branches go into itself, back to the site,
 //! into its copy of the site's original instructions (at one of them), to the start of one of BYOND's own functions
 //! (not denied ones, see `deny.txt`), or to the checked Direct3D helper (`com.rs`); it calls other BYOND DLLs (FMOD
-//! included) only through their existing import slots or the image's own `jmp [slot]` stubs for them; it reads no
-//! import table; it has no system calls, interrupts, port I/O, privileged instructions, segment tricks, or other
-//! indirect branches; it only moves `esp` the ordinary ways; and every address in it is a declared fixup (its own
-//! functions' addresses are instruction starts). Its constants are in non-executable data.
+//! included) only through their existing import slots or the image's own `jmp [slot]` stubs for them, and in
+//! dreamseeker.exe also USER32's `IsWindowVisible` through its slot ([`SEEKER_OS`]); it reads no import table; it has
+//! no system calls, interrupts, port I/O, privileged instructions, segment tricks, or other indirect branches; it only
+//! moves `esp` the ordinary ways; and every address in it is a declared fixup (its own functions' addresses are
+//! instruction starts). Its constants are in non-executable data.
 //!
 //! These are static rules on the bytes, and a determined body can get around them: it can compute an address from
 //! an allowed one (`[global + n]` reaching the import table) and jump there with `push` and `ret`, or overwrite a
@@ -19,6 +20,7 @@ use iced_x86::{
 };
 
 use crate::com;
+use crate::patch::Module;
 use crate::pe::{DIR_IAT, DIR_IMPORT, Pe, Sweep, u32_at};
 use dmfast_format::manifest::{Class, Entry, Field, Fixup, Manifest};
 
@@ -26,12 +28,20 @@ use dmfast_format::manifest::{Class, Entry, Field, Fixup, Manifest};
 const DENY: &str = include_str!("../deny.txt");
 /// The DLLs a body may call through import slots: BYOND's own, and the FMOD it ships.
 const BYOND_DLLS: [&str; 4] = ["byondcore.dll", "byondwin.dll", "byondext.dll", "fmodex.dll"];
+/// The one operating system function a body may call, only in dreamseeker.exe and only as `call dword ptr [slot]`
+/// through its existing import: a read-only test of whether a window shows, so `hiddenmap` can skip a hidden map.
+const SEEKER_OS: (&str, &str) = ("user32.dll", "IsWindowVisible");
 
 fn denied(name: &str) -> Option<&'static str> {
     let name = name.to_ascii_lowercase();
     DENY.lines()
         .filter_map(|l| l.split('#').next()?.split_whitespace().next())
         .find(|d| name.contains(&d.to_ascii_lowercase()))
+}
+
+/// Whether a body in `module` may call `import`, which isn't a BYOND DLL's, through its import slot.
+fn os_import(module: Module, import: Option<(&str, &str)>) -> bool {
+    module == Module::Seeker && import == Some(SEEKER_OS)
 }
 
 /// What a body does (one line each) and the rules it breaks.
@@ -41,11 +51,20 @@ pub struct Checked {
 }
 
 /// Checks `e`'s body (`body`, its bytes as written in the patched DLL, and `consts`, its constants there) against the
-/// stock DLL it was applied to.
-pub fn check(stock: &Pe, sweep: &Sweep, m: &Manifest, e: &Entry, body: &[u8], consts: &[u8]) -> Checked {
+/// stock `module` it was applied to.
+pub fn check(
+    stock: &Pe,
+    sweep: &Sweep,
+    module: Module,
+    m: &Manifest,
+    e: &Entry,
+    body: &[u8],
+    consts: &[u8],
+) -> Checked {
     let mut v = Validator {
         stock,
         sweep,
+        module,
         m,
         e,
         fixups: e.fixups.iter().map(|f| (f.field_rva, f)).collect(),
@@ -136,6 +155,7 @@ pub fn check(stock: &Pe, sweep: &Sweep, m: &Manifest, e: &Entry, body: &[u8], co
 struct Validator<'a> {
     stock: &'a Pe<'a>,
     sweep: &'a Sweep,
+    module: Module,
     m: &'a Manifest,
     e: &'a Entry,
     fixups: HashMap<u32, &'a Fixup>,
@@ -281,6 +301,9 @@ impl Validator<'_> {
                 let name = String::from_utf8_lossy(&s.name).trim_end_matches('\0').to_string();
                 self.reads.insert(format!("{name} +{to:#x}"));
             }
+            Class::Import if import_operand && os_import(self.module, self.stock.import_at(to)) => {
+                self.calls.insert(format!("{}!{}", SEEKER_OS.0, SEEKER_OS.1));
+            }
             Class::Import if import_operand => self.import(self.stock.import_at(to), to, at),
             _ => self.problem(
                 at,
@@ -375,5 +398,15 @@ mod tests {
         assert!(
             DENY.lines().all(|l| l.starts_with('#') || l.split('#').next().unwrap().split_whitespace().count() == 1)
         );
+    }
+
+    #[test]
+    fn one_os_import_only_in_dreamseeker() {
+        let visible = Some(("user32.dll", "IsWindowVisible"));
+        assert!(os_import(Module::Seeker, visible));
+        assert!(!os_import(Module::Win, visible));
+        assert!(!os_import(Module::Core, visible));
+        assert!(!os_import(Module::Seeker, Some(("user32.dll", "ShowWindow"))));
+        assert!(!os_import(Module::Seeker, Some(("kernel32.dll", "IsWindowVisible"))));
     }
 }
