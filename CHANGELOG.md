@@ -4,23 +4,30 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
-- **New:** `--client [which]` (Windows) patches DreamSeeker with opt-in client fixes, picked apart from `--fixes`: `safe` by default, or `--client extended`. The choice is saved like `--fixes`; `--client none` removes them.
-- **Changed:** `--fixes` alone means `--fixes safe`, and `--help bugfixes` is now `--help fixes`.
+- **New:** `--client [which]` (Windows) patches DreamSeeker with opt-in client fixes: `safe` by default, or `--client extended`.
 - **New:** `--audit` (Windows) checks DreamSeeker's patched DLLs against the stock ones in `bin/backup/`.
-- **New patch:** `truth` (DreamDaemon, Linux): faster `if(x)`, `!x`, `&&`, and `||` on numbers. ~1% less CPU usage in-round.
-- **New patch:** `varread` (DreamDaemon, Windows): faster reads of user-defined vars by name. ~1% less CPU usage in-round.
+- **New:** `--no-compiler` leaves the compiler stock.
+- **Changed:** `--no-runtime` is now `--no-server`, `--runtime` is gone, and `--uninstall` takes no other option.
+- **Changed:** the installer keeps the stock programs in `bin/backup/` instead of as `<name>_orig`.
 - **Changed:** the list initialization patch key `pairs` is now `listinit`.
 - **Changed:** `jsonutf` is now in the `extended` tier since its output can differ from stock.
+- **New client fix:** `rscdownload` (safe): fast `preload_rsc` downloads are no longer cancelled midway. Same bug as `httpexport`.
+- **New client fix:** `particles` (safe): a set of more than 10,922 icon particles no longer writes past BYOND's index buffer, and particle drawing is much faster.
+- **New client fix:** `voices` (safe): up to 128 sounds play at once instead of 32, so many effects no longer silence background sounds.
+- **New client fix:** `chainmem` (safe): a long chain of runtime icons is drawn 13 links at a time, so DreamSeeker no longer holds every link in memory.
+- **New client fix:** `commandlinks` (safe): fixes the 'dozen duplicate dreamseekers' issue.
+- **New client fix:** `echostereo` (safe): a sound with `echo` or `environment` but no position keeps its stereo instead of being downmixed to mono.
+- **New client fix:** `pitchretune` (safe): changing a playing sound's `pitch` no longer stutters.
+- **New client patch:** `objsearch` (safe): much much faster verb panels.
+- **New client fix:** `hiddenmap` (safe): a map control that isn't showing is no longer drawn while hidden, so animated icons on it no longer make movement on the main map stutter.
+- **New client fix:** `soundpriority` (extended): a higher sound priority keeps its channel instead of being the first silenced.
 - **New fix:** `filtername` (extended): adding a named filter to `filters` replaces the filter of that name instead of keeping both.
 - **New fix:** `finalpath` (breaking): `final` before a proc or var in a type's path (`/foo/final/bar()`) is the `final` modifier instead of a type `/foo/final`.
 - **New fix:** `httpexport` (safe, Windows): `world.Export()` of an `http://` URL no longer gets cut off or crashes DreamDaemon on a big or fast response.
-- **New client fix:** `rscdownload` (safe): fast `preload_rsc` downloads are no longer cancelled midway. Same bug as `httpexport`.
-- **Changed:** `--no-runtime` is now `--no-server`, `--runtime` is gone, and `--uninstall` takes no other option.
-- **New:** `--no-compiler` leaves the compiler stock.
 - **New fix:** `iconchain` (extended): an icon rebuilt over and over from an atom's own runtime icon is stored as pixels every 13 rebuilds, so clients no longer load a chain of icons as long as the number of rebuilds (minutes, gigabytes, crashes).
-- **Changed:** the installer keeps the stock programs in `bin/backup/` instead of as `<name>_orig`.
 - **New fix:** `varoverride` (safe): in a project with about 65,500 names, a child type's override of a var its parent sets at runtime (a `list()`, for example) is no longer ignored.
-- **New client fix:** `hiddenmap` (safe): a map control that isn't showing is no longer drawn while hidden, so animated icons on it no longer make movement on the main map stutter.
+- **New patch:** `truth` (DreamDaemon, Linux): faster `if(x)`, `!x`, `&&`, and `||` on numbers. ~1% less CPU usage in-round.
+- **New patch:** `varread` (DreamDaemon, Windows): faster reads of user-defined vars by name. ~1% less CPU usage in-round.
 - **New patch:** `treeskip` (DreamDaemon): faster map sending by skipping a player's records that have no changes to send. ~2-5% less `map_cpu`.
 
 ## 7.0.0
