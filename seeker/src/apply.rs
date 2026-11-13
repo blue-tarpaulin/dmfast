@@ -67,7 +67,11 @@ pub fn apply(
     let mut placed: Vec<Placed> = Vec::new();
     for p in patches.iter().filter(|p| p.module == module) {
         let site = match p.exe.iter().try_for_each(|ida| exe_pe.find_pattern(ida).map(drop)) {
-            Ok(()) => resolve(&stock, &p.site),
+            Ok(()) => p
+                .needs
+                .iter()
+                .try_for_each(|ida| stock.find_pattern(ida).map(drop))
+                .and_then(|()| resolve(&stock, &p.site)),
             Err(e) => Err(format!("dreamseeker.exe: {e}")),
         };
         let site = match site {
@@ -529,6 +533,7 @@ mod tests {
             site: Place::Export(site.into()),
             displace,
             exe: Vec::new(),
+            needs: Vec::new(),
             files: Vec::new(),
             body: body.to_vec(),
             entry: 0,
@@ -628,6 +633,16 @@ mod tests {
         applied(p.clone());
         p.exe.push("DE AD BE EF".into());
         skipped(p, "dreamseeker.exe: pattern \"DE AD BE EF\" not found");
+    }
+
+    #[test]
+    fn needs_patterns() {
+        // A patch applies only while its own module still has the code it relies on without branching to it.
+        let mut p = counter();
+        p.needs = vec!["A1 ?? ?? ?? ?? C3".into()];
+        applied(p.clone());
+        p.needs.push("DE AD BE EF".into());
+        skipped(p, "pattern \"DE AD BE EF\" not found");
     }
 
     #[test]

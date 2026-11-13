@@ -109,6 +109,9 @@ pub struct Patch {
     /// IDA patterns that must each match once in dreamseeker.exe's code: the client code the patch depends on. A BYOND
     /// build that changes that code (to fix the bug there, say) gets no patch.
     pub exe: Vec<String>,
+    /// IDA patterns that must each match once in the patched module's own code: BYOND code the body relies on but
+    /// doesn't branch to (a field another function keeps, say), so a build that changes it gets no patch.
+    pub needs: Vec<String>,
     /// Files in BYOND's `bin` the patch depends on, by name and [`fnv1a`](dmfast_format::fingerprint::fnv1a) hash. If
     /// one differs (a newer FMOD, say), the patch isn't applied.
     pub files: Vec<(String, u64)>,
@@ -151,6 +154,7 @@ mod tests {
             site: Place::Export(String::new()),
             displace: 5,
             exe: Vec::new(),
+            needs: Vec::new(),
             files: Vec::new(),
             body: Vec::new(),
             entry: 0,

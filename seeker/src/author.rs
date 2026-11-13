@@ -11,6 +11,7 @@
 //! site fingerprint <length> <hash> <IDA bytes...>
 //! displace <n>
 //! exe <IDA bytes...>
+//! needs <IDA bytes...>
 //! file <name> <hash>
 //! body <symbol>
 //! data <bytes>
@@ -21,9 +22,10 @@
 //! `about`, `tier`, `site`, `displace`, and `body` are required; `data` defaults to 0; numbers are decimal or `0x`
 //! hex. `site` may repeat: the same code at several sites (patches `<name>`, `<name>-2`, ...). A fingerprint names a
 //! whole function without its bytes ([`Place::Fingerprint`]): the bytes are only how it starts, and an install that
-//! finds no match says what each function starting that way hashes to. `exe` and `file` may repeat: each `exe` pattern
-//! must match exactly once in dreamseeker.exe's code ([`Patch::exe`]), and each named file in `bin` must have the
-//! given hash ([`Patch::files`]).
+//! finds no match says what each function starting that way hashes to. `exe`, `needs`, and `file` may repeat: each
+//! `exe` pattern must match exactly once in dreamseeker.exe's code ([`Patch::exe`]), each `needs` pattern exactly once
+//! in the patched module's own code ([`Patch::needs`]), and each named file in `bin` must have the given hash
+//! ([`Patch::files`]).
 //! `dmf_resume`, `dmf_original`, `dmf_data`, `dmf_com`, and `dmf_com_tail` need no `ref`; `jmp dmf_original + n` runs
 //! the original instructions from offset `n`. Names are matched without the `_` (and a stdcall `@<bytes>`) i686 Windows
 //! puts on C names.
@@ -102,6 +104,7 @@ struct Draft {
     sites: Vec<Place>,
     displace: Option<u32>,
     exe: Vec<String>,
+    needs: Vec<String>,
     files: Vec<(String, u64)>,
     body: Option<(usize, String)>,
     data: Option<u32>,
@@ -111,7 +114,7 @@ struct Draft {
 impl Draft {
     /// The patch without its body and fixups (at its first site), and where they come from.
     fn finish(self, key: &str) -> Result<(Patch, Source), String> {
-        let Draft { line, name, module, tier, about, sites, displace, exe, files, body, data, refs } = self;
+        let Draft { line, name, module, tier, about, sites, displace, exe, needs, files, body, data, refs } = self;
         let missing = |what: &str| format!("line {line}: patch {name} has no `{what}`");
         let about = about.ok_or_else(|| missing("about"))?;
         let tier = tier.ok_or_else(|| missing("tier"))?;
@@ -127,6 +130,7 @@ impl Draft {
             site,
             displace,
             exe,
+            needs,
             files,
             body: Vec::new(),
             entry: 0,
@@ -174,6 +178,7 @@ fn directive(drafts: &mut Vec<Draft>, line: usize, text: &str) -> Result<(), Str
             sites: Vec::new(),
             displace: None,
             exe: Vec::new(),
+            needs: Vec::new(),
             files: Vec::new(),
             body: None,
             data: None,
@@ -200,6 +205,11 @@ fn directive(drafts: &mut Vec<Draft>, line: usize, text: &str) -> Result<(), Str
         "exe" if rest.is_empty() => bail!("expected `exe <IDA bytes...>`"),
         "exe" => {
             draft.exe.push(pattern(&args)?);
+            Ok(())
+        }
+        "needs" if rest.is_empty() => bail!("expected `needs <IDA bytes...>`"),
+        "needs" => {
+            draft.needs.push(pattern(&args)?);
             Ok(())
         }
         "file" => {

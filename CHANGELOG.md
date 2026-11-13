@@ -20,6 +20,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New client fix:** `pitchretune` (safe): changing a playing sound's `pitch` no longer stutters.
 - **New client patch:** `objsearch` (safe): much much faster verb panels.
 - **New client fix:** `hiddenmap` (safe): a map control that isn't showing is no longer drawn while hidden, so animated icons on it no longer make movement on the main map stutter.
+- **New client patch:** `drawbatch` (safe): map icons stay batched instead of a draw call each when icons with and without `PIXEL_SCALE` mix, for less client CPU per frame.
 - **New client fix:** `soundpriority` (extended): a higher sound priority keeps its channel instead of being the first silenced.
 - **New fix:** `filtername` (extended): adding a named filter to `filters` replaces the filter of that name instead of keeping both.
 - **New fix:** `finalpath` (breaking): `final` before a proc or var in a type's path (`/foo/final/bar()`) is the `final` modifier instead of a type `/foo/final`.

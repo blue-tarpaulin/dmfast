@@ -76,6 +76,7 @@ fn counter_fixture() {
             site: Place::Export("??0DMString@@QAE@XZ".to_string()),
             displace: 6,
             exe: Vec::new(),
+            needs: Vec::new(),
             files: Vec::new(),
             body: Vec::new(),
             entry: 0,
