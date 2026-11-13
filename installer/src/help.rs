@@ -1,4 +1,4 @@
-//! What the installer prints for `--help`, `--help bugfixes` and `--version`.
+//! What the installer prints for `--help`, `--help fixes` and `--version`.
 
 /// First line of the help and of the guided install.
 macro_rules! banner {
@@ -23,25 +23,22 @@ pub const HELP: &str = concat!(
 
 dmfast-install [options] <BYOND or bin folder, dm.exe or dreamdaemon.exe>
   options:
-     --uninstall        remove dmfast and restores originals
-     --audit            audit the installed DreamSeeker patches
+     --uninstall        remove dmfast and restore stock
+     --audit            check the installed DreamSeeker patches
      --no-compiler      leave the compiler stock
      --no-server        leave DreamDaemon stock
-     --client           also patch DreamSeeker (its 'safe' patches, or those --fixes picks);
-                        an install without it puts DreamSeeker back to stock
-     --fixes <which>    opt-in bug fixes: 'safe', 'extended' (recommended), 'breaking',
-                        or fix keys that are comma-separated; -key leaves one out
-                        ('experimental' adds the experimental ones of those tiers)
+     --fixes [which]    bug fixes: safe (default), extended, breaking, none, or keys;
+                        -key leaves one out.
+     --client [which]   DreamSeeker patches, picked like --fixes
      --version          show version and licenses
-     -h, --help         view this help
-     --help bugfixes    view a list of the possible bugfixes
-     --help client      view a list of the DreamSeeker patches
+     -h, --help         this help
+     --help fixes       list the bug fixes
+     --help client      list the DreamSeeker patches
 
   examples:
-     dmfast-install "C:\Program Files (x86)\BYOND\bin"
-     dmfast-install --fixes safe "C:\Program Files (x86)\BYOND"
-     dmfast-install --no-compiler --no-server --client "C:\Program Files (x86)\BYOND"
-     dmfast-install --uninstall "C:\BYOND"
+     dmfast-install "C:\Program Files (x86)\BYOND"
+     dmfast-install --fixes extended --client "C:\Program Files (x86)\BYOND"
+     dmfast-install --uninstall "C:\Program Files (x86)\BYOND"
 
 Close BYOND first. Double-click this exe for a guided install, or drag BYOND onto it.
 Re-run this installer after a BYOND update."#
@@ -54,19 +51,18 @@ pub const HELP: &str = concat!(
 
 dmfast-install [options] <BYOND or bin folder, DreamMaker or DreamDaemon>
   options:
-     --uninstall        remove dmfast and restores originals
+     --uninstall        remove dmfast and restore stock
      --no-compiler      leave the compiler stock
      --no-server        leave DreamDaemon stock
-     --fixes <which>    opt-in bug fixes: 'safe', 'extended' (recommended), 'breaking',
-                        or fix keys that are comma-separated; -key leaves one out
-                        ('experimental' adds the experimental ones of those tiers)
+     --fixes [which]    bug fixes: safe (default), extended, breaking, none, or keys;
+                        -key leaves one out.
      --version          show version and licenses
-     -h, --help         view this help
-     --help bugfixes    view a list of the possible bugfixes
+     -h, --help         this help
+     --help fixes       list the bug fixes
 
   examples:
      dmfast-install ~/byond/bin
-     sudo dmfast-install --fixes safe /usr/local/byond
+     sudo dmfast-install --fixes extended /usr/local/byond
      dmfast-install --uninstall ~/byond
 
 Close BYOND first. Run it with no arguments in a terminal for a guided install.

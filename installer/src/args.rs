@@ -1,7 +1,11 @@
 //! Command-line options.
 
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::iter::Peekable;
+use std::path::{Path, PathBuf};
+use std::slice::Iter;
+
+use crate::fixes;
 
 pub struct Opts {
     pub target: PathBuf,
@@ -13,10 +17,9 @@ pub struct Opts {
     pub compiler: bool,
     /// Speed up DreamDaemon (the default; `--no-server` leaves it stock).
     pub server: bool,
-    /// `--client`: also patch DreamSeeker, with the DreamSeeker patches the saved fix selection picks (`safe` without
-    /// one).
+    /// `--client`: the DreamSeeker patch selection to save; None keeps the current one.
     #[cfg(windows)]
-    pub client: bool,
+    pub client: Option<String>,
     /// `--fixes`: the bug-fix selection to save; None keeps the current one.
     pub fixes: Option<String>,
     /// Windows: this is the relaunched admin copy.
@@ -39,8 +42,8 @@ pub enum Action {
 pub fn parse(args: &[OsString]) -> Action {
     let (mut target, mut uninstall, mut compiler, mut server, mut fixes) = (None, false, true, true, None);
     #[cfg(windows)]
-    let (mut audit, mut client, mut elevated) = (false, false, false);
-    let mut args = args.iter();
+    let (mut audit, mut client, mut elevated) = (false, None, false);
+    let mut args = args.iter().peekable();
     while let Some(arg) = args.next() {
         let a = arg.to_str().unwrap_or("");
         match a {
@@ -51,22 +54,16 @@ pub fn parse(args: &[OsString]) -> Action {
             "--no-compiler" => compiler = false,
             "--no-server" => server = false,
             #[cfg(windows)]
-            "--client" => client = true,
-            "--fixes" => match args.next().and_then(|v| v.to_str()) {
-                Some(v) if !v.is_empty() && !v.starts_with("--") => fixes = Some(v.to_string()),
-                _ => return Action::Error("--fixes needs a value: safe, extended, breaking, none, or fix keys".into()),
-            },
-            _ if a.starts_with("--fixes=") => match &a["--fixes=".len()..] {
-                "" => {
-                    return Action::Error("--fixes needs a value: safe, extended, breaking, none, or fix keys".into());
-                }
-                v => fixes = Some(v.to_string()),
-            },
+            "--client" => client = Some(value(&mut args, |v| crate::platform::client_selection(v).is_ok())),
+            #[cfg(windows)]
+            _ if a.starts_with("--client=") => client = Some(a["--client=".len()..].to_string()),
+            "--fixes" => fixes = Some(value(&mut args, |v| fixes::check(v).is_ok())),
+            _ if a.starts_with("--fixes=") => fixes = Some(a["--fixes=".len()..].to_string()),
             #[cfg(windows)]
             "--elevated" => elevated = true,
             "-h" | "--help" | "/?" => {
                 return match args.next().and_then(|v| v.to_str()) {
-                    Some("bugfixes") => Action::BugFixes,
+                    Some("fixes") => Action::BugFixes,
                     #[cfg(windows)]
                     Some("client") => Action::ClientPatches,
                     _ => Action::Help,
@@ -81,7 +78,7 @@ pub fn parse(args: &[OsString]) -> Action {
     // Options that change what an install does.
     let options = !compiler || !server || fixes.is_some();
     #[cfg(windows)]
-    let options = options || client;
+    let options = options || client.is_some();
     #[cfg(windows)]
     if audit && (uninstall || options) {
         return Action::Error("--audit only reads; it takes no other option".into());
@@ -89,12 +86,7 @@ pub fn parse(args: &[OsString]) -> Action {
     if uninstall && options {
         return Action::Error("--uninstall takes no other option".into());
     }
-    #[cfg(windows)]
-    if !compiler && !server && !client {
-        return Action::Error(
-            "--no-compiler and --no-server leave nothing to install (add --client for DreamSeeker)".into(),
-        );
-    }
+    // Windows: the install says so, since a saved --client may still patch DreamSeeker.
     #[cfg(not(windows))]
     if !compiler && !server {
         return Action::Error("--no-compiler and --no-server leave nothing to install".into());
@@ -112,4 +104,11 @@ pub fn parse(args: &[OsString]) -> Action {
         #[cfg(windows)]
         elevated,
     })
+}
+
+/// The value of `--fixes` or `--client`: the next argument if `valid` takes it and it isn't the BYOND folder, else
+/// `safe`.
+fn value(args: &mut Peekable<Iter<OsString>>, valid: impl Fn(&str) -> bool) -> String {
+    let next = args.next_if(|v| v.to_str().is_some_and(|v| valid(v) && !Path::new(v).exists()));
+    next.map_or_else(|| "safe".into(), |v| v.to_string_lossy().into_owned())
 }

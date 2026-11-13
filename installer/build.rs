@@ -113,7 +113,7 @@ fn client_doc(root: &std::path::Path) -> Vec<(String, String)> {
         .collect()
 }
 
-/// `--help bugfixes`: the fix tables of BUGFIXES.md (name, key, tier, OS), written to
+/// `--help fixes`: the fix tables of BUGFIXES.md (name, key, tier, OS), written to
 /// `$OUT_DIR/bugfixes.txt` so the list can't drift from the document.
 fn write_bugfix_list(root: &std::path::Path) {
     let doc = root.join("BUGFIXES.md");

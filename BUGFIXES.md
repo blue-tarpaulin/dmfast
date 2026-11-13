@@ -8,10 +8,10 @@ are listed in [CLIENT.md](CLIENT.md).
 Turn them on when installing:
 
 ```
-dmfast-install --fixes safe "C:\Program Files (x86)\BYOND"
+dmfast-install --fixes "C:\Program Files (x86)\BYOND"
 ```
 
-You can also give fix keys, and `-key` leaves one out: `--fixes extended,-tick0`. `--fixes none` turns them off again.
+That turns on the `safe` ones. You can also give a tier or fix keys, and `-key` leaves one out: `--fixes extended,-tick0`. `--fixes none` turns them off again.
 
 Your choice is saved in `dmfast.ini`, and the `DMFAST_FIXES` environment variable overrides it. Compiler fixes may change the `.dmb` (for example, broken code generation).
 

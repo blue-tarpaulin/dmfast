@@ -25,7 +25,9 @@ dmfast-install.exe "C:\Program Files (x86)\BYOND"
 sh dmfast-install.exe ~/byond
 ```
 
-To turn on the opt-in [bug fixes](BUGFIXES.md), pass `--fixes safe` or `--fixes extended`.
+To turn on the opt-in [bug fixes](BUGFIXES.md), pass `--fixes` or `--fixes extended`.
+
+To turn on the opt-in [client patches](CLIENT.md), pass `--client` or `--client extended`.
 
 Run it bare via terminal for more commands and help. Re-run it after BYOND updates.
 

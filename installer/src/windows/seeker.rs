@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use dmfast_format::fingerprint::fnv1a;
 use dmfast_format::manifest::CODE_SECTION;
-use dmfast_seeker::patch::{Module, Patch};
+use dmfast_seeker::patch::{Module, Patch, Tier};
 use dmfast_seeker::{apply, audit, author};
 
 use super::{BACKUP, ensure_not_in_use, pe};
@@ -111,10 +111,7 @@ pub fn client_list() -> String {
         Ok(_) => return "This build carries no DreamSeeker patches.".into(),
         Err(e) => return e.message().into(),
     };
-    let mut out = String::from(
-        "DreamSeeker patches (details in CLIENT.md), applied with --client: the 'safe' ones, or those --fixes picks\n\
-         like bug fixes. key, tier, what it does:\n",
-    );
+    let mut out = String::from("DreamSeeker patches (CLIENT.md), picked by --client like bug fixes:\n");
     let mut seen = Vec::new();
     for p in &patches {
         if !seen.contains(&&p.key) {
@@ -125,26 +122,53 @@ pub fn client_list() -> String {
     out
 }
 
-/// Without a saved fix selection, `--client` takes the `safe` patches.
-const CLIENT_DEFAULT: &str = "safe";
-
-/// Install: with `client`, applies the patches the saved fix selection picks (or [`CLIENT_DEFAULT`]'s without one) to
-/// each module's stock bytes (its backup if it is patched, else the file). dreamseeker.exe goes first, because the DLLs'
-/// gates check for its identity after patching. A module that gets no patch (every module without `client`) goes back
-/// to stock.
-pub fn plan_install(dir: &Path, client: bool) -> Result<Plan, Failure> {
-    let selection = if !client {
-        Vec::new()
-    } else {
-        match fixes::current(dir)? {
-            None => vec![CLIENT_DEFAULT.into()],
-            Some(v) => fixes::entries(&v)?,
+/// The entries of a `--client` value: tiers, patch keys, or `-key` to leave one out. `none` alone picks nothing.
+pub fn selection(spec: &str) -> Result<Vec<String>, Failure> {
+    let entries = fixes::split(spec);
+    if entries.is_empty() {
+        return Err("--client needs a value: safe, extended, breaking, none, or patch keys".into());
+    }
+    if entries == ["none"] {
+        return Ok(Vec::new());
+    }
+    let patches = embedded()?;
+    for e in &entries {
+        let key = e.strip_prefix('-').unwrap_or(e);
+        let tier = key == e && Tier::parse(key).is_some();
+        if !tier && !patches.iter().any(|p| p.key == key) {
+            return Err(format!("--client: no tier or DreamSeeker patch named {key:?} (see --help client)").into());
         }
-    };
+    }
+    Ok(entries)
+}
+
+/// The `dmfast.ini` key with the `--client` selection, applied again by installs without `--client`. dmfast itself
+/// doesn't read it.
+const KEY: &str = "client";
+const COMMENT: &str = "; DreamSeeker patches: safe, extended, breaking, none, or keys (CLIENT.md)";
+
+/// Saves a `--client` selection. Returns it as saved.
+pub fn set(dir: &Path, spec: &str) -> Result<String, Failure> {
+    let entries = selection(spec)?;
+    let value = if entries.is_empty() { "none".to_string() } else { entries.join(", ") };
+    fixes::put(dir, KEY, &value, COMMENT)?;
+    Ok(value)
+}
+
+/// The saved `--client` selection (`none` without one).
+pub fn current(dir: &Path) -> Result<String, Failure> {
+    Ok(fixes::get(dir, KEY)?.unwrap_or_else(|| "none".into()))
+}
+
+/// Install: applies the patches `client` (a `--client` value) picks to each module's stock bytes (its backup if it is
+/// patched, else the file). dreamseeker.exe goes first, because the DLLs' gates check for its identity after
+/// patching. A module that gets no patch goes back to stock.
+pub fn plan_install(dir: &Path, client: &str) -> Result<Plan, Failure> {
+    let selection = selection(client)?;
     let mut patches: Vec<Patch> = embedded()?.into_iter().filter(|p| p.wanted(&selection)).collect();
     let mut plan = Plan { steps: Vec::new(), lines: Vec::new(), patched: false };
-    if client && patches.is_empty() {
-        plan.lines.push("DreamSeeker: the fix selection picks none of its patches ('--help client' lists them)".into());
+    if !selection.is_empty() && patches.is_empty() {
+        plan.lines.push("DreamSeeker: --client picks none of its patches (see --help client)".into());
     }
     let exe_path = dir.join(EXE);
     let exe = if patches.is_empty() {

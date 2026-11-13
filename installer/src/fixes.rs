@@ -1,6 +1,7 @@
 //! `dmfast.ini`, dmfast's settings file next to its library. `--fixes` sets its `fixes` key: which
 //! opt-in BYOND bug fixes dmfast applies (BUGFIXES.md lists the fixes and tiers). dmfast reads the file
-//! when a BYOND program starts; `DMFAST_FIXES` overrides the key for one run.
+//! when a BYOND program starts; `DMFAST_FIXES` overrides the key for one run. `--client` keeps its choice of
+//! DreamSeeker patches in the `client` key, for the next install.
 
 use std::fs;
 use std::path::Path;
@@ -13,19 +14,20 @@ const FILE: &str = "dmfast.ini";
 /// Selection words other than keys: the tiers, and `experimental`
 const WORDS: [&str; 4] = ["safe", "extended", "breaking", "experimental"];
 
-const NEW_FILE: &str = "; dmfast settings, read when a BYOND program starts. dmfast-install keeps edits to this file.\n\
-                        [dmfast]\n\
-                        ; Opt-in BYOND bug fixes (see BUGFIXES.md): safe or extended (recommended), breaking (causes\n\
-                        ; runtime errors in code that relied on the bugs), none, or fix keys, comma-separated; -key\n\
-                        ; leaves one out; experimental also turns on experimental fixes of the tiers chosen.\n\
-                        ; DMFAST_FIXES, if set, overrides this for a run.\n";
+const NEW_FILE: &str = "[dmfast]\n";
 
-/// The entries of a `--fixes` value: tier names, `experimental`, fix keys, or `-key` to leave one out, separated
-/// by commas.
+const FIXES_COMMENT: &str =
+    "; bug fixes: safe, extended, breaking, none, or keys (BUGFIXES.md); DMFAST_FIXES overrides it";
+
+/// The entries of a selection (`--fixes` or `--client`): separated by commas or spaces.
+pub(crate) fn split(spec: &str) -> Vec<String> {
+    spec.split(|c: char| c == ',' || c.is_whitespace()).filter(|e| !e.is_empty()).map(str::to_owned).collect()
+}
+
+/// The entries of a `--fixes` value: tier names, `experimental`, fix keys, or `-key` to leave one out.
 /// `none` alone means no fixes (no entries).
-pub(crate) fn entries(spec: &str) -> Result<Vec<String>, Failure> {
-    let entries: Vec<String> =
-        spec.split(|c: char| c == ',' || c.is_whitespace()).filter(|e| !e.is_empty()).map(str::to_owned).collect();
+fn entries(spec: &str) -> Result<Vec<String>, Failure> {
+    let entries = split(spec);
     if entries.is_empty() {
         return Err(
             "--fixes needs a value: safe, extended, breaking, experimental, none, or fix keys (see BUGFIXES.md)".into(),
@@ -47,13 +49,9 @@ pub(crate) fn entries(spec: &str) -> Result<Vec<String>, Failure> {
     Ok(entries)
 }
 
-/// Whether an INI line sets `fixes` (comments and surrounding spaces ignored).
-fn is_fixes_line(line: &str) -> bool {
-    line.split([';', '#'])
-        .next()
-        .unwrap_or("")
-        .split_once('=')
-        .is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case("fixes"))
+/// Whether an INI line sets `key` (comments and surrounding spaces ignored).
+fn sets(line: &str, key: &str) -> bool {
+    line.split([';', '#']).next().unwrap_or("").split_once('=').is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case(key))
 }
 
 /// Checks a `--fixes` value before anything is installed.
@@ -61,34 +59,43 @@ pub fn check(spec: &str) -> Result<(), Failure> {
     entries(spec).map(|_| ())
 }
 
-/// Sets the `fixes` key, keeping the rest of the file. Returns how the selection now reads.
+/// Sets the `fixes` key. Returns how the selection now reads.
 pub fn set(dir: &Path, spec: &str) -> Result<String, Failure> {
     let entries = entries(spec)?;
     let value = if entries.is_empty() { "none".to_string() } else { entries.join(", ") };
+    put(dir, "fixes", &value, FIXES_COMMENT)?;
+    describe(dir)
+}
+
+/// Sets `key` to `value`, keeping the rest of the file. A new key goes last, after `comment`.
+pub(crate) fn put(dir: &Path, key: &str, value: &str, comment: &str) -> Result<(), Failure> {
     let path = dir.join(FILE);
     let old = if path.is_file() { String::from_utf8_lossy(&read(&path)?).into_owned() } else { NEW_FILE.to_string() };
-    let line = format!("fixes = {value}");
-    let mut lines: Vec<String> = Vec::new();
+    let line = format!("{key} = {value}");
+    let mut lines: Vec<&str> = Vec::new();
     let mut done = false;
     for l in old.lines() {
-        if is_fixes_line(l) {
-            if !done {
-                lines.push(line.clone());
-                done = true;
-            }
-        } else {
-            lines.push(l.to_string());
+        if !sets(l, key) {
+            lines.push(l);
+        } else if !done {
+            lines.push(&line);
+            done = true;
         }
     }
     if !done {
-        lines.push(line);
+        lines.extend(comment.lines());
+        lines.push(&line);
     }
-    write(&path, (lines.join("\n") + "\n").as_bytes())?;
-    describe(dir)
+    write(&path, (lines.join("\n") + "\n").as_bytes())
 }
 
 /// The saved selection (the `fixes` value), if there is a settings file with one.
 pub fn current(dir: &Path) -> Result<Option<String>, Failure> {
+    get(dir, "fixes")
+}
+
+/// `key`'s value, if there is a settings file with one.
+pub(crate) fn get(dir: &Path, key: &str) -> Result<Option<String>, Failure> {
     let path = dir.join(FILE);
     if !path.is_file() {
         return Ok(None);
@@ -97,7 +104,7 @@ pub fn current(dir: &Path) -> Result<Option<String>, Failure> {
     Ok(text
         .lines()
         .rev()
-        .filter(|l| is_fixes_line(l))
+        .filter(|l| sets(l, key))
         .find_map(|l| l.split([';', '#']).next()?.split_once('=').map(|(_, v)| v.trim().to_string()))
         .filter(|v| !v.is_empty()))
 }

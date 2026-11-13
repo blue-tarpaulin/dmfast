@@ -2,7 +2,7 @@
 //! pulls in `mimalloc.dll`, dmfast's allocator (mimalloc for small blocks, the process heap for large
 //! ones; source in `vendor/mimalloc-x86`). It goes into the compiler (`dm.exe`) unless `--no-compiler` is given, and
 //! DreamDaemon (`dreamdaemon.exe`, `dd.exe`) unless `--no-server` is, and every other program stays stock. With
-//! `--client`, byondcore.dll and byondwin.dll also get the DreamSeeker patches the fix selection picks, on disk
+//! `--client` (saved like the fixes), byondcore.dll and byondwin.dll also get the DreamSeeker patches it picks, on disk
 //! (`seeker`). The stock copy of every file dmfast changes is kept in `bin/backup/`.
 
 mod elevate;
@@ -232,7 +232,7 @@ fn restore(dir: &Path, name: &str) -> Result<(), Failure> {
     rename_retry(&backup_of(dir, name), &exe).map_err(|e| io_err("cannot restore", &exe, e))
 }
 
-pub fn install(dir: &Path, compiler: bool, server: bool, client: bool) -> Result<String, Failure> {
+pub fn install(dir: &Path, compiler: bool, server: bool, client: &str) -> Result<String, Failure> {
     let names = targets(dir, compiler, server);
     migrate(dir)?;
     // A program left out is put back (re-running without it means "not this one").
@@ -261,16 +261,15 @@ pub fn install(dir: &Path, compiler: bool, server: bool, client: bool) -> Result
     let states = names.iter().map(|n| check(dir, n)).collect::<Result<Vec<_>, _>>()?;
     let seeker = seeker::plan_install(dir, client)?;
     if names.is_empty() && !seeker.patched {
-        // Without the compiler, `server` or `client` was asked for.
         let mut why = Vec::new();
         if server {
             why.push(format!("no {}", RUNTIME.join(" or ")));
         }
-        if client {
+        if !seeker::selection(client)?.is_empty() {
             why.extend(seeker.lines().iter().cloned());
         }
         if why.is_empty() {
-            why.push("no DreamSeeker DLL to patch".into());
+            why.push("the compiler, DreamDaemon, and DreamSeeker are all left out".into());
         }
         return Err(format!("nothing to install in {}: {}", dir.display(), why.join(", and ")).into());
     }
@@ -311,7 +310,9 @@ pub fn install(dir: &Path, compiler: bool, server: bool, client: bool) -> Result
     Ok(msg)
 }
 
-pub use seeker::{audit, client_list, has_client_patches};
+pub use seeker::{
+    audit, client_list, current as current_client, has_client_patches, selection as client_selection, set as set_client,
+};
 
 /// None if dmfast isn't installed in `dir` (nothing of ours was found).
 pub fn uninstall(dir: &Path) -> Result<Option<String>, Failure> {

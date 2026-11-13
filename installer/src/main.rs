@@ -55,6 +55,10 @@ fn run(o: &Opts) -> Result<String, Failure> {
     if let Some(spec) = &o.fixes {
         fixes::check(spec)?;
     }
+    #[cfg(windows)]
+    if let Some(spec) = &o.client {
+        platform::client_selection(spec)?;
+    }
     let d = platform::bin_dir(&o.target)?;
     #[cfg(windows)]
     if o.audit {
@@ -70,16 +74,22 @@ fn run(o: &Opts) -> Result<String, Failure> {
             None => format!("dmfast is not installed in {}", d.display()),
         });
     }
-    // Settings first: on its own the file changes nothing, and a failure here leaves BYOND untouched.
+    // Settings first: on their own they change nothing, and a failure here leaves BYOND untouched.
     let fixes = match &o.fixes {
         Some(spec) => fixes::set(&d, spec)?,
         None => fixes::describe(&d)?,
     };
     #[cfg(windows)]
-    let msg = platform::install(&d, o.compiler, o.server, o.client)?;
+    {
+        let client = match &o.client {
+            Some(spec) => platform::set_client(&d, spec)?,
+            None => platform::current_client(&d)?,
+        };
+        let msg = platform::install(&d, o.compiler, o.server, &client)?;
+        Ok(format!("{msg}\n{fixes}\nDreamSeeker patches: {client}"))
+    }
     #[cfg(not(windows))]
-    let msg = platform::install(&d, o.compiler, o.server)?;
-    Ok(format!("{msg}\n{fixes}"))
+    Ok(format!("{msg}\n{fixes}", msg = platform::install(&d, o.compiler, o.server)?))
 }
 
 fn main() {

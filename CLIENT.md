@@ -10,8 +10,7 @@ These are off by default. Turn them on when installing:
 dmfast-install --client "C:\Program Files (x86)\BYOND"
 ```
 
-By default, only the `safe` ones are applied. You can pass `--fixes` to pick others, by [tier](BUGFIXES.md) or key, the same as bug fixes.
-E.g. `--client --fixes extended`.
+That applies the `safe` ones. Pick others by [tier](BUGFIXES.md) or key, like bug fixes: `--client extended`. Your choice is saved in `dmfast.ini` and applied again by later installs; `--client none` puts DreamSeeker back to stock.
 
 ## Fixes
 

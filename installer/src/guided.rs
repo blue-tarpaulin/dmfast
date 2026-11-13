@@ -31,6 +31,22 @@ fn yes(question: &str, default: bool) -> Option<bool> {
     }
 }
 
+/// A tier question under `title`; Enter keeps `keep`. `none` offers "none" too.
+fn pick(title: &str, keep: String, none: bool) -> Option<String> {
+    println!("{title}");
+    let choices = if none { "(n)one, (s)afe or (e)xtended?" } else { "(s)afe or (e)xtended?" };
+    loop {
+        let tier = match ask(&format!("  {choices} [{keep}]"))?.to_ascii_lowercase().as_str() {
+            "" => return Some(keep),
+            "n" | "none" if none => "none",
+            "s" | "safe" => "safe",
+            "e" | "extended" => "extended",
+            _ => continue,
+        };
+        return Some(tier.into());
+    }
+}
+
 /// A folder typed, pasted or dropped onto the window: terminals and Explorer quote paths with spaces.
 fn folder(prompt: &str) -> Option<PathBuf> {
     loop {
@@ -87,25 +103,24 @@ pub fn run() -> Option<Vec<String>> {
     if !compiler && !server && !client {
         return None;
     }
-    let mut args: Vec<String> = [(!compiler, "--no-compiler"), (!server, "--no-server"), (client, "--client")]
+    let mut args: Vec<String> = [(!compiler, "--no-compiler"), (!server, "--no-server")]
         .into_iter()
         .filter(|&(on, _)| on)
         .map(|(_, flag)| flag.into())
         .collect();
-    let saved = fixes::current(&bin).ok().flatten();
-    let keep = saved.as_deref().unwrap_or("none");
-    println!("Bug fixes ('--help bugfixes' lists them):");
-    loop {
-        let a = ask(&format!("  (n)one, (s)afe or (e)xtended? [{keep}]"))?.to_ascii_lowercase();
-        let pick = match a.as_str() {
-            "" => break,
-            "n" | "none" => "none",
-            "s" | "safe" => "safe",
-            "e" | "extended" => "extended",
-            _ => continue,
+    if compiler || server {
+        let saved = fixes::current(&bin).ok().flatten().unwrap_or_else(|| "none".into());
+        args.extend(["--fixes".into(), pick("Bug fixes ('--help fixes' lists them):", saved, true)?]);
+    }
+    #[cfg(windows)]
+    if platform::has_client_patches() {
+        let pick = if client {
+            let saved = platform::current_client(&bin).ok().filter(|s| s != "none");
+            pick("DreamSeeker patches ('--help client' lists them):", saved.unwrap_or_else(|| "safe".into()), false)?
+        } else {
+            "none".into()
         };
-        args.extend(["--fixes".into(), pick.into()]);
-        break;
+        args.extend(["--client".into(), pick]);
     }
     args.push(path);
     println!();

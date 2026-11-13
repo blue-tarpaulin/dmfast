@@ -4,7 +4,8 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
-- **New:** `--client` (Windows) patches DreamSeeker with opt-in-only client fixes, `safe` by default.
+- **New:** `--client [which]` (Windows) patches DreamSeeker with opt-in client fixes, picked apart from `--fixes`: `safe` by default, or `--client extended`. The choice is saved like `--fixes`; `--client none` removes them.
+- **Changed:** `--fixes` alone means `--fixes safe`, and `--help bugfixes` is now `--help fixes`.
 - **New:** `--audit` (Windows) checks DreamSeeker's patched DLLs against the stock ones in `bin/backup/`.
 - **New patch:** `truth` (DreamDaemon, Linux): faster `if(x)`, `!x`, `&&`, and `||` on numbers. ~1% less CPU usage in-round.
 - **New patch:** `varread` (DreamDaemon, Windows): faster reads of user-defined vars by name. ~1% less CPU usage in-round.
