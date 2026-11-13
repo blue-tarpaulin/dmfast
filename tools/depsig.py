@@ -35,7 +35,8 @@ ABSENT = 0xFFFF  # a form's offset for a global it doesn't address (runtime: not
 # (os, patch keys, name, start address in REF, options). Options: callers=True also guards the number of
 # call sites (writers that patches don't hook); globals=False skips globals (a function that touches every
 # table, where the guarded data's own functions cover it); max_len raises MAX_LEN for one function; split=True
-# also ends a Windows function at a `push ebp ; mov ebp,esp` right after a return (no int3 padding before it).
+# also ends a Windows function at a `push ebp ; mov ebp,esp` right after a return (no int3 padding before it);
+# since="<version>" checks only that build and later ones (a patch whose signatures match only from there).
 MANIFEST = [
     # compiler string table: intern (strtab replaces its walk, strings its free-slot scan), the .dmb save
     # (unlinks and frees strings; ftell: its loop touches the .dmb only through the string writer), the global
@@ -478,6 +479,7 @@ class Entry:
         self.keys, self.name = keys, name
         self.forms, self.globals, self.callers = [], [], None  # globals: accepted count sets
         self.split = False
+        self.since = None  # the first build checked (a patch that only installs from there)
 
 
 def find_form(img, fingerprint):
@@ -545,8 +547,14 @@ def find_changed(entry, img):
     return None
 
 
+def version(v):
+    return tuple(int(x) for x in v.split("."))
+
+
 def update(entry, os_, imgs, accept, problems):
     for v, img in imgs.items():
+        if entry.since and version(v) < version(entry.since):
+            continue
         what = f"{os_} {entry.name} in {v}"
         m = locate(entry, img)
         if m is None:
@@ -603,7 +611,7 @@ def create(os_, keys, name, start, opts, imgs, problems):
         problems.append(f"{os_} {name}: {len(raw):#x} bytes, over the limit")
         return None
     e = Entry(keys, name)
-    e.split = opts.get("split", False)
+    e.split, e.since = opts.get("split", False), opts.get("since")
     offs, seen = [], set()
     if opts.get("globals", True):
         for o, g in abs_sites(ref, start, len(raw)):
@@ -718,7 +726,7 @@ def main():
             if e is None:
                 e = create(os_, keys, name, start, opts, imgs, problems)
             else:
-                e.keys, e.split = keys, opts.get("split", False)
+                e.keys, e.split, e.since = keys, opts.get("split", False), opts.get("since")
                 err = rebuild(e, os_, imgs)
                 if err:
                     print(err)
