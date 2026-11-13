@@ -21,6 +21,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **Changed:** the installer keeps the stock programs in `bin/backup/` instead of as `<name>_orig`.
 - **New fix:** `varoverride` (safe): in a project with about 65,500 names, a child type's override of a var its parent sets at runtime (a `list()`, for example) is no longer ignored.
 - **New client fix:** `hiddenmap` (safe): a map control that isn't showing is no longer drawn while hidden, so animated icons on it no longer make movement on the main map stutter.
+- **New patch:** `treeskip` (DreamDaemon): faster map sending by skipping a player's records that have no changes to send. ~2-5% less `map_cpu`.
 
 ## 7.0.0
 

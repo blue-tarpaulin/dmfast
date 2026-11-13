@@ -124,7 +124,7 @@ MANIFEST = [
     # seenclear sweeps a record tree's node pool instead of its list: every allocated node must be linked
     # into the list (allocator: its call sites) and every free must mark the slot free (the pool's frees)
     ("win", ("seenclear",), "record pool allocator", 0x1012B4E0, {"globals": False, "callers": True}),
-    ("win", ("seenclear",), "record tree erase", 0x1012CDF0, {"globals": False}),
+    ("win", ("seenclear", "treeskip"), "record tree erase", 0x1012CDF0, {"globals": False}),
     ("win", ("seenclear",), "record tree erase 2", 0x1012CFD0, {"globals": False}),
     ("lin", ("seenclear",), "record pool allocator", 0x4249A0, {"globals": False, "callers": True}),
     ("lin", ("seenclear",), "record tree erase", 0x424770, {"globals": False}),
@@ -134,6 +134,12 @@ MANIFEST = [
     ("win", ("mapskip",), "client record find", 0x1012C390, {"globals": False}),
     ("lin", ("mapskip",), "client record check", 0x423330, {"globals": False}),
     ("lin", ("mapskip",), "client record find", 0x424E10, {"globals": False}),
+    # treeskip skips the record change send's walks that would find nothing: nothing in the send but its flag-2
+    # walk may set a flag between its walks, and its removal of unseen records (Windows: the tree erase) only
+    # removes
+    ("win", ("treeskip",), "record change send", 0x101D6370, {"globals": False, "max_len": 0x1100}),
+    ("win", ("treeskip",), "record list collector", 0x101D2AA0, {"globals": False}),
+    ("lin", ("treeskip",), "record change send", 0x34BD40, {"globals": False, "max_len": 0x1200}),
     # getvar rewrites these prologues (the var read's through a stub that jumps back to its first call): the rest
     # of each function must not branch into them. GetVariable is one big switch, but has had few forms.
     ("lin", ("getvar",), "GetVariable", 0x3C25A0, {"globals": False, "max_len": 0x3000}),

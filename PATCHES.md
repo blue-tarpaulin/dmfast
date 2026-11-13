@@ -62,6 +62,7 @@ on, and how much more peak memory the patch uses. `map_cpu` numbers are with ~50
 | Turf contents prefetch | `turfpf` | both | ~16% `map_cpu` | Fetches the next turfs' contents into cache while map sending checks the current one |
 | Map sending | `seenclear` | both | ~12% `map_cpu` | Clears each player's "seen" marks in memory order instead of jumping around |
 | Unchanged objects | `mapskip` | both | ~10% `map_cpu` | Skips rebuilding a temporary record for objects a player already sees unchanged |
+| Change walks | `treeskip` | both | ~2-5% `map_cpu` | Starts map sending's walks over a player's records at the first record each looks for, and skips walks with none |
 | Reference counting | `argload` | Linux | ~18% in-round | Faster reference counting: avoids a CPU stall on every call |
 | Var reads | `getvar` | Linux | ~7% in-round | Faster `a.b` reads: avoids the same CPU stall as `argload` |
 | Turf var chains | `turfvar` | both | ~2.5% in-round (12 z-levels) | Adds new turf var records at the end of their hash chain, so early-loaded z-levels stay near the front |

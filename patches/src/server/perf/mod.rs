@@ -14,6 +14,7 @@ pub mod seenclear;
 pub mod sortmap;
 pub mod strtable;
 pub mod strtree;
+pub mod treeskip;
 pub mod truth;
 pub mod turfpf;
 pub mod turfvar;
