@@ -19,3 +19,4 @@ pub mod profself;
 pub mod rscid;
 pub mod tick;
 pub mod urlcrlf;
+pub mod varoverride;

@@ -18,6 +18,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New:** `--no-compiler` leaves the compiler stock.
 - **New fix:** `iconchain` (extended): an icon rebuilt over and over from an atom's own runtime icon is stored as pixels every 13 rebuilds, so clients no longer load a chain of icons as long as the number of rebuilds (minutes, gigabytes, crashes).
 - **Changed:** the installer keeps the stock programs in `bin/backup/` instead of as `<name>_orig`.
+- **New fix:** `varoverride` (safe): in a project with about 65,500 names, a child type's override of a var its parent sets at runtime (a `list()`, for example) is no longer ignored.
 
 ## 7.0.0
 
