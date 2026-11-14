@@ -4,6 +4,8 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
+## 8.0.0
+
 - **New:** `--client [which]` (Windows) patches DreamSeeker with opt-in client fixes: `safe` by default, or `--client extended`.
 - **New:** `--audit` (Windows) checks DreamSeeker's patched DLLs against the stock ones in `bin/backup/`.
 - **New:** `--no-compiler` leaves the compiler stock.
