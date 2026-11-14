@@ -30,6 +30,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New patch:** `truth` (DreamDaemon, Linux): faster `if(x)`, `!x`, `&&`, and `||` on numbers. ~1% less CPU usage in-round.
 - **New patch:** `varread` (DreamDaemon, Windows): faster reads of user-defined vars by name. ~1% less CPU usage in-round.
 - **New patch:** `treeskip` (DreamDaemon): faster map sending by skipping a player's records that have no changes to send. ~2-5% less `map_cpu`.
+- **New patch:** `msgpool` (DreamDaemon): map sending reuses its message pools instead of building and freeing one per map thread every tick.
 
 ## 7.0.0
 

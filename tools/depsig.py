@@ -141,6 +141,16 @@ MANIFEST = [
     ("win", ("treeskip",), "record change send", 0x101D6370, {"globals": False, "max_len": 0x1100}),
     ("win", ("treeskip",), "record list collector", 0x101D2AA0, {"globals": False}),
     ("lin", ("treeskip",), "record change send", 0x34BD40, {"globals": False, "max_len": 0x1200}),
+    # msgpool keeps a destroyed pool's message array and rebuilds it for the next pool: messages must come back to
+    # their pool's free list (the release, and on Windows its reset), be handed out only from it (the take), and the
+    # thread message queue must hold one reference to its pool and release it once
+    ("win", ("msgpool",), "message take", 0x102B7C40, {"globals": False}),
+    ("win", ("msgpool",), "message release", 0x102B8AE0, {"globals": False}),
+    ("win", ("msgpool",), "message reset", 0x102B7A40, {"globals": False}),
+    ("win", ("msgpool",), "thread message queue", 0x10227890, {"globals": False}),
+    ("lin", ("msgpool",), "message take", 0x483F80, {"globals": False}),
+    ("lin", ("msgpool",), "message release", 0x483FC0, {"globals": False, "since": "516.1665"}),
+    ("lin", ("msgpool",), "thread message queue", 0x3676B0, {"globals": False}),
     # getvar rewrites these prologues (the var read's through a stub that jumps back to its first call): the rest
     # of each function must not branch into them. GetVariable is one big switch, but has had few forms.
     ("lin", ("getvar",), "GetVariable", 0x3C25A0, {"globals": False, "max_len": 0x3000}),

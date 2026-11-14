@@ -47,6 +47,7 @@ pub static SERVER_PERF: &[&Feature] = &[
     &public::server::perf::seenclear::SEENCLEAR,
     &public::server::perf::mapskip::MAPSKIP,
     &public::server::perf::treeskip::TREESKIP,
+    &public::server::perf::msgpool::MSGPOOL,
     &public::server::perf::varread::VARREAD,
     &public::server::perf::getvar::GETVAR,
     &public::server::perf::turfvar::TURFVAR,
