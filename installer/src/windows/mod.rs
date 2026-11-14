@@ -297,17 +297,35 @@ pub fn install(dir: &Path, compiler: bool, server: bool, client: &str) -> Result
             fs::remove_file(&p).map_err(|e| io_err("cannot remove", &p, e))?;
         }
     }
-    let mut msg = match before {
-        Some(before) => format!("installed {ours} in {} (was {before}) for {}", dir.display(), names.join(", ")),
-        None => format!("DreamSeeker patched in {}", dir.display()),
+    let mut programs = parts(&names);
+    if seeker.patched {
+        programs.push("client");
+    }
+    let msg = match before {
+        Some(b) if b == ours => format!("reinstalled {ours} in {}", dir.display()),
+        Some(b) => format!("installed {ours} in {} (was {b})", dir.display()),
+        None => format!("installed {ours} in {}", dir.display()),
     };
+    let mut msg = format!("{msg} for {}", programs.join(", "));
     if !left_out.is_empty() {
-        msg += &format!("; restored stock {}", left_out.join(", "));
+        msg += &format!("; restored stock {}", parts(&left_out).join(", "));
     }
     for line in seeker::carry_out(dir, seeker)? {
         msg += &format!("\n{line}");
     }
     Ok(msg)
+}
+
+/// What the programs are, for messages: `compiler`, `server`.
+fn parts(names: &[&str]) -> Vec<&'static str> {
+    let mut parts = Vec::new();
+    if names.contains(&COMPILER) {
+        parts.push("compiler");
+    }
+    if names.iter().any(|n| RUNTIME.contains(n)) {
+        parts.push("server");
+    }
+    parts
 }
 
 pub use seeker::{

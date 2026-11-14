@@ -238,10 +238,16 @@ pub fn install(dir: &Path, compiler: bool, server: bool) -> Result<String, Failu
         unwrap(dir, name)?;
     }
     drop_empty_backup_dir(dir)?;
-    let before = before.unwrap_or_default();
-    let mut msg = format!("installed {ours} in {} (was {before}) for {}", dir.display(), names.join(", "));
+    let mut msg = match before {
+        Some(b) if b == ours => format!("reinstalled {ours} in {}", dir.display()),
+        Some(b) => format!("installed {ours} in {} (was {b})", dir.display()),
+        None => format!("installed {ours} in {}", dir.display()),
+    };
+    let parts =
+        |names: &[&str]| names.iter().map(|&n| if n == COMPILER { "compiler" } else { "server" }).collect::<Vec<_>>();
+    msg += &format!(" for {}", parts(&names).join(", "));
     if !left_out.is_empty() {
-        msg += &format!("; restored stock {}", left_out.join(", "));
+        msg += &format!("; restored stock {}", parts(&left_out).join(", "));
     }
     Ok(msg)
 }

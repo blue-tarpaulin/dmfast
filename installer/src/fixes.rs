@@ -64,7 +64,7 @@ pub fn set(dir: &Path, spec: &str) -> Result<String, Failure> {
     let entries = entries(spec)?;
     let value = if entries.is_empty() { "none".to_string() } else { entries.join(", ") };
     put(dir, "fixes", &value, FIXES_COMMENT)?;
-    describe(dir)
+    Ok(value)
 }
 
 /// Sets `key` to `value`, keeping the rest of the file. A new key goes last, after `comment`.
@@ -109,9 +109,9 @@ pub(crate) fn get(dir: &Path, key: &str) -> Result<Option<String>, Failure> {
         .filter(|v| !v.is_empty()))
 }
 
-/// How the saved selection reads, for the install message.
+/// The saved selection, `none` without one.
 pub fn describe(dir: &Path) -> Result<String, Failure> {
-    Ok(format!("bug fixes: {}", current(dir)?.unwrap_or_else(|| "none".into())))
+    Ok(current(dir)?.unwrap_or_else(|| "none".into()))
 }
 
 /// Removes the settings file (uninstall).

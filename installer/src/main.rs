@@ -79,17 +79,24 @@ fn run(o: &Opts) -> Result<String, Failure> {
         Some(spec) => fixes::set(&d, spec)?,
         None => fixes::describe(&d)?,
     };
+    let mut lines = Vec::new();
+    for (on, part) in [(o.compiler, "compiler"), (o.server, "server")] {
+        if on {
+            lines.push(format!("{part} fixes: {fixes}"));
+        }
+    }
     #[cfg(windows)]
-    {
+    let msg = {
         let client = match &o.client {
             Some(spec) => platform::set_client(&d, spec)?,
             None => platform::current_client(&d)?,
         };
-        let msg = platform::install(&d, o.compiler, o.server, &client)?;
-        Ok(format!("{msg}\n{fixes}\nDreamSeeker patches: {client}"))
-    }
+        lines.push(format!("client patches: {client}"));
+        platform::install(&d, o.compiler, o.server, &client)?
+    };
     #[cfg(not(windows))]
-    Ok(format!("{msg}\n{fixes}", msg = platform::install(&d, o.compiler, o.server)?))
+    let msg = platform::install(&d, o.compiler, o.server)?;
+    Ok(format!("{msg}\n{}", lines.join("\n")))
 }
 
 fn main() {

@@ -206,7 +206,9 @@ pub fn plan_install(dir: &Path, client: &str) -> Result<Plan, Failure> {
                 };
                 let applied = apply::apply(stock, module, exe, id, &patches)
                     .map_err(|e| format!("DreamSeeker patches for {}: {e}", module.file()))?;
-                plan.lines.extend(applied.lines.iter().map(|l| format!("DreamSeeker, {}: {l}", module.file())));
+                // Only what didn't apply: the applied sites are noise for a user (`--audit` checks them).
+                let skipped = applied.lines.iter().filter(|l| !l.contains(": applied at "));
+                plan.lines.extend(skipped.map(|l| format!("DreamSeeker, {}: {l}", module.file())));
                 if module == Module::Seeker {
                     exe_id = Some(audit::exe_id(applied.image.as_deref().unwrap_or(stock))?);
                 }
@@ -224,7 +226,9 @@ pub fn plan_install(dir: &Path, client: &str) -> Result<Plan, Failure> {
             None if patched => {
                 ensure_not_in_use(&path)?;
                 plan.steps.push(Step::Restore(module));
-                plan.lines.push(format!("restored stock {}", module.file()));
+                if !plan.lines.iter().any(|l| l == "restored stock client") {
+                    plan.lines.push("restored stock client".into());
+                }
             }
             None if backup_of(dir, module).is_file() => plan.steps.push(Step::DropBackup(module)),
             None => {}
