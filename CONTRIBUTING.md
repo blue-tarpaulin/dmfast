@@ -46,7 +46,7 @@ Output: `dist/dmfast-install.exe` - works on both operating systems.
 
 What the shared `base` crate offers: [WRITING-PATCHES.md](WRITING-PATCHES.md).
 
-Features live in `patches/`, shared infrastructure in `base/`, and the install order in `dmfast/src/features.rs`. 
+Features live in `patches/`, shared infrastructure in `base/`, and the install order in `patches/src/lib.rs`.
 A feature that changes behaviour in any case is a fix, even if it also makes things faster.
 
 ### Rules
@@ -58,14 +58,14 @@ A feature that changes behaviour in any case is a fix, even if it also makes thi
 
 ### Adding a speed patch
 
-1. Declare it `pub` in its folder's `mod.rs` and list it in `dmfast/src/features.rs`.
+1. Declare it `pub` in its folder's `mod.rs` and list it in `FEATURES` (`patches/src/lib.rs`).
 2. Output must match stock: `.dmb` files byte-identical, and `DMFAST_VERIFY=1` (for a patch that caches answers)
    reports no mismatches on real codebases.
 3. Add rows to [PATCHES.md](PATCHES.md) and [PATCH-FIXES.md](PATCH-FIXES.md).
 
 ### Adding a bug fix
 
-1. Declare it `pub` with its tier and list it in `dmfast/src/features.rs`.
+1. Declare it `pub` with its tier and list it in `FEATURES` (`patches/src/lib.rs`).
 2. Add `tests/fixes/<key>.dme` and `.expected`; run them with `py tools/fixtest.py <bin> [key]`.
 3. Add a row to [BUGFIXES.md](BUGFIXES.md).
 

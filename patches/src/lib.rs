@@ -1,9 +1,97 @@
 //! dmfast's public speed patches and bug fixes, by program (`compiler`, `server`, `common`) and kind (`perf`,
 //! `fixes`).
 
+use base::feature::Feature;
 use dmfast_base as base;
 
-pub mod common;
-pub mod compiler;
+mod common;
+mod compiler;
 pub mod deps;
-pub mod server;
+mod server;
+
+pub use compiler::perf::banner::finish_banners;
+
+/// Every feature, in install order (see `base::driver`).
+pub static FEATURES: &[&Feature] = &[
+    // Compiler speed patches.
+    &compiler::perf::poll::POLL,
+    &compiler::perf::banner::BANNER,
+    &compiler::perf::stdio::STDIO,
+    &compiler::perf::strings::STRINGS,
+    &compiler::perf::stdio::FTELL,
+    &compiler::perf::strtab::STRTAB,
+    &compiler::perf::fastexit::FASTEXIT,
+    &compiler::perf::ctype::CTYPE,
+    &compiler::perf::dirs::DIRS,
+    &compiler::perf::filter::FILTER,
+    &compiler::perf::parent::PARENT,
+    &compiler::perf::children::CHILD_INDEX,
+    &compiler::perf::leafskip::LEAFSKIP,
+    &compiler::perf::vecgrow::VECGROW,
+    &compiler::perf::fscache::FSCACHE,
+    &compiler::perf::resources::RESOURCES,
+    &compiler::perf::dmbbuf::DMBBUF,
+    &compiler::perf::slots::SLOTS,
+    &compiler::perf::intern::REBUILD,
+    &compiler::perf::lists::LISTS,
+    &compiler::perf::listinit::LISTINIT,
+    &compiler::perf::protos::PROTOS,
+    &compiler::perf::intern::INTERNIDX,
+    // DreamDaemon speed patches.
+    &server::perf::dmbread::DMBREAD,
+    &server::perf::procs::PROCS,
+    &server::perf::strtree::STRTREE,
+    &server::perf::sortmap::SORTMAP,
+    &server::perf::crc::CRC,
+    &server::perf::strtable::STRTABLE,
+    &server::perf::varlist::VARLIST,
+    &server::perf::dmicmp::DMICMP,
+    &server::perf::iconstates::ICONSTATES,
+    &server::perf::iconcopy::ICONCOPY,
+    &server::perf::argload::ARGLOAD,
+    &server::perf::seenclear::SEENCLEAR,
+    &server::perf::mapskip::MAPSKIP,
+    &server::perf::treeskip::TREESKIP,
+    &server::perf::msgpool::MSGPOOL,
+    &server::perf::varread::VARREAD,
+    &server::perf::getvar::GETVAR,
+    &server::perf::turfvar::TURFVAR,
+    &server::perf::turfpf::TURFPF,
+    &server::perf::locidx::LOCIDX,
+    &server::perf::truth::TRUTH,
+    // Compiler bug fixes.
+    &compiler::fixes::indent::INDENT,
+    &compiler::fixes::contline::CONTLINE,
+    &compiler::fixes::macrospace::MACROSPACE,
+    &compiler::fixes::typepath::TYPEPATH,
+    &compiler::fixes::objworld::OBJWORLD,
+    &compiler::fixes::procargs::PROCARGS,
+    &compiler::fixes::mapcolors::MAPCOLORS,
+    &compiler::fixes::regexstart::REGEXSTART,
+    &compiler::fixes::varlimit::VARLIMIT,
+    &compiler::fixes::finalpath::FINALPATH,
+    // DreamDaemon bug fixes.
+    &server::fixes::urlcrlf::URLCRLF,
+    &server::fixes::jsonutf::JSONUTF,
+    &server::fixes::num2sig::NUM2SIG,
+    &server::fixes::nulldiv::NULLDIV,
+    &server::fixes::minmax::MINMAX,
+    &server::fixes::cmperr::CMPERR,
+    &server::fixes::pickweight::PICKWEIGHT,
+    &server::fixes::initvar::INITVAR,
+    &server::fixes::dbbignum::DBBIGNUM,
+    &server::fixes::dbclose::DBCLOSE,
+    &server::fixes::tick::TICKINIT,
+    &server::fixes::tick::TICK0,
+    &server::fixes::callref::CALLREF,
+    &server::fixes::rscid::RSCID,
+    &server::fixes::profself::PROFSELF,
+    &server::fixes::iconwrap::ICONWRAP,
+    &server::fixes::iconchain::ICONCHAIN,
+    &server::fixes::profcpu::PROFCPU,
+    &server::fixes::filtername::FILTERNAME,
+    &server::fixes::httpexport::HTTPEXPORT,
+    &server::fixes::varoverride::VAROVERRIDE,
+    // Fixes for both programs.
+    &common::fixes::inodes::INODES,
+];

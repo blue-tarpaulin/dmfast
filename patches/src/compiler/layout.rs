@@ -5,6 +5,7 @@
 /// The node's id (u32): its name's string id, or a keyword node's kind (`var`, a proc's argument list).
 pub const ID: usize = 0;
 /// The kind byte.
+#[cfg(windows)]
 pub const KIND: usize = 4;
 /// The flags byte (8: indexed, 2: finished).
 #[cfg(windows)]

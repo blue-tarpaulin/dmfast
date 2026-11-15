@@ -1,7 +1,6 @@
 //! BYOND's core library is patched in memory once mapped.
-//! Each feature is a `static` `base::feature::Feature` in `dmfast_patches`, grouped by program (`compiler`,
-//! `server`) and kind (`perf`, `fixes`); [`features`] lists them in install order. The dependency guards are in
-//! `dmfast_patches::deps`.
+//! Each feature is a `static` `base::feature::Feature` in `dmfast_patches`, which lists them in install order
+//! (`FEATURES`); the private submodule's follow. The dependency guards are in `dmfast_patches::deps`.
 //! The loader entry hands `CONFIG` to `base::driver`, which installs the loading program's features (`base::feature::Host`).
 //!
 //! Features are located by signature and validated completely before writing, and
@@ -11,11 +10,14 @@
 
 use dmfast_base as base;
 
-mod features;
 /// The private submodule's patches, built in when it is checked out (`build.rs`).
 #[cfg(dmfast_private)]
 #[path = "../../patches-private/src/lib.rs"]
 mod private;
+#[cfg(dmfast_private)]
+const PRIVATE: &[&base::feature::Feature] = private::FEATURES;
+#[cfg(not(dmfast_private))]
+const PRIVATE: &[&base::feature::Feature] = &[];
 
 #[cfg(test)]
 mod validate;
@@ -23,16 +25,9 @@ mod validate;
 const VERSION: &str = concat!("DMFAST ", env!("CARGO_PKG_VERSION"));
 
 static CONFIG: base::driver::Config = base::driver::Config {
-    lists: &[
-        features::COMPILER_PERF,
-        features::SERVER_PERF,
-        features::COMPILER_FIXES,
-        features::SERVER_FIXES,
-        features::COMMON_FIXES,
-        features::PRIVATE,
-    ],
+    lists: &[dmfast_patches::FEATURES, PRIVATE],
     version: VERSION,
-    after_install: dmfast_patches::compiler::perf::banner::finish_banners,
+    after_install: dmfast_patches::finish_banners,
     #[cfg(windows)]
     deps: dmfast_patches::deps::WINDOWS,
     #[cfg(target_os = "linux")]

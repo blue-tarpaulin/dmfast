@@ -6,7 +6,8 @@ Everything a patch needs from the shared `base` crate (`base/src`), by task. Eac
 
 A `static` `feature::Feature` in `patches/src/<compiler|server|common>/<perf|fixes>/<key>/mod.rs`:
 `Feature::perf` or `Feature::fix`, with modifiers like `.stats(..)` and `.after(..)`, and
-`install!(windows: windows::install, linux: linux::install)`. List it in `dmfast/src/features.rs` (install order).
+`install!(windows: windows::install, linux: linux::install)`. List it in `patches/src/lib.rs` (install
+order).
 An install function gets a `feature::Ctx` and returns its report line (`Image::report(&[sites])`: `at +0x..`). It
 finds and checks BYOND's code and records writes; they apply only if the whole install returns `Ok`, all at once
 (`ledger`). Optional parts: `Ctx::parts`. A lookup several features start from: `Ctx::shared`.
