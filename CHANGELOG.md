@@ -12,6 +12,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New patch:** `refskip` (Windows): reference counting skips BYOND's exception frame for the value types that need nothing or one helper call. ~10% less in-round CPU.
 - **New patch:** `procname`: calling a proc by name remembers where each name was found in a type's proc table instead of searching it every time. ~4% faster proc calls.
 - **New patch:** `valret` (Windows): BYOND's small functions that return a value no longer stall the CPU on every call. ~2% faster proc calls.
+- **Patch change:** `profcpu` (extended, Linux): the profiler's clock makes ~95% fewer system calls. ~15% faster tgstation world load.
 
 ## 8.0.0
 
