@@ -20,4 +20,5 @@ pub mod truth;
 pub mod turfpf;
 pub mod turfvar;
 pub mod varlist;
+pub mod varmerge;
 pub mod varread;

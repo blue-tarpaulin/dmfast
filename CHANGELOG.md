@@ -8,6 +8,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New patch:** `childpos` (compiler): a node's position among its parent's children is found 8 at a time. ~1.5% faster compiles on Windows.
 - **Patch fix:** `strtree` (Linux): DreamDaemon no longer aborts with "realloc(): invalid pointer" when it exits on a bad command-line option.
 - **Patch change:** `filter` (compiler) now answers most name misses from a Bloom filter. ~1% faster compiles.
+- **New patch:** `varmerge` (Linux): building each type's var list at load appends inherited vars in order instead of searching for each one's place. ~6% faster world load.
 
 ## 8.0.0
 
