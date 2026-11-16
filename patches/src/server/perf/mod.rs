@@ -20,6 +20,7 @@ pub mod treeskip;
 pub mod truth;
 pub mod turfpf;
 pub mod turfvar;
+pub mod valret;
 pub mod varlist;
 pub mod varmerge;
 pub mod varread;

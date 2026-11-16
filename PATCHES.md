@@ -72,6 +72,7 @@ on, and how much more peak memory the patch uses. `map_cpu` numbers are with ~50
 | Var lookups | `varread` | Windows | ~1.2% in-round | Caches each type's var defaults, so `a.b` skips BYOND's searches through the type |
 | Truth tests | `truth` | Linux | ~1.1% in-round | Tests numbers in `if`, `!`, `&&`, and `\|\|` with integer instructions instead of x87 |
 | Proc lookups | `procname` | both | ~4% on proc calls | Remembers where each proc name was found in each type's proc table, so calls by name skip most binary searches |
+| Value returns | `valret` | Windows | ~2% on proc calls | Builds returned values without a CPU stall on every call |
 
 How BYOND itself could fix each of these: [PATCH-FIXES.md](PATCH-FIXES.md).
 

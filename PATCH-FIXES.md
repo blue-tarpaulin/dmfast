@@ -72,6 +72,7 @@ Most of the problems are one of three kinds:
 | Var lookups (Windows) | ~1.2% in-round | Reading a var by name (`a.b`) that the object hasn't changed computes its type and searches the type's initial values, then its declarations, on every read. | Look each name up once per type: a per-type hash table, or a var slot resolved at compile time. |
 | Truth tests (Linux) | ~1.1% in-round | `if(x)`, `!x`, `&&`, and `\|\|` test a number by loading it onto the x87 stack and comparing it with zero. | Test its bits: a number is false exactly when `bits & 0x7FFFFFFF` is 0. Or compare with SSE, as the Windows build does. |
 | Proc lookups by name | ~4% on proc calls | Calling a proc by name binary-searches the type's sorted array of proc names; on a type with hundreds of procs most steps miss the cache. | A hash table per type, or resolve the proc's slot when the code is compiled. |
+| Value returns (Windows) | ~2% on proc calls | Small functions that build a value to return write its type byte into a stack slot and read the slot back as 4 bytes. The CPU can't forward a 4-byte load from a 1-byte store, so every call waits for the store. | Build the value in registers (`movzx` the type into `eax`), or zero the slot first. |
 | `view()`/`range()` | ~N× with N objs/turf | Each atom added to the result is first searched for in the whole list built so far: quadratic in the number of atoms in range. | Keep a hash set of the list being built (or mark atoms while building). |
 
 ## Memory

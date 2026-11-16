@@ -59,6 +59,7 @@ pub static FEATURES: &[&Feature] = &[
     &server::perf::turfpf::TURFPF,
     &server::perf::locidx::LOCIDX,
     &server::perf::truth::TRUTH,
+    &server::perf::valret::VALRET,
     // Compiler bug fixes.
     &compiler::fixes::indent::INDENT,
     &compiler::fixes::contline::CONTLINE,
