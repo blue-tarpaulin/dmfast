@@ -13,7 +13,8 @@ use dmfast_format::manifest::CODE_SECTION;
 use dmfast_seeker::patch::{Module, Patch, Tier};
 use dmfast_seeker::{apply, audit, author};
 
-use super::{BACKUP, ensure_not_in_use, pe};
+use super::{ensure_not_in_use, pe};
+use crate::backup::{drop_empty_backup_dir, make_backup_dir};
 use crate::files::{Failure, io_err, read, rename_retry, write};
 use crate::fixes;
 
@@ -23,7 +24,7 @@ const CLIENT: &[(&str, &[u8], &str)] = include!(concat!(env!("OUT_DIR"), "/clien
 const EXE: &str = "dreamseeker.exe";
 
 fn backup_of(dir: &Path, module: Module) -> PathBuf {
-    dir.join(BACKUP).join(module.file())
+    crate::backup::backup_of(dir, module.file())
 }
 
 fn is_patched(data: &[u8]) -> bool {
@@ -268,13 +269,12 @@ pub fn plan_uninstall(dir: &Path) -> Result<Plan, Failure> {
 
 /// Writes `plan`, then removes `bin/backup/` if nothing is left in it. Returns the lines for the message.
 pub fn carry_out(dir: &Path, plan: Plan) -> Result<Vec<String>, Failure> {
-    let folder = dir.join(BACKUP);
     let Plan { steps, lines, .. } = plan;
     for step in steps {
         match step {
             Step::Patch { module, stock, image } => {
                 if let Some(stock) = stock {
-                    fs::create_dir_all(&folder).map_err(|e| io_err("cannot create", &folder, e))?;
+                    make_backup_dir(dir)?;
                     write(&backup_of(dir, module), &stock)?;
                 }
                 write(&dir.join(module.file()), &image)?;
@@ -289,9 +289,7 @@ pub fn carry_out(dir: &Path, plan: Plan) -> Result<Vec<String>, Failure> {
             }
         }
     }
-    if fs::read_dir(&folder).is_ok_and(|mut d| d.next().is_none()) {
-        fs::remove_dir(&folder).map_err(|e| io_err("cannot remove", &folder, e))?;
-    }
+    drop_empty_backup_dir(dir)?;
     Ok(lines)
 }
 

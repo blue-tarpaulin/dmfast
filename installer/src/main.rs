@@ -7,6 +7,7 @@
 //! nothing.
 
 mod args;
+mod backup;
 mod files;
 mod fixes;
 mod guided;
