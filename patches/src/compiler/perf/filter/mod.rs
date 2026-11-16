@@ -4,7 +4,8 @@
 //!
 //! Every insert is mirrored as (scope = the child's parent link, name, table) in `found`. When a scope's matching
 //! children are all indexed and keyed under it, and `found` lacks the key, every probe would miss, so the child loops
-//! are skipped. `found` only grows, so it never under-reports. `deps` guards the insert.
+//! are skipped. `found` only grows, so it never under-reports. A Bloom filter of `found`'s keys in front of it (512 KB,
+//! in L2) answers most absent keys without probing `found`; it only grows too. `deps` guards the insert.
 
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
@@ -58,11 +59,16 @@ struct State {
     /// Bucket array pointers when `complete` was last valid.
     bufs: [u32; 2],
     found: hash::Set<u64>,
+    /// `found`'s keys, two bits each in one word: a clear bit proves a key absent without probing `found` (~2 MB,
+    /// past L2).
+    bloom: Box<[u64]>,
     /// (scope | table) -> child count at which all matching children were indexed.
     complete: hash::Map<u32, u16>,
     calls: u64,
     skips: u64,
     inserts: u64,
+    /// Lookups the Bloom filter passed on to `found`.
+    probes: u64,
 }
 
 static FOUND: Installed<Found> = Installed::new();
@@ -72,7 +78,16 @@ static OFF: AtomicBool = AtomicBool::new(false);
 
 /// At install, once everything is checked.
 fn init(cx: &Ctx, b_has_a: bool, tables: [usize; 2], decls: Decls) -> Result<()> {
-    STATE.set(State { bufs: [0; 2], found: hash::set(), complete: hash::map(), calls: 0, skips: 0, inserts: 0 })?;
+    STATE.set(State {
+        bufs: [0; 2],
+        found: hash::set(),
+        bloom: vec![0; 1 << BLOOM_WORDS].into_boxed_slice(),
+        complete: hash::map(),
+        calls: 0,
+        skips: 0,
+        inserts: 0,
+        probes: 0,
+    })?;
     FOUND.commit(cx, Found { b_has_a, tables, decls });
     Ok(())
 }
@@ -93,12 +108,24 @@ fn key(scope: u32, name: u32, t: u32) -> u64 {
     (u64::from(scope) << 32) | u64::from(name | (t << 31))
 }
 
+/// 2^16 words: 512 KB, which stays in L2.
+const BLOOM_WORDS: u32 = 16;
+
+/// `k`'s Bloom word and its two bits.
+fn bloom(k: u64) -> (usize, u64) {
+    let h = k.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    ((h >> (64 - BLOOM_WORDS)) as usize, (1 << (h & 63)) | (1 << ((h >> 6) & 63)))
+}
+
 /// An insert of (child, name) into table `t`.
 extern "C" fn record(t: u32, child: u32, name: u32) {
     let Some(st) = state() else { return };
     // SAFETY: `child` is the node BYOND is inserting: live.
     let scope = unsafe { live_u32(child as usize + PARENT) };
-    st.found.insert(key(scope, name, t));
+    let k = key(scope, name, t);
+    st.found.insert(k);
+    let (w, bits) = bloom(k);
+    st.bloom[w] |= bits;
     st.inserts += 1;
 }
 
@@ -134,8 +161,13 @@ extern "C" fn should_skip(scope: usize, name: u32, sel: u32, count: u32) -> u32 
             }
             st.complete.insert(ck, count);
         }
-        if st.found.contains(&key(scope as u32, name, t)) {
-            return 0;
+        let k = key(scope as u32, name, t);
+        let (w, bits) = bloom(k);
+        if st.bloom[w] & bits == bits {
+            st.probes += 1;
+            if st.found.contains(&k) {
+                return 0;
+            }
         }
         st.skips += 1;
         let table = x.tables[t as usize];
@@ -150,9 +182,11 @@ fn print_stats() {
     // SAFETY: exit-time stats: no hook runs any more.
     if let Some(st) = unsafe { STATE.shared() } {
         eprintln!(
-            "dmfast: name filter calls={} skips={} inserts={} found={} complete={} off={} verify={} mismatches={}",
+            "dmfast: name filter calls={} skips={} probes={} inserts={} found={} complete={} off={} verify={} \
+             mismatches={}",
             st.calls,
             st.skips,
+            st.probes,
             st.inserts,
             st.found.len(),
             st.complete.len(),
