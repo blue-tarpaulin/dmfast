@@ -699,6 +699,9 @@ def write_data(sections):
                            + ", ".join(f"{ABSENT if o is None else o:#x}" for o in f.globals) + "] },")
             out += ["        ],", "    },"]
         out += ["];", ""]
+    keys = sorted({k for _, _, _, entries, _ in sections for e in entries for k in e.keys})
+    out += ["/// Every key the guards name, on either OS: dmfast's tests check that each is a feature.",
+            "pub static KEYS: &[&str] = &[" + ", ".join(f'"{k}"' for k in keys) + "];", ""]
     return "\n".join(out)
 
 

@@ -27,8 +27,8 @@ pub struct Config {
     pub lists: &'static [&'static [&'static Feature]],
     /// This build's name on the stats line (`DMFAST <version>`).
     pub version: &'static str,
-    /// This OS's dependency guards ([`crate::deps`]).
-    pub deps: &'static [Dep],
+    /// This OS's dependency guard tables ([`crate::deps`]): the public patches', and any others'.
+    pub deps: &'static [&'static [Dep]],
 }
 
 /// What `run` installed in this program.

@@ -20,19 +20,12 @@ fn no_cycles() {
     validate::no_cycles(&CONFIG);
 }
 
-/// Every key the dependency guards name (both OSes' tables in `patches/src/deps.rs`) is a feature.
+/// Every key the dependency guards name, on either OS, is a feature.
 #[test]
 fn deps_keys_are_features() {
-    let data = include_str!("../../patches/src/deps.rs");
-    let mut n = 0;
-    for list in data.split("keys: &[").skip(1) {
-        let list = &list[..list.find(']').expect("keys list end")];
-        for key in list.split(',').map(|k| k.trim().trim_matches('"')).filter(|k| !k.is_empty()) {
-            n += 1;
-            assert!(CONFIG.all().any(|f| f.key == key), "deps.rs names {key:?}, which is no feature");
-        }
+    for key in dmfast_patches::deps::KEYS {
+        assert!(CONFIG.all().any(|f| f.key == *key), "deps.rs names {key:?}, which is no feature");
     }
-    assert!(n > 0, "no keys found in deps.rs");
 }
 
 #[test]

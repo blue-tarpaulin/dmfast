@@ -48,12 +48,13 @@ impl Guard {
     }
 }
 
-/// Check `deps` (this platform's) against `core` before any patch is installed.
-pub(crate) fn check(deps: &[Dep], core: &Image) -> Guard {
+/// Check `tables` (this platform's) against `core` before any patch is installed.
+pub(crate) fn check(tables: &[&[Dep]], core: &Image) -> Guard {
     // Images are open while deps are checked (before install); a closed one finds nothing, as if every dep failed.
     let code = core.hays(Some(true)).unwrap_or_default();
 
-    let found = locate(deps, &code);
+    let deps: Vec<&Dep> = tables.iter().copied().flatten().collect();
+    let found = locate(&deps, &code);
 
     // Globals: count code references (relocated words in code) to each matched form's globals.
     let present = |v: &Variant| v.globals.iter().enumerate().filter(|&(_, &off)| off != ABSENT);
@@ -115,7 +116,7 @@ pub(crate) fn check(deps: &[Dep], core: &Image) -> Guard {
 
 /// The first form of each dep that occurs exactly once: where its prefix matches (all prefixes searched in one
 /// pass) and the bytes there hash to its fingerprint. (address, form).
-fn locate<'a>(deps: &'a [Dep], code: &[crate::scan::Hay]) -> Vec<Option<(usize, &'a Variant)>> {
+fn locate<'a>(deps: &[&'a Dep], code: &[crate::scan::Hay]) -> Vec<Option<(usize, &'a Variant)>> {
     let pats: Vec<Vec<Option<u8>>> =
         deps.iter().flat_map(|d| d.variants).map(|v| crate::scan::parse(v.prefix).unwrap_or_default()).collect();
     let mut hits = crate::scan::find_patterns(code, &pats).into_iter();
@@ -164,7 +165,8 @@ mod tests {
         let v = |hash| Variant { prefix: "55 8B EC A1", len: 10, holes: &[(4, 4)], hash, globals: &[] };
         let right: &'static [Variant] = Box::leak(Box::new([v(hash)]));
         let wrong: &'static [Variant] = Box::leak(Box::new([v(hash ^ 1), v(hash)]));
-        let at = |deps: Dep, code: &[(usize, &[u8])]| locate(&[deps], code)[0].map(|(at, f)| (at, f as *const Variant));
+        let at =
+            |deps: Dep, code: &[(usize, &[u8])]| locate(&[&deps], code)[0].map(|(at, f)| (at, f as *const Variant));
 
         let mut one = vec![0xCCu8; 4];
         one.extend(FORM);

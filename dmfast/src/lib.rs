@@ -28,9 +28,9 @@ static CONFIG: base::driver::Config = base::driver::Config {
     lists: &[dmfast_patches::FEATURES, PRIVATE],
     version: VERSION,
     #[cfg(windows)]
-    deps: dmfast_patches::deps::WINDOWS,
+    deps: &[dmfast_patches::deps::WINDOWS],
     #[cfg(target_os = "linux")]
-    deps: dmfast_patches::deps::LINUX,
+    deps: &[dmfast_patches::deps::LINUX],
 };
 
 #[cfg(windows)]

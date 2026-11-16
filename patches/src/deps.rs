@@ -1107,3 +1107,6 @@ pub static LINUX: &[Dep] = &[
         ],
     },
 ];
+
+/// Every key the guards name, on either OS: dmfast's tests check that each is a feature.
+pub static KEYS: &[&str] = &["argload", "children", "crc", "dirs", "dmbread", "dmicmp", "fastexit", "filter", "ftell", "getvar", "iconchain", "iconstates", "internidx", "leafskip", "listinit", "lists", "locidx", "mapskip", "msgpool", "parent", "procs", "protos", "resources", "seenclear", "slots", "sortmap", "strings", "strtab", "strtable", "strtree", "treeskip", "turfpf", "turfvar", "varlist", "varread", "vecgrow"];
