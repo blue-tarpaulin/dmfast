@@ -3,14 +3,10 @@
 
 use std::sync::LazyLock;
 
+use dmfast_format::selection::{CONFIG_FILE, EXPERIMENTAL, Tier, by_tier, has, ini_value, left_out, split};
+
 use crate::driver::Config;
-use crate::feature::{Feature, Kind, Status, Tier};
-
-/// Next to dmfast's library (written by `dmfast-install`); its `fixes` key is the selection.
-const CONFIG_FILE: &str = "dmfast.ini";
-
-/// The selection entry that lets Experimental features turn on.
-const EXPERIMENTAL: &str = "experimental";
+use crate::feature::{Feature, Kind, Status};
 
 /// Entries: feature keys, tier names, `experimental`, or `-key` to leave one out (`none` selects nothing).
 struct Selection {
@@ -39,16 +35,15 @@ pub(super) fn has_selection() -> bool {
 /// Whether `entries` turn `f` on, before `DMFAST_DISABLE`, builds and deps: by key unless `-key`; Stable ones also
 /// by default or (fixes) a tier at or above theirs; Experimental ones only with `experimental` (fixes: and a tier).
 pub(crate) fn wanted(f: &Feature, entries: &[String]) -> bool {
-    let has = |e: &str| entries.iter().any(|x| x == e);
-    if entries.iter().any(|e| e.strip_prefix('-') == Some(f.key)) {
+    if left_out(entries, f.key) {
         return false;
     }
-    if has(f.key) {
+    if has(entries, f.key) {
         return true;
     }
-    let tier = f.tier.is_some_and(|t| Tier::ALL.iter().any(|&s| s >= t && has(s.name())));
+    let tier = f.tier.is_some_and(|t| by_tier(entries, t));
     match f.status {
-        Status::Experimental => has(EXPERIMENTAL) && (f.kind == Kind::Perf || tier),
+        Status::Experimental => has(entries, EXPERIMENTAL) && (f.kind == Kind::Perf || tier),
         _ => f.on_by_default || tier,
     }
 }
@@ -63,30 +58,16 @@ pub(super) fn check_keys(config: &Config) {
     let Some(s) = SELECTION.as_ref() else { return };
     for e in &s.entries {
         let key = e.strip_prefix('-').unwrap_or(e);
-        let known = Tier::ALL.iter().any(|t| t.name() == e) || e == EXPERIMENTAL || config.all().any(|f| f.key == key);
+        let known = Tier::parse(e).is_some() || e == EXPERIMENTAL || config.all().any(|f| f.key == key);
         if !known {
             eprintln!("dmfast: {}: no fix named {key:?}", s.source);
         }
     }
 }
 
-/// The value of `key` in INI text (any section; `;` and `#` start comments; the last one wins).
-fn ini_value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
-    text.lines()
-        .rev()
-        .map(|l| l.split([';', '#']).next().unwrap_or("").trim())
-        .filter_map(|l| l.split_once('='))
-        .find(|(k, _)| k.trim().eq_ignore_ascii_case(key))
-        .map(|(_, v)| v.trim())
-}
-
-/// Entries of a selection: separated by commas or spaces, lower-cased; `none` adds nothing.
+/// Entries of a selection, lower-cased; `none` adds nothing.
 fn entries(value: &str) -> Vec<String> {
-    value
-        .split(|c: char| c == ',' || c.is_whitespace())
-        .filter(|e| !e.is_empty() && !e.eq_ignore_ascii_case("none"))
-        .map(str::to_ascii_lowercase)
-        .collect()
+    split(value).filter(|e| !e.eq_ignore_ascii_case("none")).map(str::to_ascii_lowercase).collect()
 }
 
 /// The folder holding this library (dmfast.dll / libdmfast.so).

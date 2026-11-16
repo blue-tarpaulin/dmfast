@@ -6,22 +6,18 @@
 use std::fs;
 use std::path::Path;
 
+use dmfast_format::selection::{CONFIG_FILE, EXPERIMENTAL, Tier, ini_sets, ini_value};
+
 use crate::files::{Failure, io_err, read, write};
-
-/// Read by dmfast (`CONFIG_FILE` in the patches crate); keep the names in step.
-const FILE: &str = "dmfast.ini";
-
-/// Selection words other than keys: the tiers, and `experimental`
-const WORDS: [&str; 4] = ["safe", "extended", "breaking", "experimental"];
 
 const NEW_FILE: &str = "[dmfast]\n";
 
 const FIXES_COMMENT: &str =
     "; bug fixes: safe, extended, breaking, none, or keys (BUGFIXES.md); DMFAST_FIXES overrides it";
 
-/// The entries of a selection (`--fixes` or `--client`): separated by commas or spaces.
+/// The entries of a selection (`--fixes` or `--client`).
 pub(crate) fn split(spec: &str) -> Vec<String> {
-    spec.split(|c: char| c == ',' || c.is_whitespace()).filter(|e| !e.is_empty()).map(str::to_owned).collect()
+    dmfast_format::selection::split(spec).map(str::to_owned).collect()
 }
 
 /// The entries of a `--fixes` value: tier names, `experimental`, fix keys, or `-key` to leave one out.
@@ -39,7 +35,8 @@ fn entries(spec: &str) -> Result<Vec<String>, Failure> {
     for e in &entries {
         let key = e.strip_prefix('-').unwrap_or(e);
         let word = !key.is_empty() && key.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit());
-        if !word || key == "none" || (e.starts_with('-') && WORDS.contains(&key)) {
+        let tier_word = Tier::parse(key).is_some() || key == EXPERIMENTAL;
+        if !word || key == "none" || (e.starts_with('-') && tier_word) {
             return Err(format!(
                 "--fixes: {e:?} is not a tier (safe, extended, breaking), experimental, a fix key, or -key"
             )
@@ -47,11 +44,6 @@ fn entries(spec: &str) -> Result<Vec<String>, Failure> {
         }
     }
     Ok(entries)
-}
-
-/// Whether an INI line sets `key` (comments and surrounding spaces ignored).
-fn sets(line: &str, key: &str) -> bool {
-    line.split([';', '#']).next().unwrap_or("").split_once('=').is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case(key))
 }
 
 /// Checks a `--fixes` value before anything is installed.
@@ -69,13 +61,13 @@ pub fn set(dir: &Path, spec: &str) -> Result<String, Failure> {
 
 /// Sets `key` to `value`, keeping the rest of the file. A new key goes last, after `comment`.
 pub(crate) fn put(dir: &Path, key: &str, value: &str, comment: &str) -> Result<(), Failure> {
-    let path = dir.join(FILE);
+    let path = dir.join(CONFIG_FILE);
     let old = if path.is_file() { String::from_utf8_lossy(&read(&path)?).into_owned() } else { NEW_FILE.to_string() };
     let line = format!("{key} = {value}");
     let mut lines: Vec<&str> = Vec::new();
     let mut done = false;
     for l in old.lines() {
-        if !sets(l, key) {
+        if !ini_sets(l, key) {
             lines.push(l);
         } else if !done {
             lines.push(&line);
@@ -96,17 +88,12 @@ pub fn current(dir: &Path) -> Result<Option<String>, Failure> {
 
 /// `key`'s value, if there is a settings file with one.
 pub(crate) fn get(dir: &Path, key: &str) -> Result<Option<String>, Failure> {
-    let path = dir.join(FILE);
+    let path = dir.join(CONFIG_FILE);
     if !path.is_file() {
         return Ok(None);
     }
     let text = String::from_utf8_lossy(&read(&path)?).into_owned();
-    Ok(text
-        .lines()
-        .rev()
-        .filter(|l| sets(l, key))
-        .find_map(|l| l.split([';', '#']).next()?.split_once('=').map(|(_, v)| v.trim().to_string()))
-        .filter(|v| !v.is_empty()))
+    Ok(ini_value(&text, key).filter(|v| !v.is_empty()).map(str::to_owned))
 }
 
 /// The saved selection, `none` without one.
@@ -116,7 +103,7 @@ pub fn describe(dir: &Path) -> Result<String, Failure> {
 
 /// Removes the settings file (uninstall).
 pub fn remove(dir: &Path) -> Result<(), Failure> {
-    let path = dir.join(FILE);
+    let path = dir.join(CONFIG_FILE);
     if path.is_file() {
         fs::remove_file(&path).map_err(|e| io_err("cannot remove", &path, e))?;
     }

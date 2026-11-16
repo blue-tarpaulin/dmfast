@@ -4,10 +4,10 @@ version.workspace = true
 edition = "2024"
 
 [dependencies]
+dmfast-format = { path = "../format" }
 object = { version = "0.40.0", default-features = false, features = ["read_core", "pe", "elf", "std"] }
 
 [target.'cfg(windows)'.dependencies]
-dmfast-format = { path = "../format" }
 dmfast-seeker = { path = "../seeker" }
 windows-sys = { version = "0.61.2", features = ["Win32_UI_Shell", "Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging", "Win32_System_Registry", "Win32_System_Console"] }
 

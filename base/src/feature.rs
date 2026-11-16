@@ -74,26 +74,7 @@ impl Hosts {
     }
 }
 
-/// Fix tiers, as in BUGFIXES.md: `safe` only changes the buggy case; `extended` changes behaviour a working game
-/// could rely on; `breaking` turns code stock accepts into errors or changes results. A tier includes lower ones.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub enum Tier {
-    Safe,
-    Extended,
-    Breaking,
-}
-
-impl Tier {
-    pub(crate) const ALL: [Tier; 3] = [Tier::Safe, Tier::Extended, Tier::Breaking];
-
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            Tier::Safe => "safe",
-            Tier::Extended => "extended",
-            Tier::Breaking => "breaking",
-        }
-    }
-}
+pub use dmfast_format::selection::Tier;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Status {

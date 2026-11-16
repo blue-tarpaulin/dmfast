@@ -1,6 +1,8 @@
 //! A DreamSeeker patch as written, before it is placed in a module: where it goes, its body's bytes, and what each of
 //! the body's address fields points at, by name or pattern (resolved when it is applied).
 
+use dmfast_format::selection::{by_tier, has, left_out};
+
 /// The file a patch goes into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Module {
@@ -22,30 +24,8 @@ impl Module {
     }
 }
 
-/// How safe a patch is to turn on, as for dmfast's bug fixes: a fix selection naming a tier takes every patch at it
-/// or a safer one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Tier {
-    Safe,
-    Extended,
-    Breaking,
-}
-
-impl Tier {
-    pub const ALL: [Tier; 3] = [Tier::Safe, Tier::Extended, Tier::Breaking];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Tier::Safe => "safe",
-            Tier::Extended => "extended",
-            Tier::Breaking => "breaking",
-        }
-    }
-
-    pub fn parse(name: &str) -> Option<Tier> {
-        Tier::ALL.into_iter().find(|t| t.name() == name)
-    }
-}
+/// How safe a patch is to turn on, as for dmfast's bug fixes.
+pub use dmfast_format::selection::Tier;
 
 /// A place in the DLL's code or data.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -131,11 +111,7 @@ pub struct Patch {
 impl Patch {
     /// Whether a fix selection (tiers, keys, `-key` to leave one out; empty: none) turns it on.
     pub fn wanted(&self, entries: &[String]) -> bool {
-        let has = |e: &str| entries.iter().any(|x| x == e);
-        if entries.iter().any(|e| e.strip_prefix('-') == Some(self.key.as_str())) {
-            return false;
-        }
-        has(&self.key) || Tier::ALL.iter().any(|&t| t >= self.tier && has(t.name()))
+        !left_out(entries, &self.key) && (has(entries, &self.key) || by_tier(entries, self.tier))
     }
 }
 

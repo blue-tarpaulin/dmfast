@@ -22,10 +22,9 @@ fn main() {
     let target_dir = PathBuf::from(env::var("OUT_DIR").unwrap()).join("dmfast-target");
     let lib = build_x86(&root, &target_dir, triple, "dmfast", file);
     println!("cargo:rustc-env=DMFAST_LIB={}", lib.display());
-    println!("cargo:rerun-if-changed={}", root.join("base").display());
-    println!("cargo:rerun-if-changed={}", root.join("dmfast").display());
-    println!("cargo:rerun-if-changed={}", root.join("patches").display());
-    println!("cargo:rerun-if-changed={}", root.join("patches-private").display());
+    for dir in ["base", "dmfast", "format", "patches", "patches-private"] {
+        println!("cargo:rerun-if-changed={}", root.join(dir).display());
+    }
     write_bugfix_list(&root);
     client_patches(&root, windows);
     if !windows {
