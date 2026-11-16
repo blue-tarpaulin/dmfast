@@ -24,6 +24,7 @@ pub static FEATURES: &[&Feature] = &[
     &compiler::perf::filter::FILTER,
     &compiler::perf::parent::PARENT,
     &compiler::perf::children::CHILD_INDEX,
+    &compiler::perf::childpos::CHILDPOS,
     &compiler::perf::leafskip::LEAFSKIP,
     &compiler::perf::vecgrow::VECGROW,
     &compiler::perf::fscache::FSCACHE,

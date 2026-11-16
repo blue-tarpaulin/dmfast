@@ -3,6 +3,7 @@
 use crate::base::feature::Ctx;
 
 pub mod banner;
+pub mod childpos;
 pub mod children;
 pub mod ctype;
 pub mod dirs;

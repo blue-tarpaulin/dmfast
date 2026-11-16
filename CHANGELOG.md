@@ -5,6 +5,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 ## Unreleased
 
 - **New:** dmfast installs itself about 4x faster (DreamDaemon ~190 ms -> ~50 ms), so worlds reach `world/New` ~10% sooner and compiles finish ~2% sooner.
+- **New patch:** `childpos` (compiler): a node's position among its parent's children is found 8 at a time. ~1.5% faster compiles on Windows.
 
 ## 8.0.0
 

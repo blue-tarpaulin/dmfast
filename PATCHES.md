@@ -32,6 +32,7 @@ on, and how much more peak memory the patch uses. `map_cpu` numbers are with ~50
 | String index | `strtab` | both | ~0.1 s, +26 MB | ~3% | Hash index for string table lookups |
 | Intern index | `internidx` | both | ~0.1 s | ~3% | Hash index for identifier interning |
 | Child index | `children` | both | ~0.1 s | ~2% | Indexes children by name for path resolution |
+| Child position scan | `childpos` | both | ~0.09 s | ~1.5% | Finds a node's position among its parent's children 8 at a time |
 | Proto index | `protos` | both | ~0.1 s, +13 MB | ~2% | Hash index for proto lookups |
 | .dmb buffer | `dmbbuf` | both | ~0.1 s | ~1% | Larger write buffer for the .dmb |
 | Compile-pass leaf skip | `leafskip` | both | ~0.1 s | ~1% | Skips finished leaf nodes in each compile pass |
