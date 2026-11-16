@@ -3,7 +3,10 @@
 
 pub mod alloc;
 pub mod glibc;
-pub(crate) mod mem;
+mod image;
+mod patch;
+
+pub(crate) use patch::{alloc_exec, free_exec, poke_code, poke_data, seal_exec};
 
 use std::ffi::OsString;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};

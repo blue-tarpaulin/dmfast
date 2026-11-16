@@ -3,11 +3,14 @@
 //! loading program's features ([`crate::feature::Host`], [`crate::driver`]).
 
 pub(crate) mod alloc;
-pub(crate) mod mem;
+mod image;
+mod patch;
 mod seeker;
 pub mod ucrt;
 
-pub use mem::module_range;
+pub use image::module_range;
+// Windows writes data like code, through the page protection.
+pub(crate) use patch::{alloc_exec, free_exec, poke_code, poke_code as poke_data, seal_exec};
 
 use windows_sys::Win32::System::SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH};
 

@@ -108,16 +108,34 @@ pub(crate) fn find_bytes(hays: &[Hay], needle: &[u8]) -> Vec<usize> {
 
 /// Addresses of every `call rel32` (`E8`) to `target` in `hays`.
 pub(crate) fn find_calls(hays: &[Hay], target: usize) -> Vec<usize> {
-    let mut hits = Vec::new();
-    for &(start, code) in hays {
-        for i in memchr::memchr_iter(0xE8, &code[..code.len().saturating_sub(4)]) {
-            let rel = i32::from_le_bytes([code[i + 1], code[i + 2], code[i + 3], code[i + 4]]);
-            if (start + i + 5).wrapping_add(rel as isize as usize) == target {
-                hits.push(start + i);
-            }
-        }
-    }
-    hits
+    calls(hays).filter(|&(_, to)| to == target).map(|(at, _)| at).collect()
+}
+
+/// Every `call rel32` (`E8`) in `hays`: (address, target).
+pub(crate) fn calls<'a>(hays: &'a [Hay<'a>]) -> impl Iterator<Item = (usize, usize)> + 'a {
+    hays.iter().flat_map(|&(start, code)| {
+        memchr::memchr_iter(0xE8, code).filter_map(move |i| Some((start + i, rel32_target(start, code, i, 1)?)))
+    })
+}
+
+/// Every direct branch with a rel32 operand (`call` `E8`, `jmp` `E9`, `j<cc>` `0F 8x`) in `hays`: (address, target).
+pub(crate) fn branches<'a>(hays: &'a [Hay<'a>]) -> impl Iterator<Item = (usize, usize)> + 'a {
+    hays.iter().flat_map(|&(start, code)| {
+        memchr::memchr3_iter(0xE8, 0xE9, 0x0F, code).filter_map(move |i| {
+            let op = match code[i] {
+                0x0F if code.get(i + 1)? & 0xF0 == 0x80 => 2,
+                0x0F => return None,
+                _ => 1,
+            };
+            Some((start + i, rel32_target(start, code, i, op)?))
+        })
+    })
+}
+
+/// Where the branch at offset `i` of `code` (at `start`) goes: an `op`-byte opcode, then a rel32.
+fn rel32_target(start: usize, code: &[u8], i: usize, op: usize) -> Option<usize> {
+    let rel = i32::from_le_bytes(*code.get(i + op..)?.first_chunk()?);
+    Some((start + i + op + 4).wrapping_add(rel as isize as usize))
 }
 
 /// Offsets of every (possibly overlapping) occurrence.
@@ -128,4 +146,19 @@ fn overlapping<'a>(finder: &'a Finder<'_>, hay: &'a [u8]) -> impl Iterator<Item 
         from = at + 1;
         Some(at)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn branches_decode_their_rel32_targets() {
+        // call +0, jmp -10, jne +0x100, a 0F that is no branch, then a call cut off at the end.
+        let code = [0xE8, 0, 0, 0, 0, 0xE9, 0xF6, 0xFF, 0xFF, 0xFF, 0x0F, 0x85, 0, 1, 0, 0, 0x0F, 0xAF, 0xE8, 1, 2];
+        let hays = [(0x1000, &code[..])];
+        assert_eq!(calls(&hays).collect::<Vec<_>>(), [(0x1000, 0x1005)]);
+        assert_eq!(branches(&hays).collect::<Vec<_>>(), [(0x1000, 0x1005), (0x1005, 0x1000), (0x100A, 0x1110)]);
+        assert_eq!(find_calls(&hays, 0x1005), [0x1000]);
+    }
 }

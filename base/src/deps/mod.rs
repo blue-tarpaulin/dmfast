@@ -87,12 +87,9 @@ pub(crate) fn check(deps: &[Dep], core: &Image) -> Guard {
         }
     }
     if !calls.is_empty() {
-        for &(start, bytes) in &code {
-            for i in memchr::memchr_iter(0xE8, &bytes[..bytes.len().saturating_sub(4)]) {
-                let rel = i32::from_le_bytes([bytes[i + 1], bytes[i + 2], bytes[i + 3], bytes[i + 4]]);
-                if let Some(n) = calls.get_mut(&(start + i + 5).wrapping_add(rel as usize)) {
-                    *n += 1;
-                }
+        for (_, to) in crate::scan::calls(&code) {
+            if let Some(n) = calls.get_mut(&to) {
+                *n += 1;
             }
         }
     }

@@ -1,10 +1,7 @@
 //! [`Stub`]: x86 code built for executable memory or for writing in place, and [`trampoline`].
 
 use super::CodeAddr;
-#[cfg(target_os = "linux")]
-use crate::linux::mem as sys;
-#[cfg(windows)]
-use crate::windows::mem as sys;
+use crate::os as sys;
 use crate::{Result, bail};
 
 /// A jump condition: the `cc` of `j<cc>` (`7x rel8`, `0F 8x rel32`), named for what it tests after a `cmp a,b`.

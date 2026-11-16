@@ -6,9 +6,9 @@ use std::sync::LazyLock;
 
 use windows_sys::Win32::System::LibraryLoader::GetProcAddress;
 
+use super::module_range;
 use crate::code::{Foreign, live_u32};
 use crate::image::Image;
-use crate::windows::mem::module_range;
 use crate::{Result, bail};
 
 impl Image {

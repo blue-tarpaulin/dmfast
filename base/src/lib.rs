@@ -22,6 +22,8 @@ pub mod validate;
 pub mod windows;
 
 #[cfg(target_os = "linux")]
-pub(crate) use linux::{CORE_NAME, alloc::alloc_status, mem::poke_code, mem::poke_data};
+use linux as os;
 #[cfg(windows)]
-pub(crate) use windows::{CORE_NAME, alloc::alloc_status, mem::poke_code, mem::poke_data};
+use windows as os;
+
+pub(crate) use os::{CORE_NAME, alloc::alloc_status, poke_code, poke_data};
