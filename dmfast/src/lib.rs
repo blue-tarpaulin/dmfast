@@ -27,7 +27,6 @@ const VERSION: &str = concat!("DMFAST ", env!("CARGO_PKG_VERSION"));
 static CONFIG: base::driver::Config = base::driver::Config {
     lists: &[dmfast_patches::FEATURES, PRIVATE],
     version: VERSION,
-    after_install: dmfast_patches::finish_banners,
     #[cfg(windows)]
     deps: dmfast_patches::deps::WINDOWS,
     #[cfg(target_os = "linux")]

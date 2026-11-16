@@ -9,8 +9,6 @@ mod compiler;
 pub mod deps;
 mod server;
 
-pub use compiler::perf::banner::finish_banners;
-
 /// Every feature, in install order (see `base::driver`).
 pub static FEATURES: &[&Feature] = &[
     // Compiler speed patches.

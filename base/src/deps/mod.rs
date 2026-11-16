@@ -11,8 +11,6 @@
 //!
 //! A new BYOND build that changes any of this disables the patch until accepted (`depsig.py --accept`).
 
-use std::sync::Mutex;
-
 use dmfast_format::fingerprint::fnv1a;
 use rustc_hash::FxHashMap;
 
@@ -41,10 +39,17 @@ pub struct Dep {
     pub variants: &'static [Variant],
 }
 
-static MISSING: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+/// The features whose dependency guards failed ([`check`]).
+pub(crate) struct Guard(Vec<&'static str>);
+
+impl Guard {
+    pub(crate) fn failed(&self, key: &str) -> bool {
+        self.0.contains(&key)
+    }
+}
 
 /// Check `deps` (this platform's) against `core` before any patch is installed.
-pub(crate) fn check(deps: &[Dep], core: &Image) {
+pub(crate) fn check(deps: &[Dep], core: &Image) -> Guard {
     // Images are open while deps are checked (before install); a closed one finds nothing, as if every dep failed.
     let code = core.hays(Some(true)).unwrap_or_default();
 
@@ -92,8 +97,7 @@ pub(crate) fn check(deps: &[Dep], core: &Image) {
         }
     }
 
-    let mut missing = crate::sync::lock(&MISSING);
-    missing.clear();
+    let mut missing = Vec::new();
     for (dep, f) in deps.iter().zip(&found) {
         let ok = f.is_some_and(|(at, v)| {
             let globals_ok = present(v).all(|(g, &off)| {
@@ -109,6 +113,7 @@ pub(crate) fn check(deps: &[Dep], core: &Image) {
             }
         }
     }
+    Guard(missing)
 }
 
 /// The first form of each dep that occurs exactly once: where its prefix matches (all prefixes searched in one
@@ -140,10 +145,6 @@ fn locate<'a>(deps: &'a [Dep], code: &[crate::scan::Hay]) -> Vec<Option<(usize, 
             first
         })
         .collect()
-}
-
-pub(crate) fn missing(key: &str) -> bool {
-    crate::sync::lock(&MISSING).contains(&key)
 }
 
 #[cfg(test)]

@@ -296,7 +296,7 @@ pub(crate) mod tests {
     use crate::image::Image;
     use std::cell::Cell;
 
-    const NONE: Install = Install { os: 1, run: None };
+    const NONE: Install = Install(None);
     static A: Feature = Feature::perf(Hosts::SERVER, "a", "", NONE);
     static B: Feature = Feature::perf(Hosts::SERVER, "b", "", NONE);
     static WRAPS_A: Feature = Feature::perf(Hosts::SERVER, "w", "", NONE).after(&[&A]);

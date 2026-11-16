@@ -11,7 +11,8 @@ use crate::base::{Result, bail};
 
 pub static BANNER: Feature =
     Feature::perf(Hosts::COMPILER, "banner", "version banner", install!(windows: install, linux: install))
-        .offered_if(super::found);
+        .offered_if(super::found)
+        .finish(finish_banners);
 
 /// Version banners as in the binary
 const BANNERS: [&[u8]; 2] = [b"DM compiler version %ld.%ld\n\n\0", b"DM compiler version %ld.%ld\n\0"];
@@ -53,11 +54,8 @@ fn install(cx: &Ctx) -> Result<String> {
     parts.finish()
 }
 
-/// `after_install` of [`crate::base::driver::Config`]
-pub fn finish_banners(n: Counts) {
-    if !BANNER.applied() {
-        return;
-    }
+/// The banner line, once every feature is installed: `n` counts this one too.
+fn finish_banners(n: Counts) {
     let (applied, offered) = (n.applied - 1, n.offered - 1);
     write_banners(&match n.fixes {
         0 => format!("{applied}/{offered}"),

@@ -17,10 +17,9 @@ pub fn keys_are_unique(config: &Config) {
     }
 }
 
-/// Every feature installs on some OS, has a tier iff it is a fix, and its `after`/`requires` share its program.
+/// Every fix has a tier and no speed patch does, and `after`/`requires` share the feature's program.
 pub fn declarations_are_consistent(config: &Config) {
     for f in config.all() {
-        assert!(f.install.os != 0, "{}: no install function on any OS", f.key);
         match f.kind {
             Kind::Perf => assert!(f.tier.is_none(), "{}: a speed patch has no tier", f.key),
             Kind::Fix => assert!(f.tier.is_some(), "{}: a fix needs a tier", f.key),
@@ -71,7 +70,7 @@ fn sel(entries: &[&str]) -> Vec<String> {
 fn selection_rule() {
     use crate::driver::select::wanted;
     use crate::feature::{Hosts, Install, Status, Tier};
-    const NONE: Install = Install { os: 1, run: None };
+    const NONE: Install = Install(None);
     let perf = Feature::perf(Hosts::SERVER, "p", "", NONE);
     let safe = Feature::fix(Hosts::SERVER, "s", "", Tier::Safe, NONE);
     let ext = Feature::fix(Hosts::SERVER, "e", "", Tier::Extended, NONE);

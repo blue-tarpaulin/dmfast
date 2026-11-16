@@ -11,8 +11,9 @@
 use std::any::Any;
 use std::cell::OnceCell;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU8, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
+use crate::driver::Counts;
 use crate::image::Image;
 use crate::{Error, Result};
 
@@ -277,19 +278,10 @@ impl Parts<'_> {
 #[doc(hidden)]
 pub type InstallFn = fn(&Ctx) -> Result<String>;
 
-/// [`Install::os`] bits.
-#[doc(hidden)]
-pub const WINDOWS: u8 = 1;
-#[doc(hidden)]
-pub const LINUX: u8 = 2;
-
-/// Built by [`install!`](crate::feature::install): this OS's install fn (`None`: not here), OSes with one.
+/// Built by [`install!`](crate::feature::install): this OS's install fn (`None`: not here).
 #[doc(hidden)]
 #[derive(Clone, Copy)]
-pub struct Install {
-    pub os: u8,
-    pub run: Option<InstallFn>,
-}
+pub struct Install(pub Option<InstallFn>);
 
 /// One speed patch or bug fix. Build with [`Feature::perf`] / [`Feature::fix`] and the modifiers below.
 pub struct Feature {
@@ -314,25 +306,9 @@ pub struct Feature {
     pub(crate) offered: Option<fn(&Ctx) -> bool>,
     /// Prints its counters at exit under `DMFAST_STATS`.
     pub(crate) stats: Option<fn()>,
-    state: AtomicU8,
-}
-
-/// What the driver did with a feature in this process ([`Feature::state`]).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[repr(u8)]
-pub(crate) enum State {
-    /// Not for this OS or program, not offered, or never looked at.
-    NotOffered = 0,
-    /// Offered, not selected.
-    Skipped,
-    /// Selected, but `DMFAST_DISABLE` lists it.
-    Disabled,
-    /// BYOND has the fix itself (`fixed_in`), or this build predates `since`.
-    OutOfRange,
-    Deprecated,
-    Applied,
-    /// Tried and failed: a signature, a dependency guard, a required feature, or a write conflict.
-    Failed,
+    /// Called with the program's counts once every feature is installed.
+    pub(crate) finish: Option<fn(Counts)>,
+    applied: AtomicBool,
 }
 
 impl Feature {
@@ -351,7 +327,8 @@ impl Feature {
             install,
             offered: None,
             stats: None,
-            state: AtomicU8::new(State::NotOffered as u8),
+            finish: None,
+            applied: AtomicBool::new(false),
         }
     }
 
@@ -423,25 +400,19 @@ impl Feature {
         self
     }
 
-    fn state(&self) -> State {
-        const ALL: [State; 7] = [
-            State::NotOffered,
-            State::Skipped,
-            State::Disabled,
-            State::OutOfRange,
-            State::Deprecated,
-            State::Applied,
-            State::Failed,
-        ];
-        ALL.get(self.state.load(Relaxed) as usize).copied().unwrap_or(State::NotOffered)
+    /// Called once every feature is installed, still at install time, with the program's counts (this feature's
+    /// included). Called only if it applied.
+    pub const fn finish(mut self, f: fn(Counts)) -> Feature {
+        self.finish = Some(f);
+        self
     }
 
-    pub(super) fn set_state(&self, s: State) {
-        self.state.store(s as u8, Relaxed);
+    pub(crate) fn mark_applied(&self) {
+        self.applied.store(true, Relaxed);
     }
 
     pub fn applied(&self) -> bool {
-        self.state() == State::Applied
+        self.applied.load(Relaxed)
     }
 
     /// `fix ` for a fix, nothing for a speed patch: the report lines' prefix before the key.
@@ -462,32 +433,23 @@ impl Feature {
 #[macro_export]
 macro_rules! install {
     (windows: $w:expr, linux: $l:expr $(,)?) => {
-        $crate::feature::Install {
-            os: $crate::feature::WINDOWS | $crate::feature::LINUX,
-            run: cfg_select! {
-                windows => { Some($w as $crate::feature::InstallFn) }
-                target_os = "linux" => { Some($l as $crate::feature::InstallFn) }
-                _ => { None }
-            },
-        }
+        $crate::feature::Install(cfg_select! {
+            windows => { Some($w as $crate::feature::InstallFn) }
+            target_os = "linux" => { Some($l as $crate::feature::InstallFn) }
+            _ => { None }
+        })
     };
     (windows: $w:expr $(,)?) => {
-        $crate::feature::Install {
-            os: $crate::feature::WINDOWS,
-            run: cfg_select! {
-                windows => { Some($w as $crate::feature::InstallFn) }
-                _ => { None }
-            },
-        }
+        $crate::feature::Install(cfg_select! {
+            windows => { Some($w as $crate::feature::InstallFn) }
+            _ => { None }
+        })
     };
     (linux: $l:expr $(,)?) => {
-        $crate::feature::Install {
-            os: $crate::feature::LINUX,
-            run: cfg_select! {
-                target_os = "linux" => { Some($l as $crate::feature::InstallFn) }
-                _ => { None }
-            },
-        }
+        $crate::feature::Install(cfg_select! {
+            target_os = "linux" => { Some($l as $crate::feature::InstallFn) }
+            _ => { None }
+        })
     };
 }
 pub use crate::install;

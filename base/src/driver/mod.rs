@@ -13,8 +13,8 @@ pub(crate) mod select;
 use std::sync::OnceLock;
 
 use crate::CORE_NAME;
-use crate::deps::Dep;
-use crate::feature::{Ctx, Feature, Host, Kind, State, Status};
+use crate::deps::{Dep, Guard};
+use crate::feature::{Ctx, Feature, Host, Kind, Status};
 use crate::image::Image;
 pub(crate) use report::mimalloc;
 pub use report::{Counter, print_stats, stats, verify};
@@ -27,8 +27,6 @@ pub struct Config {
     pub lists: &'static [&'static [&'static Feature]],
     /// This build's name on the stats line (`DMFAST <version>`).
     pub version: &'static str,
-    /// Called with the counts once every feature is installed, still at install time.
-    pub after_install: unsafe fn(Counts),
     /// This OS's dependency guards ([`crate::deps`]).
     pub deps: &'static [Dep],
 }
@@ -85,17 +83,17 @@ pub(crate) unsafe fn install(config: &'static Config, host: Host) {
             return eprintln!("dmfast: {e}; {what} patches disabled");
         }
     };
-    crate::deps::check(config.deps, &core);
+    let guard = crate::deps::check(config.deps, &core);
     // SAFETY: install time (caller).
-    unsafe { run(config, host, Ctx::new(core, Image::host())) };
+    unsafe { run(config, host, Ctx::new(core, Image::host()), &guard) };
 }
 
-/// Install `config`'s features of `host` into `ctx`'s images (their code copied first), then call
-/// [`Config::after_install`] and print the stats line.
+/// Install `config`'s features of `host` into `ctx`'s images (their code copied first) except those `guard` failed,
+/// then call the applied ones' [`Feature::finish`] and print the stats line.
 ///
 /// # Safety
-/// Install time: no other thread runs BYOND's code; deps checked.
-unsafe fn run(config: &'static Config, host: Host, ctx: Ctx) {
+/// Install time: no other thread runs BYOND's code.
+unsafe fn run(config: &'static Config, host: Host, ctx: Ctx, guard: &Guard) {
     let _ = INSTALLED.set((config, host));
     read_verify();
     crate::snapshot::take(ctx.core());
@@ -106,27 +104,26 @@ unsafe fn run(config: &'static Config, host: Host, ctx: Ctx) {
     let build = byond(ctx.core());
     let (mut offered, mut applied, mut fixes) = (0, 0, 0);
     for f in config.ordered(host) {
-        let Some(install) = f.install.run else { continue };
+        let Some(install) = f.install.0 else { continue };
         let want = wanted(f, entries);
-        // Leave `f` out with `state`, saying why under `DMFAST_STATS` if it was wanted.
-        let skip = |why: std::fmt::Arguments<'_>, state: State| {
+        // Leave `f` out, saying why under `DMFAST_STATS` if it was wanted.
+        let skip = |why: std::fmt::Arguments<'_>| {
             if want && stats() {
                 eprintln!("dmfast: disabled {}{} - {why}", f.kind_prefix(), f.key);
             }
-            f.set_state(state);
         };
         if let Some((fixed, _)) = f.byond.fixed_in
             && build >= fixed
         {
-            skip(format_args!("not needed: BYOND fixed it in {}", build_name(fixed)), State::OutOfRange);
+            skip(format_args!("not needed: BYOND fixed it in {}", build_name(fixed)));
             continue;
         }
         if build != 0 && build < f.byond.since {
-            skip(format_args!("needs BYOND {} or later", build_name(f.byond.since)), State::OutOfRange);
+            skip(format_args!("needs BYOND {} or later", build_name(f.byond.since)));
             continue;
         }
         if let Status::Deprecated(why) = f.status {
-            skip(format_args!("deprecated: {why}"), State::Deprecated);
+            skip(format_args!("deprecated: {why}"));
             continue;
         }
         if f.offered.is_some_and(|o| !o(&ctx)) {
@@ -136,7 +133,6 @@ unsafe fn run(config: &'static Config, host: Host, ctx: Ctx) {
             offered += 1;
         }
         if !want {
-            f.set_state(State::Skipped);
             continue;
         }
         if disabled(f.key) {
@@ -146,12 +142,11 @@ unsafe fn run(config: &'static Config, host: Host, ctx: Ctx) {
                     Kind::Fix => eprintln!("dmfast: fix {} ({}): skipped (DMFAST_DISABLE)", f.key, f.title),
                 }
             }
-            f.set_state(State::Disabled);
             continue;
         }
         let result = if let Some(r) = f.requires.iter().find(|r| !r.applied()) {
             Err(format!("needs {}", r.key).into())
-        } else if crate::deps::missing(f.key) {
+        } else if guard.failed(f.key) {
             Err("mismatched signature".into())
         } else {
             crate::ledger::begin();
@@ -166,7 +161,7 @@ unsafe fn run(config: &'static Config, host: Host, ctx: Ctx) {
         };
         match result {
             Ok(detail) => {
-                f.set_state(State::Applied);
+                f.mark_applied();
                 match f.kind {
                     Kind::Perf => applied += 1,
                     Kind::Fix => fixes += 1,
@@ -179,7 +174,6 @@ unsafe fn run(config: &'static Config, host: Host, ctx: Ctx) {
                 }
             }
             Err(e) => {
-                f.set_state(State::Failed);
                 if f.kind == Kind::Fix || stats() {
                     eprintln!("dmfast: disabled {}{} - {e}", f.kind_prefix(), f.key);
                 }
@@ -192,8 +186,10 @@ unsafe fn run(config: &'static Config, host: Host, ctx: Ctx) {
     // SAFETY: install is over and images closed: nothing holds or makes a slice of the copy.
     unsafe { crate::snapshot::release() };
     check_keys(config);
-    // SAFETY: still install time; `after_install` is the loader entry's own hook.
-    unsafe { (config.after_install)(Counts { applied, offered, fixes }) };
+    let counts = Counts { applied, offered, fixes };
+    for finish in config.all().filter(|f| f.applied()).filter_map(|f| f.finish) {
+        finish(counts);
+    }
     if stats() {
         let program = if host == Host::Server { " (runtime)" } else { "" };
         eprintln!("dmfast: {}{program}, {}, {}", config.version, summary(config, host), crate::alloc_status());
