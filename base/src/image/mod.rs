@@ -9,9 +9,11 @@
 //! Images exist only during install; one used later reads and writes nothing and is reported as a bug.
 
 mod find;
+mod index;
 mod read;
 mod write;
 
+use std::cell::OnceCell;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
@@ -47,6 +49,9 @@ pub struct Image {
     /// The object's path for `dlopen` (`None`: the main program).
     #[cfg(target_os = "linux")]
     pub(crate) path: Option<std::ffi::CString>,
+    /// Install-time indexes ([`index`]).
+    branches: OnceCell<index::Branches>,
+    relocs: OnceCell<index::Relocs>,
     _install_only: PhantomData<*const ()>,
 }
 
@@ -64,6 +69,8 @@ impl Image {
             dynamic: None,
             #[cfg(target_os = "linux")]
             path: None,
+            branches: OnceCell::new(),
+            relocs: OnceCell::new(),
             _install_only: PhantomData,
         }
     }
@@ -208,6 +215,22 @@ mod tests {
         let (all, calls) = (image.find_all("E8 ?? 00 00 00"), image.calls_to(a + 7));
         assert_eq!((all, calls), (Ok(Hits(vec![a + 1])), Ok(Hits(vec![a + 1]))));
         assert!(image.find_in(a + 4, 8, "C3").is_err() && image.write_code(a, &[0xCC]).is_err());
+    }
+
+    /// A range is untouched unless a branch from outside it lands strictly inside it.
+    #[test]
+    fn untouched_sees_branches_into_a_range() {
+        let _serial = crate::sync::lock(&crate::ledger::tests::SERIAL);
+        // call a+7 at a+1.
+        let code = [0x90u8, 0xE8, 1, 0, 0, 0, 0xC3, 0xEB, 0x90];
+        let a = code.as_ptr() as usize;
+        // SAFETY: `code` outlives the image.
+        let image = unsafe { Image::new(a, vec![(a, 9)]) }.with_parts(vec![(a, 9, true)]).unwrap();
+        assert!(image.untouched(&[(a + 6, 2)]).is_err());
+        assert!(image.untouched(&[(a + 8, 1), (a + 6, 2)]).is_err());
+        assert_eq!(image.untouched(&[(a + 7, 2)]), Ok(()), "a branch to the start");
+        assert_eq!(image.untouched(&[(a + 1, 7)]), Ok(()), "a branch from inside");
+        assert_eq!(image.untouched(&[(a, 7)]), Ok(()), "a branch to the end");
     }
 
     /// Searches rely on each match (absolute addresses), probes on nothing; `rely` only inside the image.

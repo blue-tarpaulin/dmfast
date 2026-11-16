@@ -1,6 +1,7 @@
 //! [`Image`]'s writers: code and data writes the ledger applies if the installing feature succeeds, jumps, calls,
 //! stubs, and hooks.
 
+use super::index::{ends, strictly_between as between};
 use super::{Image, within};
 use crate::code::{CodeAddr, Stub, branch, trampoline};
 use crate::ledger;
@@ -15,17 +16,55 @@ impl Image {
     pub fn untouched(&self, ranges: &[(usize, usize)]) -> Result<()> {
         // Overlaps `lo..hi`; `inside(to, to)`: strictly inside a range.
         let inside = |lo: usize, hi: usize| ranges.iter().any(|&(at, len)| hi > at && lo < at + len);
-        for r in self.reloc_sites() {
-            if inside(r, r + 4) {
-                bail!("relocation at {r:#x} in rewritten code");
-            }
-            let to = u32::from_le_bytes(*self.haystack(r, 4)?.first_chunk().ok_or("short read")?) as usize;
+        let pointer = |r: usize, to: usize| -> Result<()> {
             if inside(to, to) {
                 bail!("relocated pointer at {r:#x} into rewritten code at {to:#x}");
             }
+            Ok(())
+        };
+        match self.reloc_index()? {
+            Some(relocs) => {
+                for &(at, len) in ranges {
+                    let first = relocs.sites.partition_point(|&r| r + 4 <= at);
+                    if let Some(&r) = relocs.sites.get(first).filter(|&&r| r < at + len) {
+                        bail!("relocation at {r:#x} in rewritten code");
+                    }
+                    if let Some(&e) = between(&relocs.code, at, at + len).first() {
+                        let (to, r) = ends(e);
+                        pointer(r, to)?;
+                    }
+                }
+                // Data as it is now: a feature's applied write may have changed a word.
+                let data = self.hays(Some(false))?;
+                for &r in &relocs.data {
+                    let to = match data.iter().find(|&&(s, b)| s <= r && r + 4 <= s + b.len()) {
+                        Some(&(s, b)) => super::le32(b, r - s).ok_or("short read")? as usize,
+                        None => self.word(r)?,
+                    };
+                    pointer(r, to)?;
+                }
+            }
+            None => {
+                for r in self.reloc_sites() {
+                    if inside(r, r + 4) {
+                        bail!("relocation at {r:#x} in rewritten code");
+                    }
+                    pointer(r, self.word(r)?)?;
+                }
+            }
+        }
+        if let Some(b) = self.branches()? {
+            for &(at, len) in ranges {
+                if let Some((to, from)) =
+                    between(&b.all, at, at + len).iter().map(|&e| ends(e)).find(|&(_, from)| !inside(from, from + 1))
+                {
+                    bail!("branch at {from:#x} into rewritten code at {to:#x}");
+                }
+            }
+            return Ok(());
         }
         let code = self.hays(Some(true))?;
-        for (from, to) in crate::scan::branches(&code) {
+        for (from, to, _) in crate::scan::branches(&code) {
             if inside(to, to) && !inside(from, from + 1) {
                 bail!("branch at {from:#x} into rewritten code at {to:#x}");
             }

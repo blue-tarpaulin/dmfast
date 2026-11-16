@@ -4,6 +4,8 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
+- **New:** dmfast installs itself about 4x faster (DreamDaemon ~190 ms -> ~50 ms), so worlds reach `world/New` ~10% sooner and compiles finish ~2% sooner.
+
 ## 8.0.0
 
 - **New:** `--client [which]` (Windows) patches DreamSeeker with opt-in client fixes: `safe` by default, or `--client extended`.

@@ -87,12 +87,8 @@ pub(crate) fn check(tables: &[&[Dep]], core: &Image) -> Guard {
             calls.insert(*at, 0);
         }
     }
-    if !calls.is_empty() {
-        for (_, to) in crate::scan::calls(&code) {
-            if let Some(n) = calls.get_mut(&to) {
-                *n += 1;
-            }
-        }
+    for (&to, n) in &mut calls {
+        *n = core.call_sites(to).map_or(0, |s| s.len() as u32);
     }
 
     let mut missing = Vec::new();

@@ -83,6 +83,11 @@ pub(crate) fn installing() -> bool {
     INSTALLING.load(Relaxed)
 }
 
+/// No feature's write has been applied yet: memory is as shipped.
+pub(crate) fn nothing_applied() -> bool {
+    lock(&WRITTEN).is_empty()
+}
+
 /// The installing feature relies on `addr..addr+len` (see the module docs); nothing outside an install.
 #[inline]
 pub(crate) fn rely(addr: usize, len: usize) {

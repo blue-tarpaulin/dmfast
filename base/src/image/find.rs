@@ -1,5 +1,6 @@
 //! [`Image`]'s searches: IDA-style patterns, bytes, and calls, in its code, its data, or a range.
 
+use super::index::ends;
 use super::{Hits, Image, relied};
 use crate::scan::{self, Hay};
 use crate::{Result, bail};
@@ -87,12 +88,28 @@ impl Image {
 
     /// Every `call rel32` (`E8`) to `target` in the executable parts.
     pub fn calls_to(&self, target: usize) -> Result<Hits> {
-        Ok(relied(scan::find_calls(&self.hays(Some(true))?, target), 5))
+        Ok(relied(self.call_sites(target)?, 5))
     }
 
     /// [`Image::calls_to`] relying on nothing, as [`Image::probe_all`].
     pub fn probe_calls_to(&self, target: usize) -> Result<Hits> {
-        Ok(Hits(scan::find_calls(&self.hays(Some(true))?, target)))
+        Ok(Hits(self.call_sites(target)?))
+    }
+
+    /// The `call rel32` sites to `target` in the executable parts, in address order.
+    pub(crate) fn call_sites(&self, target: usize) -> Result<Vec<usize>> {
+        match self.branches()? {
+            Some(b) => {
+                let first = b.calls.partition_point(|&e| ends(e).0 < target);
+                Ok(b.calls[first..]
+                    .iter()
+                    .map(|&e| ends(e))
+                    .take_while(|&(t, _)| t == target)
+                    .map(|(_, s)| s)
+                    .collect())
+            }
+            None => Ok(scan::find_calls(&self.hays(Some(true))?, target)),
+        }
     }
 
     /// Every `call rel32` (`E8`) to `target` in `addr..addr+len`.
