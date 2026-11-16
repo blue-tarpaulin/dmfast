@@ -62,7 +62,7 @@ unsafe extern "C" fn null_div() {
     )
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let null = core.find_unique(NULL_CASE, "null / x case")?;
     let num = core.find_unique(NUMBER_CASE, "number / x case")?;

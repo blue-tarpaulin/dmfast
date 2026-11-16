@@ -4,7 +4,7 @@ use crate::base::Result;
 use crate::base::code::{Cond, Stub};
 use crate::base::feature::Ctx;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // loop: sub esp,0Ch ; push ebx ; call getc ; mov edi,[ebx+18h] ; mov eax,edi ; movzx eax,al ; mov [esp],eax ;
     // call isspace ; add esp,10h ; test eax,eax ; jne loop ; mov ecx,[ebp-30h] ; mov edx,[ebp+8] ; jmp

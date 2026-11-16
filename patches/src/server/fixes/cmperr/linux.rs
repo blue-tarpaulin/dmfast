@@ -23,7 +23,7 @@ const FETCH_LEN: usize = 17;
 const ERROR: &str = "83 EC 08 FF B5 ?? ?? ?? ?? FF B5 ?? ?? ?? ?? 68 ?? ?? ?? ?? FF 73 04 FF 33 68 ?? ?? ?? ?? E8";
 const ERROR_AT: usize = 0x24;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // (head, load)
     let mut sites = Vec::new();

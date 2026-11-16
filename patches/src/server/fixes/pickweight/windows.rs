@@ -33,7 +33,7 @@ extern "C" fn pick() {
     }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // push ebp ; mov ebp,esp ; mov edx,[state] ; sub esp,8 ; inc word [edx+14h] ; cmp [rand_mode],1F4h ;
     // movzx ecx,word [edx+14h] ; mov eax,[edx+10h] ; push ebx ; push esi ; push edi ; movzx esi,word [eax+ecx*4]

@@ -50,7 +50,7 @@ fn ebp_operand(core: &Image, at: usize, op: u8, reg: u8) -> Result<usize> {
     }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let site = core.find_unique(SITE, "filter list add")?;
     let replace = core.jcc_at(site + 3, Cond::Below)?.target;

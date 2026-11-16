@@ -42,7 +42,7 @@ const DONE_JE: usize = 0xB;
 const SETUP_CLOCK: usize = 0x30;
 const STORE: usize = 0x3A;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let at = core.find_unique(TEST, "recursion test and profiler entry")?;
     ensure!(is_message(core, core.ptr_at(at + MESSAGE_PUSH)?)?, "recursion test: not the recursion error");

@@ -42,7 +42,7 @@ unsafe extern "C" fn share() {
     )
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let s = core.find_unique(LOOP, "icon state copy")?;
     // It must be the loop of `DMGraphic::operator=(DMGraphic const&)` itself, not a lookalike elsewhere.

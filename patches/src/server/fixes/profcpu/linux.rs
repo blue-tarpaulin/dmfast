@@ -27,7 +27,7 @@ const CPU_CLOCK: &str = "53 83 EC 08 8B 5C 24 10 C7 03 00 00 00 00 E8 ?? ?? ?? ?
 /// Its `call clock`.
 const CALL: usize = 14;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let sites = core.import_calls("clock", libc_clock as ClockFn)?;
     let [site] = sites[..] else { bail!("clock(): expected 1 call, found {}", sites.len()) };

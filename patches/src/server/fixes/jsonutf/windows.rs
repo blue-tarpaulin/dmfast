@@ -6,7 +6,7 @@ use crate::base::feature::Ctx;
 /// How far into the function the patched code is searched for.
 const SPAN: usize = 0x300;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.export(c"?AddJsonEncodedUtf8@StringEditor@@QAEXPBD_N1@Z")?;
     // cmp bl,80h ; jb ascii ; lea eax,[ebp+0Ch] ; push eax ; push edx ; call decode_utf8

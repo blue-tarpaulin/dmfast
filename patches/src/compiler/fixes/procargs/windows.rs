@@ -76,7 +76,7 @@ unsafe extern "C" fn insert(path: usize, parent: usize, flag: usize) -> usize {
     }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(COMPILE_FN, "proc argument compile")?;
     let error = core.call_target(core.find_unique_in(f, 0x300, ERROR_CALL, "argument error call")? + ERROR_AT)?;

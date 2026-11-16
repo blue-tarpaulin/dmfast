@@ -26,7 +26,7 @@ const SCAN_LEN: usize = 0x1B;
 const FOUND: usize = 0x68;
 const CALL: usize = 0x60;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let text = core.find_data(b"Overflow in AddToLocList\n\0")?.unique("loc list overflow message")?;
     let add = core.find_unique(&format!("{APPEND} {} E8", hx(text)), "loc list append")?;

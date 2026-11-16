@@ -22,7 +22,7 @@ const WRITE: &str = "0F B7 42 14 83 C0 01 0F B7 C0 89 45 10 8B 02 8B 00 89 ?? 08
 /// [`WRITE`]'s jump's rel32.
 const WRITE_JUMP: usize = 0x1F;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(RECORDER, "init proc recorder")?;
     ensure!(core.ptr_at(f + START_READ)? == core.ptr_at(f + START_WRITE)?, "init proc recorder: two start globals");

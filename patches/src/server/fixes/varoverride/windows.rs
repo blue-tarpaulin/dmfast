@@ -17,7 +17,7 @@ const START_WRITE: usize = 0x37;
 /// push ebp ; mov ebp,esp ; sub esp,10h
 const ENTRY: usize = 6;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(RECORDER, "init proc recorder")?;
     ensure!(core.ptr_at(f + START_READ)? == core.ptr_at(f + START_WRITE)?, "init proc recorder: two start globals");

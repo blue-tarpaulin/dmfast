@@ -80,7 +80,7 @@ unsafe extern "C" fn reader() {
     )
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let g = core.find_unique(READER, "text stream reader")?;
     let pattern = FILE_READER.replace("{getc}", &hx(core.ucrt_slot("getc")?));

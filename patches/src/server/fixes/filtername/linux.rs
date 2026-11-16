@@ -30,7 +30,7 @@ const FILTER_ARRAY: usize = 60;
 /// cmove ecx,eax
 const NAME: &str = "8B 48 30 85 C9 0F 84 ?? ?? ?? ?? 31 D2 31 C0 66 31 D2 81 F9 FF FF 00 00 0F 44 C8";
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let site = core.find_unique(SITE, "filter list add")?;
     let replace = core.jcc_at(site + JNE, Cond::NotEqual)?.target;

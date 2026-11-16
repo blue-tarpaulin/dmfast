@@ -192,7 +192,7 @@ fn type_case(core: &Image, a: usize, tag: u8, id_of: usize) -> Result<(usize, us
     Ok((getter, key))
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(READ, "user var read")?;
     let own = core.call_target(f + 0x11)?;

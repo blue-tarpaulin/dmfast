@@ -8,7 +8,7 @@ use crate::base::feature::Ctx;
 /// Stock: `eax = buckets[edx]; edi = &buckets[edx]; while (eax && [eax] != esi) eax = [eax+4]`.
 /// New: `edi = &buckets[edx]; eax = *edi; while (eax && [eax] != esi) { edi = eax+4; eax = *edi }`, so a miss
 /// inserts at `*edi`, the tail.
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     const FIND: &str = "55 8B EC 56 57 FF 75 0C FF 75 08 E8 ?? ?? ?? ?? 0F B7 15 ?? ?? ?? ?? 8B F0 0F B7 CE 83 C4 08 \
                         23 D1 8B 0D ?? ?? ?? ?? 8B 04 91 8D 3C 91 85 C0 74 0B 39 30 74 55 8B 40 04 85 C0 75 F5 \

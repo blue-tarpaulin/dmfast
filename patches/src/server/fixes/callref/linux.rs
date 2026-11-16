@@ -61,7 +61,7 @@ unsafe extern "C" fn release(count: u32) {
     }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let at = core.find_unique(OPCODE, "call() opcode")?;
     let pos = core.u8_at(at + POS)?;

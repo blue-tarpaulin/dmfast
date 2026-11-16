@@ -104,7 +104,7 @@ unsafe extern "C" fn check_stub() {
     )
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let builder = core.find_unique(BUILDER, "icon_states builder")?;
     let first = builder + FIRST;

@@ -93,7 +93,7 @@ unsafe extern "C" fn insert() {
     )
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(COMPILE_FN, "proc argument compile")?;
     core.require(core.rel8(f + COMPILE_VAR)?, VAR_NAME, "proc argument compile: var name read")?;

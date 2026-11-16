@@ -56,7 +56,7 @@ fn called_by(core: &Image, wrapper: &CStr, target: usize, what: &str) -> Result<
     Ok(())
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let incref = core.find_unique(INCREF, "Value IncRef")?;
     let decref = core.find_unique(DECREF, "Value DecRef")?;

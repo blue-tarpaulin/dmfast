@@ -74,7 +74,7 @@ unsafe extern "thiscall" fn insert(set: usize, key: *const Key) -> *mut c_void {
     }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let a = core.find_unique(GET_OR_ADD, "rsc id get-or-add insert")?;
     let branch_a = core.find_unique(BRANCH, "rsc id 0xFFFF branch")?;

@@ -4,7 +4,7 @@ use super::last_operator;
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // mov ecx,[esi] ; cmp ecx,first ; jb in ; cmp ecx,goto ; jbe reject ; in: lea eax,[ecx-plus] ; cmp eax,n ; ja ok:
     // rejects plus..=plus+n and first..=goto, one range (516: 0ADh..=0DBh and 0DCh..=0E5h).

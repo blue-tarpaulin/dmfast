@@ -50,7 +50,7 @@ const STORE: usize = 79;
 const STORE_LEN: usize = 5;
 const DONE_JMP: usize = 85;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let at = core.find_unique(TEST, "recursion test")?;
     let error = core.rel32(at + ERROR_JE)?;

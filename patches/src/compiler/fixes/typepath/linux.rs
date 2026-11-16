@@ -4,7 +4,7 @@ use super::last_operator;
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // 516: mov eax,[ebx] ; add esp,10h ; lea edx,[eax-0ADh] ; cmp edx,38h ; ja ok ; sub esp,8 ; push message
     let hits =

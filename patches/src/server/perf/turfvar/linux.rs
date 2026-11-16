@@ -7,7 +7,7 @@ use crate::base::feature::Ctx;
 /// Regparm (eax, edx = turf ref); ebx = hash, esi = &bucket.
 /// Stock: `eax = *esi; while (eax && [eax] != ebx) eax = [eax+4]`.
 /// New: `eax = *esi; while (eax && [eax] != ebx) { esi = eax+4; eax = *esi }`, so a miss inserts at `*esi`, the tail.
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     const FIND: &str = "56 53 83 EC 1C 52 50 E8 ?? ?? ?? ?? 8B 15 ?? ?? ?? ?? 83 C4 10 89 C3 66 23 05 ?? ?? ?? ?? \
                         0F B7 C0 8D 34 82 8B 06 85 C0 75 0D EB 1C 8D 74 26 00 8B 40 04 85 C0 74 11 3B 18 75 F5 \

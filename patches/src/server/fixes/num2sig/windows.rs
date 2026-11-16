@@ -71,7 +71,7 @@ unsafe extern "C" fn format() {
     )
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let arg = core.find_unique(ARG, "num2text two-argument path")?;
     // Then the pushes of digits (from the same slot) and value, and the call: right there or through a `jmp`.

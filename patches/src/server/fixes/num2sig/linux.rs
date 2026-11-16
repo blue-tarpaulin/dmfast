@@ -17,7 +17,7 @@ const CALL: usize = 63;
 
 type SigG = unsafe extern "C" fn(*mut u8, *const u8, i32, f64) -> i32;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let call = core.find_unique(HANDLER, "num2text two-argument %g call")? + CALL;
     SPRINTF.set(core.call_target(call)?);

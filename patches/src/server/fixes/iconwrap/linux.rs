@@ -4,7 +4,7 @@ use crate::base::code::Stub;
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // Render function (ebx = icon record: [+8] list, [+0Ch] its length, [+14h] 16-bit rendered offset, [+18h]
     // rendered copy): lea esi,[ebx+8] ; push esi ; call is_flat ; add esp,10h ; test al,al ; jne done ;

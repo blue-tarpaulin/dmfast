@@ -73,7 +73,7 @@ unsafe extern "C" fn parent_pass(root: usize) {
     }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let names = Names::new(core)?;
     let ids = Ids::new(&names)?;

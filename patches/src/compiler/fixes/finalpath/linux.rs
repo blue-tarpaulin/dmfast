@@ -110,7 +110,7 @@ unsafe extern "C" fn unwrap_finals_c(root: usize) {
     unsafe { unwrap_finals(root) }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let ids = Ids::new(&Names::new(core)?)?;
     let pass = core.find_unique(PASS, "parent-type pass call")?;

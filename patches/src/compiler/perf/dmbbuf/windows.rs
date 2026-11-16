@@ -33,7 +33,7 @@ unsafe extern "C" fn wfopen(name: *const u16, mode: *const u16) -> *mut FILE {
     }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // ucrtbase's setvbuf needs ucrtbase's streams.
     core.ucrt_slot("fclose")?;

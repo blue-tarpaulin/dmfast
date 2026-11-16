@@ -139,7 +139,7 @@ pub unsafe extern "C" fn readdir(dir: *mut DIR) -> *mut dirent {
 }
 
 /// On once every lookup finds our functions (the preload works) and libbyond imports `stat`.
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     for (name, ours) in [
         (c"stat", stat as StatFn as usize),
         (c"fstat", fstat as FstatFn as usize),

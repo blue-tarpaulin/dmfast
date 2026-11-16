@@ -26,7 +26,7 @@ const SPAN: usize = 0x240;
 /// The hooked bytes.
 const ENTRY: usize = 7;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(INTERN, "list intern")?;
     let grow = core.find_unique_in(f, SPAN, GROWTH, "list intern growth")?;

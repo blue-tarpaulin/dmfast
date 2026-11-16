@@ -6,7 +6,7 @@ use crate::base::code::Foreign;
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // push ebp ; mov ebp,esp ; sub esp,8 ; mov ecx,[ebp+8] ; push ebx ; mov ebx,[count] ;
     // mov [ebp-4],ebx ; push esi ; push edi ; test ecx,ecx ; je ... ; movzx edx,word [ecx+4]

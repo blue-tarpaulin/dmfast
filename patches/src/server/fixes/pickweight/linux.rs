@@ -4,7 +4,7 @@ use crate::base::Result;
 use crate::base::code::{Cond, Stub};
 use crate::base::feature::Ctx;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // After the thresholds: pc += 1 ; eax = code[pc] ; pc = eax - 1 (what follows differs between builds)
     //   movzx eax,[esi+14h] ; add eax,1 ; mov [esi+14h],ax ; movzx eax,ax ;

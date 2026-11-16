@@ -6,7 +6,7 @@ use crate::base::code::{Cond, Stub};
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // Close(), after detaching the queries: push [esi+18h] ; call [free] ; add esp,4 ; mov ecx,esi ;
     // call close_handle ; push 0 ; lea ecx,[esi+14h] ; call DMString::operator= ; pop esi ; ret.

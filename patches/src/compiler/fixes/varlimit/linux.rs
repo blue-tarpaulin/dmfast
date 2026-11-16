@@ -36,7 +36,7 @@ fn loc_flag(core: &Image, id: u32) -> Result<u32> {
     Ok(u32::from(flag))
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let cmp = core.find_unique(CHECK, "var reference $loc check")? + CMP;
     let id = core.u32_at(cmp + 2)?;

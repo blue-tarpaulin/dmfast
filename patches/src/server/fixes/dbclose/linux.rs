@@ -6,7 +6,7 @@ use crate::base::code::Stub;
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // Close(), after detaching the queries: push [ebx+18h] ; call free ; mov [esp],ebx ; add ebx,14h ;
     // call close_handle. 516.1670 clears +18h and +20h after the free, so it doesn't match.

@@ -89,7 +89,7 @@ unsafe extern "C" fn reader() {
     )
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let g = core.find_unique(READER, "text stream reader")?;
     let ctor = core.find_unique(CTOR, "text stream constructor")?;

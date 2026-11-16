@@ -66,7 +66,7 @@ unsafe extern "C" fn insert(set: usize, key: *const Key) -> *mut c_void {
     }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let s = core.find_unique(GET_OR_ADD, "rsc id get-or-add insert")?;
     let insert_fn = core.call_target(s + CALL)?;

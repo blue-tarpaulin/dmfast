@@ -27,7 +27,7 @@ extern "C" fn initial(tag: u32, id: u32, var: u32) -> u64 {
     unsafe { f.get()(tag, id, var) }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // push ebp ; mov ebp,esp ; mov ecx,[ebp+8] ; movzx eax,cl ; add eax,-2Ch ; cmp eax,26h ; ja default ;
     // movzx eax,[table+eax] ; jmp [table2+eax*4] ; (default:) push [ebp+0Ch] ; push ecx ; call 1020ab40

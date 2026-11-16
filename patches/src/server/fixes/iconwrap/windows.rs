@@ -4,7 +4,7 @@ use crate::base::code::Stub;
 use crate::base::feature::Ctx;
 use crate::base::{Result, ensure};
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // The render function (esi = the icon record: [+8] list, [+0Ch] its length, [+14h] the 16-bit rendered
     // offset, [+18h] the rendered copy): cmp dword [esi+0Ch],0 ; je done ; lea edi,[esi+8] ; mov ecx,edi ;

@@ -30,7 +30,7 @@ unsafe extern "C" fn fopen(name: *const c_char, mode: *const c_char) -> *mut FIL
     }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let sites = core.import_calls("fopen", libc::fopen as Fopen)?;
     ensure!(!sites.is_empty(), "no fopen call sites");

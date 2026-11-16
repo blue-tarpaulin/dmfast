@@ -134,7 +134,7 @@ pub(super) fn print_stats() {
     }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(MERGE, "var list merge")?;
     core.require(f + TAIL, TAIL_CODE, "var list merge: tail")?;

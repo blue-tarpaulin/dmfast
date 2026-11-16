@@ -52,7 +52,7 @@ extern "C" fn fast_exit(code: i32) -> ! {
 /// `lea ecx,[ebp-x] ; call builder_teardown ; lea ecx,[ebp-y] ; call ebx ; lea ecx,[ebp-z] ; call ebx`, then the
 /// epilogue (inline, or behind a `jmp` in newer builds): two destructors, then `mov eax,[ebp-r]` (the exit code).
 /// The first two instructions become `push dword [ebp-r] ; call fast_exit`.
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let (exe, core) = (cx.exe()?, cx.core());
     // `_flushall` flushes ucrtbase's streams: both modules must use them.
     exe.ucrt_slot("fflush")?;

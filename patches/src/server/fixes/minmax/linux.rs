@@ -100,7 +100,7 @@ fn stub(f: usize, prologue: &[u8], tags: Tags) -> Result<usize> {
         .exec()
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let (first, second) = find(core, 0)?;
     let tags = tags(core, first, second)?;

@@ -159,7 +159,7 @@ pub(crate) fn value_tags(core: &Image) -> Result<Tags> {
     tags(core, find(core)?, PROLOGUE)
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let [max, min] = find(core)?;
     let tags = tags(core, [max, min], 0)?;

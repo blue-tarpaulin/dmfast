@@ -23,7 +23,7 @@ const BUILDER: &str =
 const PARENT: usize = 27;
 const RECURSE: usize = 29;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let p = core.find_unique(PASS, "world node test")? + PASS_CMP;
     let j = core.find_unique(DISPATCH, "world var dispatch")?;

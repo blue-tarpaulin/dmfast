@@ -63,7 +63,7 @@ unsafe extern "C" fn unlink(tree: usize, node: usize) -> usize {
     removed
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let site = core.find_unique(FIND_CALL, "proto find call")? + CALL;
     let tree = core.u32_at(site - 4)?;

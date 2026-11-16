@@ -37,7 +37,7 @@ const FALSE_NEW: [u8; 23] = pad(&[
     0xC3,                               // ret
 ]);
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let t = core.find_unique(IS_TRUE, "true test")? + NUMBER;
     let f = core.find_unique(IS_FALSE, "false test")? + NUMBER;

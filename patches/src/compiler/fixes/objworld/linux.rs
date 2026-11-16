@@ -26,7 +26,7 @@ fn je_world(core: &Image, at: usize, node: u8, mid: usize) -> Result<Site> {
     Ok(Site { at, node, copy: mid, jcc: Some(core.jcc_at(je, Cond::Equal)?), back: je + 6 })
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let mut queue = core.find_all(QUEUE_EAX)?.into_iter().map(|at| (at, EAX, 3)).collect::<Vec<_>>();
     queue.extend(core.find_all(QUEUE_EDI)?.into_iter().map(|at| (at, EDI, 0)));

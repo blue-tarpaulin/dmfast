@@ -58,7 +58,7 @@ extern "C" fn classify<const I: usize>(c: i32) -> i32 {
     }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let mut patched = Vec::new();
     for class in &CLASSES {

@@ -53,7 +53,7 @@ unsafe extern "C" fn dtor_tail() {
 /// `mov [ebp+8],esi ; lea esp,[ebp-8] ; pop ebx ; pop esi ; pop ebp ; jmp DungBuilder::~DungBuilder`, or
 /// before 516.1656 (no frame pointer) `mov [esp+20h],esi ; add esp,14h ; pop ebx ; pop esi ; jmp ...`;
 /// that jmp goes to [`dtor_tail`].
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let exe = cx.exe()?;
     let m = exe.find_unique(
         "83 EC 0C 57 E8 ?? ?? ?? ?? 8D 85 ?? FF FF FF 89 04 24 E8 ?? ?? ?? ?? 8D 85 ?? FF FF FF 89 04 24 E8",

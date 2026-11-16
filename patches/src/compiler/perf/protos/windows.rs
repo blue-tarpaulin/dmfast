@@ -58,7 +58,7 @@ unsafe extern "C" fn tree_stub() {
     )
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(TREE, "proto tree")?;
     ORIGINAL.set(core.hook(f, ENTRY, tree_stub as unsafe extern "C" fn())?);

@@ -93,7 +93,7 @@ unsafe extern "thiscall" fn save_icon(_context: usize, id: u32, icon: usize) -> 
     0
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let at = core.find_unique(CONVERT, "icon to resource conversion")?;
     let f = at - ENTRY_AT;

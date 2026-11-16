@@ -47,7 +47,7 @@ struct Scan {
     missing: usize,
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let text = core.find_data(b"Overflow in AddToLocList\n\0")?.unique("loc list overflow message")?;
     let add = core.find_unique(APPEND, "loc list append")?;

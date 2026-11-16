@@ -146,7 +146,7 @@ pub(super) fn print_stats() {
     );
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let (tu, ia) = (core.iat_slot("toupper")?, core.iat_slot("isalnum")?);
     let pattern = COMPARE.replace("{tu}", &hx(tu)).replace("{ia}", &hx(ia));

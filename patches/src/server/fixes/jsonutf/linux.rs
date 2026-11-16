@@ -3,7 +3,7 @@
 use crate::base::Result;
 use crate::base::feature::Ctx;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // test bl,bl ; jns copy ; sub esp,8 ; lea eax,[esp+24h] ; push eax ; push edx ; call decode_utf8
     let at =

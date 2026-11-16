@@ -25,7 +25,7 @@ const SWITCH: &str = "0F B6 C2 66 0F 7E 45 A8 3C 58 77";
 /// [ebp+14h].
 const SWITCH_AT: usize = 0x21;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(INITIAL, "initial() entry")?;
     let call = f + DEFAULTS_CALL;

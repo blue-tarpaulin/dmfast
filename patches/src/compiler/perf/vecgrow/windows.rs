@@ -31,7 +31,7 @@ unsafe extern "C" fn grow() {
     )
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(APPEND, "dword-vector append")?;
     core.untouched(&[(f + GROW, GROW_LEN)])?;

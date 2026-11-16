@@ -4,7 +4,7 @@ use crate::base::Result;
 use crate::base::code::{Cond, Stub};
 use crate::base::feature::Ctx;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // After `\`: `call getc ; cmp [edi+18h],0Ah ; jne other`, then the loop `call getc ; movzx eax,[edi+18h] ;
     // push eax ; call [isspace] ; add esp,4 ; test eax,eax ; jne loop ; jmp top`. The call at +31 is wildcarded

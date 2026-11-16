@@ -22,7 +22,7 @@ fn sites(cx: &Ctx, ida: &str, offset: usize, n: usize, what: &str) -> Result<Vec
     Ok(hits.iter().map(|&at| at + offset).collect())
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // HttpRequest2's per chunk, and WorldExportHttpRequest's finish handler posting itself from another thread.
     let posts = sites(cx, POST, 0, 2, "HTTP chunk task post")?;

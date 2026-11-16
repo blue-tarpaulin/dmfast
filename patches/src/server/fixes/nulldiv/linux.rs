@@ -25,7 +25,7 @@ const LOOP_AT: usize = 46;
 /// on.
 const DISPATCH: &str = "3C 2A 0F 84 ?? ?? ?? ?? 0F 87 ?? ?? ?? ?? 3C 0C 0F 84 ?? ?? ?? ?? 3C 21 0F 85 ?? ?? ?? ??";
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let num = core.find_unique(NUMBER_CASE, "number / x case")?;
     let right_type = u32::from_le_bytes(core.array::<4>(num + 2)?);

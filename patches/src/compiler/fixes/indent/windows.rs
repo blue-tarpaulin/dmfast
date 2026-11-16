@@ -97,7 +97,7 @@ unsafe extern "C" fn check_line() {
     )
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let l = core.find_unique(LOOP, "indentation count loop")?;
     let c = core.find_unique(ACCEPT, "indentation check")?;

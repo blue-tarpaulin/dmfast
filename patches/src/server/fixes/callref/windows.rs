@@ -62,7 +62,7 @@ unsafe extern "C" fn release(state: usize, count: u32) {
     }
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let op = core.find_unique(OPCODE, "call() opcode")?;
     let unref = core.rel32(op + UNREF_CALL)?;

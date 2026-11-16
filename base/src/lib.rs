@@ -10,7 +10,7 @@ pub mod driver;
 pub mod feature;
 pub mod hash;
 pub mod image;
-pub mod ledger;
+pub(crate) mod ledger;
 #[cfg(target_os = "linux")]
 pub mod linux;
 pub(crate) mod scan;

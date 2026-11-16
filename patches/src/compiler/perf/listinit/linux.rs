@@ -27,7 +27,7 @@ unsafe extern "C" fn original(_list: usize) -> u32 {
     )
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // push ebp/edi/esi/ebx ; sub esp,1Ch ; mov edi,[array] ; mov esi,[count] ; mov eax,[esp+30h] ;
     // test eax,eax ; je append ; mov eax,[esp+30h] ; movzx ebp,word [eax+4]

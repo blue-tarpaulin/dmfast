@@ -336,7 +336,7 @@ fn prefix_listing(core: &Image) -> Result<Vec<Site>> {
 }
 
 /// Each listing is checked before any of its code is written; one that doesn't match is left out.
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // libc's, as the program binds them.
     OPENDIR.set(symbol(c"opendir"));
@@ -354,7 +354,7 @@ pub fn install(cx: &Ctx) -> Result<String> {
     parts.finish()
 }
 
-pub fn print_stats() {
+pub(super) fn print_stats() {
     eprintln!(
         "dmfast: dir listings hits={} (without chdir {}) reads={} dirs={} verify={} mismatches={}; entries opened={} skipped={}",
         HITS,

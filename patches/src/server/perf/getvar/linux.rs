@@ -65,7 +65,7 @@ unsafe extern "C" fn var_read() {
     )
 }
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let getvar = core.find_unique(GETVAR, "GetVariable")?;
     // The var read: the prologue match that pushes the undefined-variable format. The other match and the pushes

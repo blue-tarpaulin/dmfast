@@ -14,7 +14,7 @@ const HANDLER: &str = "3C 2A 0F 85 ?? ?? ?? ?? 8B 95 EC FD FF FF 8B 85 E8 FD FF 
 /// top): `mov eax,[state] ; movzx ecx,word [eax+pos] ; mov edx,[eax+base]` (12 bytes, absolute addresses only).
 const FETCH: usize = 0x19;
 
-pub fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let error = core.find_unique(ERROR, "cannot compare error block")?;
     let sites = core.find_all(HANDLER)?;
