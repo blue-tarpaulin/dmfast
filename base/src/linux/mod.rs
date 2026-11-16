@@ -15,16 +15,24 @@ pub(crate) const CORE_NAME: &str = "libbyond.so";
 /// The page size mappings use.
 pub(crate) const PAGE: usize = 4096;
 
-/// The library's constructor body: drop this library from `LD_PRELOAD`, then install `config`'s features.
+/// The library's constructor body: drop this library from `LD_PRELOAD`, install `config`'s features, and print their
+/// counters at exit under `DMFAST_STATS`.
 ///
 /// # Safety
 /// Called from the constructor: every object is mapped and relocated, no other thread exists.
 pub unsafe fn init(config: &'static Config) {
     remove_from_preload();
-    if let Some(host) = Host::current() {
-        // SAFETY: called from the constructor (caller).
-        unsafe { crate::driver::install(config, host) };
+    let Some(host) = Host::current() else { return };
+    // SAFETY: called from the constructor (caller).
+    unsafe { crate::driver::install(config, host) };
+    if crate::driver::stats() {
+        // SAFETY: registers a plain `extern "C" fn()` that captures nothing.
+        unsafe { libc::atexit(print_stats_at_exit) };
     }
+}
+
+extern "C" fn print_stats_at_exit() {
+    crate::driver::print_stats();
 }
 
 /// What the program's calls to `name` resolve to (`dlsym(RTLD_DEFAULT)`), 0 if none. One object's own symbol:

@@ -14,7 +14,7 @@ use std::sync::OnceLock;
 
 use crate::CORE_NAME;
 use crate::deps::{Dep, Guard};
-use crate::feature::{Ctx, Feature, Host, Kind, Status};
+use crate::feature::{Ctx, Feature, Host, InstallFn, Kind, Status};
 use crate::image::Image;
 pub(crate) use report::mimalloc;
 pub use report::{Counter, print_stats, stats, verify};
@@ -102,82 +102,41 @@ unsafe fn run(config: &'static Config, host: Host, ctx: Ctx, guard: &Guard) {
     }
     let entries = selection();
     let build = byond(ctx.core());
-    let (mut offered, mut applied, mut fixes) = (0, 0, 0);
+    let mut counts = Counts { applied: 0, offered: 0, fixes: 0 };
     for f in config.ordered(host) {
         let Some(install) = f.install.0 else { continue };
         let want = wanted(f, entries);
-        // Leave `f` out, saying why under `DMFAST_STATS` if it was wanted.
-        let skip = |why: std::fmt::Arguments<'_>| {
+        if let Some(why) = out_of_range(f, build) {
             if want && stats() {
-                eprintln!("dmfast: disabled {}{} - {why}", f.kind_prefix(), f.key);
+                report::left_out(f, &why);
             }
-        };
-        if let Some((fixed, _)) = f.byond.fixed_in
-            && build >= fixed
-        {
-            skip(format_args!("not needed: BYOND fixed it in {}", build_name(fixed)));
-            continue;
-        }
-        if build != 0 && build < f.byond.since {
-            skip(format_args!("needs BYOND {} or later", build_name(f.byond.since)));
-            continue;
-        }
-        if let Status::Deprecated(why) = f.status {
-            skip(format_args!("deprecated: {why}"));
             continue;
         }
         if f.offered.is_some_and(|o| !o(&ctx)) {
             continue;
         }
         if f.kind == Kind::Perf {
-            offered += 1;
+            counts.offered += 1;
         }
         if !want {
             continue;
         }
         if disabled(f.key) {
-            if stats() {
-                match f.kind {
-                    Kind::Perf => eprintln!("dmfast: {}: skipped (DMFAST_DISABLE)", f.title),
-                    Kind::Fix => eprintln!("dmfast: fix {} ({}): skipped (DMFAST_DISABLE)", f.key, f.title),
-                }
-            }
+            report::turned_off(f);
             continue;
         }
-        let result = if let Some(r) = f.requires.iter().find(|r| !r.applied()) {
-            Err(format!("needs {}", r.key).into())
-        } else if guard.failed(f.key) {
-            Err("mismatched signature".into())
-        } else {
-            crate::ledger::begin();
-            match install(&ctx) {
-                // SAFETY: install time (caller).
-                Ok(detail) => unsafe { crate::ledger::commit(f) }.map(|()| detail),
-                Err(e) => {
-                    crate::ledger::discard();
-                    Err(e)
-                }
-            }
-        };
-        match result {
+        // SAFETY: install time (caller).
+        match unsafe { try_install(f, install, &ctx, guard) } {
             Ok(detail) => {
                 f.mark_applied();
                 match f.kind {
-                    Kind::Perf => applied += 1,
-                    Kind::Fix => fixes += 1,
+                    Kind::Perf => counts.applied += 1,
+                    Kind::Fix => counts.fixes += 1,
                 }
-                if stats() {
-                    match f.kind {
-                        Kind::Perf => eprintln!("dmfast: {}: {detail}", f.title),
-                        Kind::Fix => eprintln!("dmfast: fix {}: {}: {detail}", f.key, f.title),
-                    }
-                }
+                report::applied(f, &detail);
             }
-            Err(e) => {
-                if f.kind == Kind::Fix || stats() {
-                    eprintln!("dmfast: disabled {}{} - {e}", f.kind_prefix(), f.key);
-                }
-            }
+            Err(e) if f.kind == Kind::Fix || stats() => report::left_out(f, &e),
+            Err(_) => {}
         }
     }
     // Images, and the `Ctx::shared` values holding them, go before the copy is released.
@@ -186,18 +145,51 @@ unsafe fn run(config: &'static Config, host: Host, ctx: Ctx, guard: &Guard) {
     // SAFETY: install is over and images closed: nothing holds or makes a slice of the copy.
     unsafe { crate::snapshot::release() };
     check_keys(config);
-    let counts = Counts { applied, offered, fixes };
     for finish in config.all().filter(|f| f.applied()).filter_map(|f| f.finish) {
         finish(counts);
     }
     if stats() {
         let program = if host == Host::Server { " (runtime)" } else { "" };
         eprintln!("dmfast: {}{program}, {}, {}", config.version, summary(config, host), crate::alloc_status());
-        #[cfg(target_os = "linux")]
-        // SAFETY: registers a plain `extern "C" fn()` that captures nothing.
-        unsafe {
-            libc::atexit(report::print_stats_at_exit)
-        };
+    }
+}
+
+/// Why `f` isn't for BYOND `build` (0: unknown), if it isn't: BYOND fixed the bug, the build is too old, or `f` is
+/// deprecated.
+fn out_of_range(f: &Feature, build: u32) -> Option<String> {
+    if let Some((fixed, _)) = f.byond.fixed_in
+        && build >= fixed
+    {
+        return Some(format!("not needed: BYOND fixed it in {}", build_name(fixed)));
+    }
+    if build != 0 && build < f.byond.since {
+        return Some(format!("needs BYOND {} or later", build_name(f.byond.since)));
+    }
+    match f.status {
+        Status::Deprecated(why) => Some(format!("deprecated: {why}")),
+        _ => None,
+    }
+}
+
+/// Install `f` if what it requires applied and its dependency guards passed; its writes apply only on success.
+///
+/// # Safety
+/// Install time: no other thread runs BYOND's code.
+unsafe fn try_install(f: &'static Feature, install: InstallFn, ctx: &Ctx, guard: &Guard) -> crate::Result<String> {
+    if let Some(r) = f.requires.iter().find(|r| !r.applied()) {
+        return Err(format!("needs {}", r.key).into());
+    }
+    if guard.failed(f.key) {
+        return Err("mismatched signature".into());
+    }
+    crate::ledger::begin();
+    match install(ctx) {
+        // SAFETY: install time (caller).
+        Ok(detail) => unsafe { crate::ledger::commit(f) }.map(|()| detail),
+        Err(e) => {
+            crate::ledger::discard();
+            Err(e)
+        }
     }
 }
 
@@ -214,4 +206,23 @@ fn byond(core: &Image) -> u32 {
 /// `516.1670` from `516_1670`.
 fn build_name(build: u32) -> String {
     format!("{}.{}", build / 10000, build % 10000)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::feature::{Hosts, Install};
+
+    #[test]
+    fn builds_and_deprecation_leave_features_out() {
+        const NONE: Install = Install(None);
+        let fixed = Feature::perf(Hosts::SERVER, "f", "", NONE).fixed_in(516_1670, "https://x");
+        assert_eq!(out_of_range(&fixed, 516_1669), None);
+        assert_eq!(out_of_range(&fixed, 516_1670).as_deref(), Some("not needed: BYOND fixed it in 516.1670"));
+        let new = Feature::perf(Hosts::SERVER, "n", "", NONE).since(516_1674);
+        assert_eq!(out_of_range(&new, 516_1673).as_deref(), Some("needs BYOND 516.1674 or later"));
+        assert_eq!(out_of_range(&new, 0), None, "an unknown build doesn't rule it out");
+        let old = Feature::perf(Hosts::SERVER, "d", "", NONE).deprecated("gone");
+        assert_eq!(out_of_range(&old, 516_1688).as_deref(), Some("deprecated: gone"));
+    }
 }

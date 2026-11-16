@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
 
 use crate::driver::select::has_selection;
 use crate::driver::{Config, INSTALLED};
-use crate::feature::{Host, Kind};
+use crate::feature::{Feature, Host, Kind};
 
 /// `DMFAST_STATS` is set (read once).
 pub fn stats() -> bool {
@@ -63,6 +63,31 @@ pub(crate) fn mimalloc(version: i32, split: &str) -> String {
     format!("mimalloc {}.{}.{}, {split}", version / 10000, version / 100 % 100, version % 100)
 }
 
+/// `f` was left out, and `why`.
+pub(super) fn left_out(f: &Feature, why: &dyn fmt::Display) {
+    eprintln!("dmfast: disabled {}{} - {why}", f.kind_prefix(), f.key);
+}
+
+/// With `DMFAST_STATS`: `f` was selected, but `DMFAST_DISABLE` turned it off.
+pub(super) fn turned_off(f: &Feature) {
+    if stats() {
+        match f.kind {
+            Kind::Perf => eprintln!("dmfast: {}: skipped (DMFAST_DISABLE)", f.title),
+            Kind::Fix => eprintln!("dmfast: fix {} ({}): skipped (DMFAST_DISABLE)", f.key, f.title),
+        }
+    }
+}
+
+/// With `DMFAST_STATS`: `f` applied; `detail` is its install's line.
+pub(super) fn applied(f: &Feature, detail: &str) {
+    if stats() {
+        match f.kind {
+            Kind::Perf => eprintln!("dmfast: {}: {detail}", f.title),
+            Kind::Fix => eprintln!("dmfast: fix {}: {}: {detail}", f.key, f.title),
+        }
+    }
+}
+
 /// `applied=<perf keys>; fixes=<fix keys>` in install order (`none` if empty, `fixes=unselected` without a selection).
 pub(super) fn summary(config: &Config, host: Host) -> String {
     let keys = |kind: Kind| {
@@ -90,10 +115,4 @@ pub fn print_stats() {
             stats();
         }
     }
-}
-
-/// [`print_stats`] as an `atexit` handler (Linux; on Windows the DLL's detach prints them).
-#[cfg(target_os = "linux")]
-pub(super) extern "C" fn print_stats_at_exit() {
-    print_stats();
 }
