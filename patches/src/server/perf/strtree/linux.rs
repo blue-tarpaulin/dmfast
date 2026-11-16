@@ -81,8 +81,9 @@ const REBUILD_END: &str = "8B 55 C0 8B 75 B8 39 F2 74 66";
 const REBUILD_SKIP: usize = 0x99;
 const SKIP_JE: usize = 8;
 
-/// The count global's address, for [`intern_stub`].
+/// The count and table globals' addresses, for [`intern_stub`].
 static COUNT: Addr = Addr::new();
+static TABLE: Addr = Addr::new();
 /// Intern's hit (ebx = entry), miss (ebp = empty link), and empty table.
 static INTERN_HIT: Addr = Addr::new();
 static INTERN_MISS: Addr = Addr::new();
@@ -147,9 +148,13 @@ unsafe extern "C" fn intern_stub() {
         "je 3f",
         "jmp dword ptr [{miss}]",
         "3:",
+        // The empty path grows the table from eax, which the walk loaded from the table global.
+        "mov eax, dword ptr [{table}]",
+        "mov eax, dword ptr [eax]",
         "jmp dword ptr [{empty}]",
         lookup = sym lookup,
         count = sym COUNT,
+        table = sym TABLE,
         hit = sym INTERN_HIT,
         miss = sym INTERN_MISS,
         empty = sym INTERN_EMPTY,
@@ -251,6 +256,7 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
     let (rebuild, loading) = removal(core, rm, table)?;
 
     COUNT.set(count);
+    TABLE.set(table);
     REBUILD.set(rebuild);
     INTERN_HIT.set(core.jcc_at(i + INTERN_HIT_JE, Cond::Equal)?.target);
     INTERN_MISS.set(core.jcc_at(i + INTERN_MISS_JZ, Cond::Zero)?.target);

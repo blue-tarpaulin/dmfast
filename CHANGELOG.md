@@ -6,6 +6,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 - **New:** dmfast installs itself about 4x faster (DreamDaemon ~190 ms -> ~50 ms), so worlds reach `world/New` ~10% sooner and compiles finish ~2% sooner.
 - **New patch:** `childpos` (compiler): a node's position among its parent's children is found 8 at a time. ~1.5% faster compiles on Windows.
+- **Patch fix:** `strtree` (Linux): DreamDaemon no longer aborts with "realloc(): invalid pointer" when it exits on a bad command-line option.
 - **Patch change:** `filter` (compiler) now answers most name misses from a Bloom filter. ~1% faster compiles.
 
 ## 8.0.0
