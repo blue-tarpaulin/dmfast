@@ -4,13 +4,12 @@ use std::ops::Range;
 use std::sync::OnceLock;
 
 use super::verify;
+use crate::base::Result;
 use crate::base::code::{Foreign, hx};
 use crate::base::driver::{self, Counter};
 use crate::base::feature::Ctx;
 use crate::base::sync::Installed;
-use crate::base::windows::module_range;
-use crate::base::windows::ucrt::ucrt_export;
-use crate::base::{Result, bail, ensure};
+use crate::base::windows::ucrt::{ucrt_export, ucrt_range};
 
 type Compare = unsafe extern "C" fn(*const u8, *const u8) -> i32;
 type Char = unsafe extern "C" fn(i32) -> i32;
@@ -148,20 +147,17 @@ pub(super) fn print_stats() {
 
 pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
-    let (tu, ia) = (core.iat_slot("toupper")?, core.iat_slot("isalnum")?);
+    let (tu, ia) = (core.ucrt_slot("toupper")?, core.ucrt_slot("isalnum")?);
     let pattern = COMPARE.replace("{tu}", &hx(tu)).replace("{ia}", &hx(ia));
     let f = core.find_unique(&pattern, "icon state name compare")?;
-    let Some((start, end)) = module_range("ucrtbase.dll") else { bail!("ucrtbase.dll not loaded") };
-    let ucrt = start..end;
     let (toupper, isalnum) = (core.ptr_at(tu)?, core.ptr_at(ia)?);
-    ensure!(ucrt.contains(&toupper) && ucrt.contains(&isalnum), "toupper/isalnum are not ucrtbase's");
     let pctype = ucrt_export("__pctype_func")?;
     let found = Found {
         original: Foreign::at(core.hook(f, ENTRY, compare as Compare)?),
         toupper: Foreign::at(toupper),
         isalnum: Foreign::at(isalnum),
         pctype: Foreign::at(pctype),
-        ucrt,
+        ucrt: ucrt_range()?,
     };
     FOUND.commit(cx, found);
     Ok(core.report(&[f]))

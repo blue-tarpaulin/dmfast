@@ -146,12 +146,14 @@ fn install_merge(cx: &Ctx) -> Result<String> {
     let call = |at: usize| core.call_target(m + at);
     let jmp = |at: usize| core.branch_at(m + at).map(|b| b.target);
     // libbyond's own helpers; memcpy as the calls bind it.
-    let export = |name| core.export(name).unwrap_or(0);
-    let (alloc_shared, free_shared, copy_shared, memcpy) =
-        (export(c"_Z11AllocSharedm"), export(c"_Z10FreeSharedPv"), export(c"_Z10CopySharedPv"), symbol(c"memcpy"));
+    let (alloc_shared, free_shared, copy_shared, memcpy) = (
+        core.export(c"_Z11AllocSharedm")?,
+        core.export(c"_Z10FreeSharedPv")?,
+        core.export(c"_Z10CopySharedPv")?,
+        symbol(c"memcpy")?,
+    );
     ensure!(
-        ![alloc_shared, free_shared, copy_shared, memcpy].contains(&0)
-            && call(0x96)? == alloc_shared
+        call(0x96)? == alloc_shared
             && [call(0xB8)?, call(0xD5)?] == [memcpy, memcpy]
             && [call(0xDE)?, call(0x197)?] == [free_shared, free_shared]
             && call(0x1A0)? == copy_shared,

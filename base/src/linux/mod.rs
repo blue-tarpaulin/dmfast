@@ -13,6 +13,7 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 use crate::driver::Config;
 use crate::feature::Host;
+use crate::{Result, bail};
 
 pub(crate) const CORE_NAME: &str = "libbyond.so";
 /// The page size mappings use.
@@ -38,11 +39,15 @@ extern "C" fn print_stats_at_exit() {
     crate::driver::print_stats();
 }
 
-/// What the program's calls to `name` resolve to (`dlsym(RTLD_DEFAULT)`), 0 if none. One object's own symbol:
+/// What the program's calls to `name` resolve to (`dlsym(RTLD_DEFAULT)`). One object's own symbol:
 /// [`Image::export`](crate::image::Image::export).
-pub fn symbol(name: &std::ffi::CStr) -> usize {
+pub fn symbol(name: &std::ffi::CStr) -> Result<usize> {
     // SAFETY: a lookup by NUL-terminated name; nothing is called.
-    unsafe { libc::dlsym(libc::RTLD_DEFAULT, name.as_ptr()) as usize }
+    let f = unsafe { libc::dlsym(libc::RTLD_DEFAULT, name.as_ptr()) } as usize;
+    if f == 0 {
+        bail!("no {}", name.to_string_lossy());
+    }
+    Ok(f)
 }
 
 /// Keep children from inheriting this 32-bit library (64-bit ones would print a loader error).

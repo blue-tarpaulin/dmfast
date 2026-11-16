@@ -4,20 +4,23 @@
 use std::collections::{BTreeSet, HashMap};
 
 use iced_x86::{Decoder, DecoderOptions, Instruction, OpKind};
+pub use object::pe::{
+    IMAGE_DIRECTORY_ENTRY_BASERELOC as DIR_BASERELOC, IMAGE_DIRECTORY_ENTRY_IAT as DIR_IAT,
+    IMAGE_DIRECTORY_ENTRY_IMPORT as DIR_IMPORT,
+};
+use object::pe::{
+    IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT as DIR_DELAY_IMPORT, IMAGE_DIRECTORY_ENTRY_EXPORT as DIR_EXPORT,
+    IMAGE_DIRECTORY_ENTRY_SECURITY as DIR_SECURITY, IMAGE_NT_OPTIONAL_HDR32_MAGIC,
+};
 
+// object 0.40 has these only as newtypes; plain values keep the byte work simple.
 const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
+const IMAGE_REL_BASED_ABSOLUTE: u16 = 0;
+const IMAGE_REL_BASED_HIGHLOW: u16 = 3;
 /// Code, execute, read.
 pub const CODE_FLAGS: u32 = 0x6000_0020;
 /// Initialised data, read, write.
 pub const DATA_FLAGS: u32 = 0xC000_0040;
-const IMAGE_REL_BASED_ABSOLUTE: u16 = 0;
-const IMAGE_REL_BASED_HIGHLOW: u16 = 3;
-const DIR_EXPORT: usize = 0;
-pub const DIR_IMPORT: usize = 1;
-const DIR_SECURITY: usize = 4;
-pub const DIR_BASERELOC: usize = 5;
-pub const DIR_IAT: usize = 12;
-const DIR_DELAY_IMPORT: usize = 13;
 
 pub(crate) fn u32_at(d: &[u8], o: usize) -> Option<u32> {
     Some(u32::from_le_bytes(d.get(o..o.checked_add(4)?)?.try_into().ok()?))
@@ -119,7 +122,7 @@ impl<'a> Pe<'a> {
         }
         let file = nt + 4;
         let opt = file + 20;
-        if u16_at(data, opt) != Some(0x10B) {
+        if u16_at(data, opt) != Some(IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
             return Err(bad());
         }
         let at = Headers { file, opt, table: opt + u16_at(data, file + 16).ok_or_else(bad)? as usize };

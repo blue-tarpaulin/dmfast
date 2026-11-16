@@ -15,8 +15,7 @@ impl Image {
     /// [`Image::iat_slot`], checked to resolve into ucrtbase.dll (hooks on the module's `FILE`s assume its layout).
     pub fn ucrt_slot(&self, name: &str) -> Result<usize> {
         let slot = self.iat_slot(name)?;
-        let (start, end) = module_range("ucrtbase.dll").ok_or("ucrtbase.dll not loaded")?;
-        if !(start..end).contains(&(self.ptr_at(slot)?)) {
+        if !ucrt_range()?.contains(&(self.ptr_at(slot)?)) {
             bail!("{name} is not ucrtbase's");
         }
         Ok(slot)
@@ -26,17 +25,23 @@ impl Image {
 /// ucrtbase.dll's export `name`, for calls on byondcore's streams, errno or heap blocks (dmfast's own CRT is not
 /// ucrtbase). Use this, not `cx.module("ucrtbase.dll")`, which copies its code to read it as shipped.
 pub fn ucrt_export(name: &str) -> Result<usize> {
-    let (start, end) = module_range("ucrtbase.dll").ok_or("ucrtbase.dll not loaded")?;
+    let ucrt = ucrt_range()?;
     let c: Vec<u8> = name.bytes().chain([0]).collect();
-    // SAFETY: `start` is ucrtbase.dll's handle; `c` is NUL-terminated.
-    let f = unsafe { GetProcAddress(start as _, c.as_ptr()) }.map_or(0, |f| f as usize);
-    if f == 0 {
+    // SAFETY: `ucrt.start` is ucrtbase.dll's handle; `c` is NUL-terminated.
+    let Some(f) = (unsafe { GetProcAddress(ucrt.start as _, c.as_ptr()) }) else {
         bail!("ucrtbase.dll exports no {name}");
-    }
-    if !(start..end).contains(&f) {
+    };
+    let f = f as usize;
+    if !ucrt.contains(&f) {
         bail!("{name} is not ucrtbase's");
     }
     Ok(f)
+}
+
+/// ucrtbase.dll's mapped range.
+pub fn ucrt_range() -> Result<std::ops::Range<usize>> {
+    let (start, end) = module_range("ucrtbase.dll").ok_or("ucrtbase.dll not loaded")?;
+    Ok(start..end)
 }
 
 /// Checks the undocumented UCRT `FILE` fields the stream fast paths use (`_ptr` +0, `_cnt` +8, read/write flags

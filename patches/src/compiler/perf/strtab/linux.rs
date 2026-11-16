@@ -91,13 +91,13 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
         "string intern: walk exit does not reload the table"
     );
     let compare = core.follow_call(f + COMPARE_CALL, COMPARE, "string intern: compare")?;
-    let strcmp = symbol(c"strcmp");
-    ensure!(strcmp != 0 && core.rel32(compare + COMPARE_JMP + 1)? == strcmp, "string intern: compare isn't strcmp");
+    let strcmp = symbol(c"strcmp")?;
+    ensure!(core.rel32(compare + COMPARE_JMP + 1)? == strcmp, "string intern: compare isn't strcmp");
     let hit = core.rel32(f + JE_HIT + 2)?;
     core.require(hit, HIT_CODE, "string intern: hit path")?;
     let free_path = core.rel8(hit + HIT_CODE.split_whitespace().count())?;
     core.require(free_path, HIT_FREE, "string intern: hit path's free")?;
-    let free = symbol(c"free");
+    let free = symbol(c"free")?;
     ensure!(core.call_target(free_path + 5)? == free, "string intern: hit path does not free the entry's string");
     let save = core.find_unique(
         &format!(

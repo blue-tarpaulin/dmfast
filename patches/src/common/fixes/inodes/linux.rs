@@ -145,10 +145,10 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
         (c"fstat", fstat as FstatFn as usize),
         (c"readdir", readdir as ReaddirFn as usize),
     ] {
-        ensure!(symbol(name) == ours, "{} does not resolve to libdmfast.so (not preloaded?)", name.to_string_lossy());
+        ensure!(symbol(name)? == ours, "{} does not resolve to libdmfast.so (not preloaded?)", name.to_string_lossy());
     }
     for name in [c"stat64", c"fstat64", c"readdir64"] {
-        ensure!(symbol(name) != 0, "no {}", name.to_string_lossy());
+        symbol(name)?;
     }
     // `__xstat`/`lstat` imports aren't covered. readdir's call sites aren't checked: `dirs` rewrites them to calls
     // through the lookup checked above.

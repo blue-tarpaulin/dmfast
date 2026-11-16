@@ -167,7 +167,7 @@ impl Image {
 }
 
 /// (start, end) of the loaded module `name`.
-pub fn module_range(name: &str) -> Option<(usize, usize)> {
+pub(super) fn module_range(name: &str) -> Option<(usize, usize)> {
     let base = module_base(name);
     // SAFETY: a loaded module's headers are mapped.
     (base != 0).then(|| (base, base + unsafe { image_size(base) }))

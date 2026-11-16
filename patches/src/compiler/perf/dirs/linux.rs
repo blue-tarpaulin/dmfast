@@ -339,9 +339,9 @@ fn prefix_listing(core: &Image) -> Result<Vec<Site>> {
 pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // libc's, as the program binds them.
-    OPENDIR.set(symbol(c"opendir"));
-    READDIR.set(symbol(c"readdir"));
-    CLOSEDIR.set(symbol(c"closedir"));
+    OPENDIR.set(symbol(c"opendir")?);
+    READDIR.set(symbol(c"readdir")?);
+    CLOSEDIR.set(symbol(c"closedir")?);
     let write = |sites: &[Site]| sites.iter().try_for_each(|&(call, _, with)| core.call(call, 5, with));
     let mut parts = cx.parts();
     parts.named("listing cache", || {

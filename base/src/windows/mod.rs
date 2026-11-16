@@ -8,7 +8,7 @@ mod patch;
 mod seeker;
 pub mod ucrt;
 
-pub use image::module_range;
+use image::module_range;
 // Windows writes data like code, through the page protection.
 pub(crate) use patch::{alloc_exec, free_exec, poke_code, poke_code as poke_data, seal_exec};
 
