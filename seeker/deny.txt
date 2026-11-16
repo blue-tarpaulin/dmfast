@@ -67,3 +67,12 @@ deletefile      # files: deleting
 removefile      # files: deleting
 movefile        # files: moving
 renamefile      # files: renaming
+writefile       # files: writing
+copyfile        # files: copying
+selfcopy        # files: copying BYOND itself
+clipboard       # clipboard
+setuserconfig   # settings: writing
+setsystemconfig # settings: writing
+setcustomconfig # settings: writing
+deluserconfig   # settings: deleting
+writeconfig     # settings: writing
