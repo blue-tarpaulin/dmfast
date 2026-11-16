@@ -67,6 +67,7 @@ on, and how much more peak memory the patch uses. `map_cpu` numbers are with ~50
 | Change walks | `treeskip` | both | ~2-5% `map_cpu` | Starts map sending's walks over a player's records at the first record each looks for, and skips walks with none |
 | Message pools | `msgpool` | both | ~1-2% `map_cpu` | Reuses map sending's message pools instead of building and freeing ~270 KB per map thread every tick |
 | Reference counting | `argload` | Linux | ~18% in-round | Faster reference counting: avoids a CPU stall on every call |
+| Reference counting | `refskip` | Windows | ~10% in-round | Skips the reference count functions' exception frame for the types that need nothing or one helper call |
 | Var reads | `getvar` | Linux | ~7% in-round | Faster `a.b` reads: avoids the same CPU stall as `argload` |
 | Turf var chains | `turfvar` | both | ~2.5% in-round (12 z-levels) | Adds new turf var records at the end of their hash chain, so early-loaded z-levels stay near the front |
 | Var lookups | `varread` | Windows | ~1.2% in-round | Caches each type's var defaults, so `a.b` skips BYOND's searches through the type |

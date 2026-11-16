@@ -97,4 +97,5 @@ pub static FEATURES: &[&Feature] = &[
     &common::fixes::inodes::INODES,
     // Installed last, to skip call sites other features rewrote or matched.
     &server::perf::procname::PROCNAME,
+    &server::perf::refskip::REFSKIP,
 ];
