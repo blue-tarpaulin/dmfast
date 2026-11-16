@@ -94,4 +94,6 @@ pub static FEATURES: &[&Feature] = &[
     &server::fixes::varoverride::VAROVERRIDE,
     // Fixes for both programs.
     &common::fixes::inodes::INODES,
+    // Installed last, to skip call sites other features rewrote or matched.
+    &server::perf::procname::PROCNAME,
 ];

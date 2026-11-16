@@ -9,6 +9,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **Patch fix:** `strtree` (Linux): DreamDaemon no longer aborts with "realloc(): invalid pointer" when it exits on a bad command-line option.
 - **Patch change:** `filter` (compiler) now answers most name misses from a Bloom filter. ~1% faster compiles.
 - **New patch:** `varmerge` (Linux): building each type's var list at load appends inherited vars in order instead of searching for each one's place. ~6% faster world load.
+- **New patch:** `procname`: calling a proc by name remembers where each name was found in a type's proc table instead of searching it every time. ~4% faster proc calls.
 
 ## 8.0.0
 

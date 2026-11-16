@@ -10,6 +10,7 @@ pub mod iconstates;
 pub mod locidx;
 pub mod mapskip;
 pub mod msgpool;
+pub mod procname;
 pub mod procs;
 pub mod seenclear;
 pub mod sortmap;

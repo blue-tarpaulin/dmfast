@@ -88,6 +88,13 @@ pub(crate) fn nothing_applied() -> bool {
     lock(&WRITTEN).is_empty()
 }
 
+/// Whether an earlier feature wrote or relied on any of `addr..addr+len`: a write there would conflict with it.
+pub(crate) fn claimed(addr: usize, len: usize) -> bool {
+    let end = addr.saturating_add(len);
+    let hit = |r: &[Range]| r.iter().any(|&(s, e, _)| addr < e && s < end);
+    hit(&lock(&WRITTEN)) || hit(&lock(&RELIED))
+}
+
 /// The installing feature relies on `addr..addr+len` (see the module docs); nothing outside an install.
 #[inline]
 pub(crate) fn rely(addr: usize, len: usize) {

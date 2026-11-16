@@ -71,6 +71,7 @@ on, and how much more peak memory the patch uses. `map_cpu` numbers are with ~50
 | Turf var chains | `turfvar` | both | ~2.5% in-round (12 z-levels) | Adds new turf var records at the end of their hash chain, so early-loaded z-levels stay near the front |
 | Var lookups | `varread` | Windows | ~1.2% in-round | Caches each type's var defaults, so `a.b` skips BYOND's searches through the type |
 | Truth tests | `truth` | Linux | ~1.1% in-round | Tests numbers in `if`, `!`, `&&`, and `\|\|` with integer instructions instead of x87 |
+| Proc lookups | `procname` | both | ~4% on proc calls | Remembers where each proc name was found in each type's proc table, so calls by name skip most binary searches |
 
 How BYOND itself could fix each of these: [PATCH-FIXES.md](PATCH-FIXES.md).
 
