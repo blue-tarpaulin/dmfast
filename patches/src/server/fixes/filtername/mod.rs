@@ -5,6 +5,9 @@
 //! image's `filters` (`+=`, `Add()`, `Insert()`, `filters[i] = f`) didn't, so both stayed. The fix makes the add drop
 //! any other filter of that name the same way; the new filter goes where the add puts it. Unnamed filters are never
 //! dropped. Only an add whose filter's name is already there changes, and its new chain comes from BYOND's own splice.
+//!
+//! 516.1689 drops the other filter itself, but as a move: `filters[i] = f` puts `f` before the filter at `i`, which
+//! stays. There the add's own handling of a name already there is skipped, so every add takes the path above.
 
 use std::slice;
 

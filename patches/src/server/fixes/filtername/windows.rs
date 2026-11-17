@@ -1,4 +1,5 @@
-//! `filtername`, Windows: the filter list add's append and splice calls (cdecl) go to the wrappers in `mod.rs`.
+//! `filtername`, Windows: the filter list add's append and splice calls (cdecl) go to the wrappers in `mod.rs`. From
+//! 516.1689 the add's own handling of a name already there is skipped first.
 
 use super::{Append, FOUND, Found, Splice, Tables};
 use crate::base::code::{Cond, Foreign};
@@ -40,6 +41,36 @@ const STATE: usize = 4;
 const FILTER_COUNT: usize = 13;
 const FILTER_ARRAY: usize = 21;
 
+/// 516.1689's end of the add: cmp si,bx (index, count) ; jb replace ; mov edx,[filter] ; push edx ; push [chain] ;
+/// call append ; add esp,8 ; jmp done ; replace: push 1 ; lea eax,[filter] ; push eax ; push 1 ; push esi ;
+/// push [chain] ; call splice ; add esp,14h ; done
+const SITE_1689: &str = "66 3B F3 72 17 8B 95 ?? ?? ?? ?? 52 FF B5 ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 C4 08 EB 1A 6A 01 \
+                         8D 85 ?? ?? ?? ?? 50 6A 01 56 FF B5 ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 C4 14";
+const FILTER_1689: [usize; 2] = [7, 32];
+const CHAIN_1689: [usize; 2] = [14, 42];
+const APPEND_1689: usize = 18;
+const SPLICE_1689: usize = 46;
+/// Its check for a name: mov eax,[esi+30h] ; mov [..],eax ; test eax,eax ; je plain ; mov ebx,edi ;
+/// cmp eax,0FFFFh ; je plain. `plain` is the add without a name, which ends at the site.
+const NAMED_1689: &str = "8B 46 30 89 85 ?? ?? ?? ?? 85 C0 0F 84 ?? ?? ?? ?? 8B DF 3D FF FF 00 00 0F 84";
+const NO_NAME_JE: usize = 11;
+const NO_NAME_JE_2: usize = 24;
+/// Then its lookup of the name: the chain (cmp eax,[chain count] ; jae ; mov ecx,[chains] ; mov eax,[ecx+eax*4] ;
+/// test eax,eax ; je ; movzx esi,word [eax] ; mov ecx,[eax+8] (the ids)) ...
+const CHAINS_1689: &str = "3B 05 ?? ?? ?? ?? 0F 83 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 8B 04 81 85 C0 0F 84 ?? ?? ?? ?? \
+                           0F B7 30 8B 48 08";
+const CHAIN_ARRAY_1689: usize = 14;
+/// ... the filter count (mov eax,[state] ; mov edx,[name] ; mov eax,[eax+filter count] ; mov ebx,eax) ...
+const FILTER_COUNT_1689: &str = "A1 ?? ?? ?? ?? 8B 95 ?? ?? ?? ?? 8B 80 ?? ?? ?? ?? 8B D8";
+const FILTER_COUNT_AT_1689: usize = 13;
+/// ... and each filter (mov eax,[state] ; mov eax,[eax+filters] ; mov eax,[eax+ecx*4] ; jmp name_cmp).
+const FILTERS_1689: &str = "A1 ?? ?? ?? ?? 8B 80 ?? ?? ?? ?? 8B 04 88 EB ??";
+const FILTER_ARRAY_AT_1689: usize = 7;
+const FILTERS_JMP_1689: usize = 15;
+const STATE_1689: usize = 1;
+/// name_cmp: cmp [eax+30h],edx
+const NAME_CMP_1689: &str = "39 50 30";
+
 /// Length of the `op` at `at` with ModRM reg field `reg` and an `[ebp+disp8]` or `[ebp+disp32]` operand.
 fn ebp_operand(core: &Image, at: usize, op: u8, reg: u8) -> Result<usize> {
     let [o, modrm] = core.array(at)?;
@@ -50,9 +81,33 @@ fn ebp_operand(core: &Image, at: usize, op: u8, reg: u8) -> Result<usize> {
     }
 }
 
+/// What install found: the add's end, its append and splice calls, and from 516.1689 the jump to its add without a
+/// name.
+struct Add {
+    site: usize,
+    append: usize,
+    splice: usize,
+    tables: Tables,
+    no_name: Option<usize>,
+}
+
 pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
-    let site = core.find_unique(SITE, "filter list add")?;
+    let sites = core.find_all(SITE)?;
+    let add = if sites.is_empty() { add_1689(core)? } else { add(core, sites.unique("filter list add")?)? };
+    let append = Foreign::at(core.call_target(add.append)?);
+    let splice = Foreign::at(core.call_target(add.splice)?);
+    FOUND.commit(cx, Found { tables: add.tables, append, splice });
+    if let Some(at) = add.no_name {
+        core.always_jump(at)?;
+    }
+    core.retarget(add.append + 1, super::append as Append)?;
+    core.retarget(add.splice + 1, super::splice as Splice)?;
+    Ok(core.report(&[add.site]))
+}
+
+/// Through 516.1688: the tables from the add's loop over the chain's names.
+fn add(core: &Image, site: usize) -> Result<Add> {
     let replace = core.jcc_at(site + 3, Cond::Below)?.target;
     let chain = core.bytes(site + PUSH_CHAIN, ebp_operand(core, site + PUSH_CHAIN, 0xFF, 6)?)?;
     let append = site + PUSH_CHAIN + chain.len();
@@ -85,10 +140,42 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
         filter_count: core.ptr_at(get + FILTER_COUNT)?,
         filter_array,
     };
-    let append_fn = Foreign::at(core.call_target(append)?);
-    let splice_fn = Foreign::at(core.call_target(splice)?);
-    FOUND.commit(cx, Found { tables, append: append_fn, splice: splice_fn });
-    core.retarget(append + 1, super::append as Append)?;
-    core.retarget(splice + 1, super::splice as Splice)?;
-    Ok(core.report(&[site]))
+    Ok(Add { site, append, splice, tables, no_name: None })
+}
+
+/// 516.1689: the tables from its inlined lookup of the name, and the jump that skips it.
+fn add_1689(core: &Image) -> Result<Add> {
+    let site = core.find_unique(SITE_1689, "filter list add")?;
+    ensure!(
+        core.u32_at(site + FILTER_1689[0])? == core.u32_at(site + FILTER_1689[1])?
+            && core.u32_at(site + CHAIN_1689[0])? == core.u32_at(site + CHAIN_1689[1])?,
+        "filter list add: append and splice of another filter or chain"
+    );
+    let named = core.find_unique(NAMED_1689, "filter list add's name check")?;
+    let plain = core.jcc_at(named + NO_NAME_JE, Cond::Equal)?.target;
+    ensure!(
+        core.jcc_at(named + NO_NAME_JE_2, Cond::Equal)?.target == plain
+            && named < plain
+            && plain < site
+            && site - named < 0x400,
+        "filter list add's name check: not in the add found"
+    );
+    let span = plain - named;
+    let chains = core.find_unique_in(named, span, CHAINS_1689, "filter list add's name lookup")?;
+    let count = core.find_unique_in(named, span, FILTER_COUNT_1689, "filter list add's filter count")?;
+    let filters = core.find_unique_in(named, span, FILTERS_1689, "filter list add's filter read")?;
+    let state = core.ptr_at(count + STATE_1689)?;
+    ensure!(
+        core.ptr_at(filters + STATE_1689)? == state
+            && core.is_at(core.rel8(filters + FILTERS_JMP_1689)?, NAME_CMP_1689)?,
+        "filter list add's name lookup: not as expected"
+    );
+    let tables = Tables {
+        chain_count: core.ptr_at(chains + CHAIN_COUNT)?,
+        chain_array: core.ptr_at(chains + CHAIN_ARRAY_1689)?,
+        state,
+        filter_count: core.ptr_at(count + FILTER_COUNT_AT_1689)?,
+        filter_array: core.ptr_at(filters + FILTER_ARRAY_AT_1689)?,
+    };
+    Ok(Add { site, append: site + APPEND_1689, splice: site + SPLICE_1689, tables, no_name: Some(named + NO_NAME_JE) })
 }
