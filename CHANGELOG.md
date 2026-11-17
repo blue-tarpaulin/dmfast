@@ -4,14 +4,18 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
+## 8.1.0
+
+- **Fixed:** Fixed support for BYOND 516.1689.
+- **Fixed:** dmfast works alongside auxtools 3 fully now and is checked in CI.
 - **New:** dmfast installs itself about 4x faster (DreamDaemon ~190 ms -> ~50 ms), so worlds reach `world/New` ~10% sooner and compiles finish ~2% sooner.
 - **New patch:** `childpos` (compiler): a node's position among its parent's children is found 8 at a time. ~1.5% faster compiles on Windows.
-- **Patch fix:** `strtree` (Linux): DreamDaemon no longer aborts with "realloc(): invalid pointer" when it exits on a bad command-line option.
-- **Patch change:** `filter` (compiler) now answers most name misses from a Bloom filter. ~1% faster compiles.
 - **New patch:** `varmerge` (Linux): building each type's var list at load appends inherited vars in order instead of searching for each one's place. ~6% faster world load.
 - **New patch:** `refskip` (Windows): reference counting skips BYOND's exception frame for the value types that need nothing or one helper call. ~10% less in-round CPU.
 - **New patch:** `procname`: calling a proc by name remembers where each name was found in a type's proc table instead of searching it every time. ~4% faster proc calls.
 - **New patch:** `valret` (Windows): BYOND's small functions that return a value no longer stall the CPU on every call. ~2% faster proc calls.
+- **Patch fix:** `strtree` (Linux): DreamDaemon no longer aborts with "realloc(): invalid pointer" when it exits on a bad command-line option.
+- **Patch change:** `filter` (compiler) now answers most name misses from a Bloom filter. ~1% faster compiles.
 - **Patch change:** `profcpu` (extended, Linux): the profiler's clock makes ~95% fewer system calls. ~15% faster tgstation world load.
 
 ## 8.0.0
