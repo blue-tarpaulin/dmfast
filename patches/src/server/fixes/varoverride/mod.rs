@@ -23,7 +23,8 @@ pub static VAROVERRIDE: Feature = Feature::fix(
     "child types' var overrides apply in projects with ~65,500 names",
     Tier::Safe,
     install!(windows: windows::install, linux: linux::install),
-);
+)
+.fixed_in(516_1689, "https://www.byond.com/forum/post/2992603");
 
 /// The recording of one var's init code: (var name, init proc, end of its code), cdecl.
 type RecordFn = unsafe extern "C" fn(u32, u32, u32);
