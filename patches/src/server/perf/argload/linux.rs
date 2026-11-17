@@ -1,7 +1,6 @@
-//! `argload`, Linux: faster IncRef and DecRef prologues and assign, installed together or not at all. IncRef keeps
-//! its bytes (auxtools 3 finds it by its prologue): its callers go to a copy of the prologue with the new loads,
-//! which jumps back into it. DecRef (auxtools finds it through `ByondValue_DecRef`'s calls) and assign are rewritten
-//! in place.
+//! `argload`, Linux: faster IncRef and DecRef prologues and assign, installed together or not at all. IncRef and
+//! DecRef keep their bytes (auxtools 3 finds them by their prologues): their callers, and assign's tail jump to
+//! DecRef, go to copies of the prologues with the new loads, which jump back into them.
 
 use std::ffi::CStr;
 
@@ -19,8 +18,10 @@ const ASSIGN: &str = "83 EC 2C 8B 44 24 30 F3 0F 7E 44 24 34 F3 0F 7E 08 66 0F D
 
 /// How far into the exported wrapper its call of the internal function may be.
 const WRAPPER_SPAN: usize = 0x400;
-/// IncRef's prologue before the loads: push ebp ; mov ebp,esp ; push esi ; push ebx ; sub esp,20h.
+/// IncRef's and DecRef's prologue before the loads: push ebp ; mov ebp,esp ; push esi ; push ebx ; sub esp,20h.
 const PROLOGUE: usize = 8;
+/// assign's `jmp DecRef` tail.
+const ASSIGN_TAIL: usize = 52;
 
 /// IncRef/DecRef at +8: stock's `movq xmm1,[ebp+8]` split into ecx = lo and `hi` (a register number) = hi, as two
 /// dword loads. xmm1 = lo|hi<<32 and xmm0 = hi as before, no flags touched (22 bytes).
@@ -71,18 +72,20 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
     called_by(core, c"ByondValue_IncRef", incref, "Value IncRef")?;
     called_by(core, c"ByondValue_DecRef", decref, "Value DecRef")?;
     ensure!(
-        core.call_target(assign_fn + 32)? == incref && core.branch_at(assign_fn + 52)?.target == decref,
+        core.call_target(assign_fn + 32)? == incref && core.branch_at(assign_fn + ASSIGN_TAIL)?.target == decref,
         "Value assign: call/jmp targets are not IncRef/DecRef"
     );
     // eax and ebx: the high dword's register in IncRef and DecRef.
     let (inc, dec) = (refcount(0), refcount(3));
     let fast_inc = trampoline(&[core.bytes(incref, PROLOGUE)?, &inc].concat(), incref + PROLOGUE + inc.len())?;
-    core.untouched(&[(decref + 8, dec.len()), (assign_fn + 7, ASSIGN_LEN)])?;
-    let calls = core.redirect_calls(incref, fast_inc)?.len();
-    core.write_code(decref + 8, &dec)?;
+    let fast_dec = trampoline(&[core.bytes(decref, PROLOGUE)?, &dec].concat(), decref + PROLOGUE + dec.len())?;
+    core.untouched(&[(assign_fn + 7, ASSIGN_LEN)])?;
+    let inc_calls = core.redirect_calls(incref, fast_inc)?.len();
+    let dec_calls = core.redirect_calls(decref, fast_dec)?.len();
     core.write_stub(assign_fn + 7, ASSIGN_LEN, &assign(fast_inc))?;
+    core.retarget(assign_fn + ASSIGN_TAIL + 1, fast_dec)?;
     Ok(format!(
-        "IncRef +{:#x} ({calls} calls), DecRef +{:#x}, assign +{:#x}",
+        "IncRef +{:#x} ({inc_calls} calls), DecRef +{:#x} ({dec_calls} calls), assign +{:#x}",
         incref - core.base,
         decref - core.base,
         assign_fn - core.base
