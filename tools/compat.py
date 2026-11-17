@@ -4,9 +4,10 @@
 usage: compat.py [--phase PHASE] [--work DIR] [--suite-cache DIR] <BYOND version> <installer> <project.dme>
 
 Checks: identical .dmb, verify mode, world load and output, bug fixes (fixtest.py), DM test suite
-(dmtests.py), and on Windows DreamSeeker's patches (installed with --client, checked with --audit). Writes a Markdown
-row to compat-<os>-<version>.md and $GITHUB_STEP_SUMMARY.
-Phases (setup project verify load world fixes suite report) share state through --work; report fails the run.
+(dmtests.py), the newest auxtools 3 release finding BYOND's functions as on stock, and on Windows DreamSeeker's patches
+(installed with --client, checked with --audit). Writes a Markdown row to compat-<os>-<version>.md and
+$GITHUB_STEP_SUMMARY.
+Phases (setup project verify load world fixes suite auxtools report) share state through --work; report fails the run.
 """
 import argparse, json, os, re, shutil, statistics, subprocess, sys, tempfile, time, zipfile
 import urllib.request
@@ -289,9 +290,63 @@ def suite():
             S["suite"] = f"FAIL: {S['suite']}"
 
 
+def latest_auxtools():
+    """(tag, path of its debug server library) of the newest auxtools 3 release, downloaded into WORK."""
+    def get(url):
+        headers = {"User-Agent": "dmfast-compat"}
+        if token := os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN"):
+            headers["Authorization"] = f"Bearer {token}"
+        for attempt in range(5):
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as r:
+                    return r.read()
+            except OSError as e:
+                err = e
+                time.sleep(5)
+        raise SystemExit(f"::error::{VERSION} {OS}: download failed ({url}): {err}")
+    releases = json.loads(get("https://api.github.com/repos/auxtools/auxtools/releases?per_page=30"))
+    tag = next(r["tag_name"] for r in releases
+               if r["tag_name"].startswith("v3.") and not r["draft"] and not r["prerelease"])
+    base = f"https://github.com/auxtools/auxtools/releases/download/{tag}"
+    lib = WORK / "auxtools" / ("debug_server.dll" if WIN else "libdebug_server.so")
+    lib.parent.mkdir(parents=True, exist_ok=True)
+    if WIN:
+        lib.write_bytes(get(f"{base}/debug_server.dll"))
+    else:
+        import io, tarfile
+        with tarfile.open(fileobj=io.BytesIO(get(f"{base}/auxtools-linux.tar.gz"))) as t:
+            lib.write_bytes(t.extractfile("libdebug_server.so").read())
+    return tag, lib
+
+
+def auxtools():
+    """The newest auxtools 3 release finds BYOND's functions by their bytes: its signature check, init and shutdown
+    must say on dmfast (with the extended fixes) what they say on stock."""
+    tag, lib = latest_auxtools()
+    world_dir = WORK / "auxtools"
+    shutil.copy(ROOT / "tests" / "auxtools" / "auxtools.dme", world_dir)
+    rc, _, h, out = compile(STOCK, world_dir / "auxtools.dme")
+    if h is None:
+        fail(f"auxtools world doesn't compile (exit {rc})", out)
+        S["auxtools"] = "FAIL: doesn't compile"
+        return
+    said = {}
+    for name, bin_dir, fixes in (("stock", STOCK, None), ("dmfast", FAST, "extended")):
+        env = byond.env(bin_dir, AUXTOOLS_LIB=str(lib), **({"DMFAST_FIXES": fixes} if fixes else {}))
+        _, out = byond.run([bin_dir / DD, "auxtools.dmb", *DD_ARGS], world_dir, env, 60)
+        said[name] = [l for l in out.splitlines() if l.startswith(("check:", "init:", "shutdown:"))]
+        log(f"auxtools {tag} on {name}: " + "; ".join(said[name]))
+    if said["dmfast"] != said["stock"] or len(said["stock"]) != 3:
+        fail(f"auxtools {tag} answers differently on dmfast than on stock",
+             f"stock:  {said['stock']}\ndmfast: {said['dmfast']}")
+        S["auxtools"] = f"FAIL ({tag})"
+    else:
+        S["auxtools"] = f"same ({tag}: {said['stock'][0].removeprefix('check: ')})"
+
+
 # The table columns a phase fills, for a phase CI cut at its time limit (compat-work/timeout-<phase>).
 COLUMNS = {"project": ["t_fast"], "verify": ["verify"], "load": ["l_stock", "l_fast"], "world": ["w_out"],
-           "fixes": ["fixes"], "suite": ["suite"]}
+           "fixes": ["fixes"], "suite": ["suite"], "auxtools": ["auxtools"]}
 
 
 def report():
@@ -312,16 +367,16 @@ def report():
     log(f"== {VERSION} ({real}) {OS}: {result}")
     log(f"compile {PROJECT.name}: stock {g('t_stock')}, dmfast {g('t_fast')}, .dmb {g('h_stock')} / {g('h_fast')}")
     log(f"world load: stock {g('l_stock')}, dmfast {g('l_fast')}; output for 10 s after loading: {g('w_out')}")
-    log(f"verify mode: {g('verify')}; bug fixes: {g('fixes', 'none')}; DM test suite: {g('suite')}")
+    log(f"verify mode: {g('verify')}; bug fixes: {g('fixes', 'none')}; DM test suite: {g('suite')}; auxtools: {g('auxtools')}")
     log(f"compiler groups: {count(S.get('compiler'))}; runtime groups: {count(S.get('runtime'))}; disabled: {disabled}")
     log(groups.strip())
     row([VERSION, real, OS, result, g("t_stock"), g("t_fast"), count(S.get("compiler")), count(S.get("runtime")), disabled,
-         g("l_stock"), g("l_fast"), g("verify"), g("w_out"), g("fixes", "none"), g("suite")])
+         g("l_stock"), g("l_fast"), g("verify"), g("w_out"), g("fixes", "none"), g("suite"), g("auxtools")])
     return S["fail"]
 
 
 PHASES = {"setup": setup, "project": project, "verify": verify, "load": load, "world": world_output,
-          "fixes": fixes, "suite": suite, "report": report}
+          "fixes": fixes, "suite": suite, "auxtools": auxtools, "report": report}
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

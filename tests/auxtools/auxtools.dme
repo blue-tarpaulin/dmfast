@@ -1,0 +1,10 @@
+// auxtools 3 against this BYOND: its signature check, then a full init and shutdown. The library's path comes from
+// AUXTOOLS_LIB. tools/compat.py runs it on stock and on dmfast and compares the lines.
+
+/world/New()
+	..()
+	var/lib = world.GetConfig("env", "AUXTOOLS_LIB")
+	world.log << "check: [call_ext(lib, "auxtools_check_signatures")()]"
+	world.log << "init: [call_ext(lib, "auxtools_init")()]"
+	world.log << "shutdown: [call_ext(lib, "auxtools_full_shutdown")()]"
+	shutdown()

@@ -249,6 +249,11 @@ jobs:
       - name: DM test suite
         shell: bash
         run: COMPAT_PHASE=suite COMPAT_SUITE_CACHE="${{ github.workspace }}/suite-cache" timeout 15m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-suite; exit 0; }; exit $rc; }
+      - name: auxtools 3
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: COMPAT_PHASE=auxtools timeout 5m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-auxtools; exit 0; }; exit $rc; }
       - name: Report
         if: always()
         shell: bash
@@ -278,8 +283,8 @@ jobs:
           {
             echo "### BYOND compatibility"
             echo
-            echo "| Requested | Build | OS | Result | tgstation stock | tgstation dmfast | Compiler groups | Runtime groups | Disabled | World load stock | World load dmfast | Verify mode | World output | Bug fixes | DM test suite |"
-            echo "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
+            echo "| Requested | Build | OS | Result | tgstation stock | tgstation dmfast | Compiler groups | Runtime groups | Disabled | World load stock | World load dmfast | Verify mode | World output | Bug fixes | DM test suite | auxtools 3 |"
+            echo "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
             cat compat-*.md 2>/dev/null | sort -t'|' -k4,4 -k2,2V
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
