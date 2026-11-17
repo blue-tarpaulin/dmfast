@@ -23,6 +23,7 @@ pub static STRINGS: Feature = Feature::perf(
     "string table",
     install!(windows: windows::install, linux: linux::install),
 )
+.fixed_in(516_1689, "https://www.byond.com/docs/notes/516.html")
 .stats(verify::print_stats);
 
 /// H. Only the stubs read and write it, on whichever thread interns.
