@@ -14,7 +14,6 @@ on, and how much more peak memory the patch uses. `map_cpu` numbers are with ~50
 | Patch | Key | OS | Saves | % of fast | What it does |
 |---|---|---|---|---|---|
 | Dir listing | `dirs` | Linux | 12.2 s | 490% | Caches directory listings; skips needless chdir and opens |
-| String table | `strings` | both | 18.2 s | 430% | Hinted free-slot search, geometric string table growth |
 | Stdio | `stdio` | both | 1.49 s | 35% | Unlocked file reads and writes |
 | ftell cache | `ftell` | both | in `stdio`'s | - | ftell without a seek syscall in the .dmb writer |
 | mimalloc | `mimalloc` | both | 0.69 s | 16% | mimalloc for small blocks, the system heap for larger ones |
@@ -38,6 +37,7 @@ on, and how much more peak memory the patch uses. `map_cpu` numbers are with ~50
 | Compile-pass leaf skip | `leafskip` | both | ~0.1 s | ~1% | Skips finished leaf nodes in each compile pass |
 | Vector growth | `vecgrow` | both | ~0.1 s | ~1% | Grows dword arrays geometrically |
 | Version banner | `banner` | both | - | - | Adds a dmfast line to the version banner |
+| String table | `strings` | both | ~~18.2 s~~ | ~~430%~~ | Hinted free-slot search, geometric string table growth |
 
 ## DreamDaemon  - given stock time of 7 s until world/New
 
