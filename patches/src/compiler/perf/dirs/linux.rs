@@ -8,7 +8,7 @@ use std::os::unix::fs::MetadataExt;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use libc::{__errno_location, DIR, DT_DIR, DT_LNK, DT_UNKNOWN, ENOTDIR, dirent};
+use libc::{__errno_location, DIR, DT_DIR, DT_LNK, DT_UNKNOWN, ENOTDIR, dirent, dirent64};
 
 use crate::base::code::Foreign;
 use crate::base::driver::{Counter, verify};
@@ -16,25 +16,61 @@ use crate::base::feature::Ctx;
 use crate::base::hash::Map;
 use crate::base::image::Image;
 use crate::base::linux::symbol;
-use crate::base::sync::{Owned, lock};
-use crate::base::{Result, ensure};
+use crate::base::sync::{Installed, Owned, lock};
+use crate::base::{Result, bail, ensure};
 
-// libbyond reads `d_type` at +0Ah and `d_name` at +0Bh of glibc's 32-bit `struct dirent`.
-const _: () = assert!(offset_of!(dirent, d_type) == 10 && offset_of!(dirent, d_name) == 11);
+/// libbyond's `readdir` record: glibc's 32-bit `dirent`, or `dirent64` in builds with 64-bit file offsets.
+#[repr(C, align(8))]
+struct Record([u8; size_of::<dirent64>()]);
+
+/// A record layout: the `readdir` that returns it, and where its `d_name` is (`d_type` is the byte before).
+struct Layout {
+    readdir: &'static CStr,
+    name: usize,
+}
+
+static LAYOUTS: [Layout; 2] = [
+    Layout { readdir: c"readdir", name: offset_of!(dirent, d_name) },
+    Layout { readdir: c"readdir64", name: offset_of!(dirent64, d_name) },
+];
+
+const _: () = assert!(
+    size_of::<dirent>() <= size_of::<Record>()
+        && offset_of!(dirent, d_type) + 1 == offset_of!(dirent, d_name)
+        && offset_of!(dirent64, d_type) + 1 == offset_of!(dirent64, d_name)
+);
+
+/// The layout a listing reads: the displacements at `name_at` reach `d_name`, those at `next_at` its second byte.
+fn layout(core: &Image, name_at: &[usize], next_at: &[usize]) -> Result<&'static Layout> {
+    let name = core.u8_at(name_at[0])?;
+    for &at in name_at {
+        ensure!(core.u8_at(at)? == name, "name displacement at {at:#x} differs");
+    }
+    for &at in next_at {
+        ensure!(core.u8_at(at)? == name.wrapping_add(1), "name displacement at {at:#x} differs");
+    }
+    let Some(l) = LAYOUTS.iter().find(|l| l.name == usize::from(name)) else {
+        bail!("unknown d_name offset {name:#x}");
+    };
+    Ok(l)
+}
 
 static OPENDIR: Foreign<unsafe extern "C" fn(*const c_char) -> *mut DIR> = Foreign::new();
-static READDIR: Foreign<unsafe extern "C" fn(*mut DIR) -> *mut dirent> = Foreign::new();
+/// The main listing's `readdir`: its record is in the layout the listing reads.
+static READDIR: Foreign<unsafe extern "C" fn(*mut DIR) -> *const u8> = Foreign::new();
 static CLOSEDIR: Foreign<unsafe extern "C" fn(*mut DIR) -> c_int> = Foreign::new();
 /// libbyond's `ChangeDir(path)`: chdir, then refresh its cached cwd with `getcwd`; 1 on success.
 static CHANGE_DIR: Foreign<unsafe extern "C" fn(*const c_char) -> u8> = Foreign::new();
+/// Where the main listing's records keep `d_name`.
+static NAME_AT: Installed<usize> = Installed::new();
 
 fn opendir(name: *const c_char) -> *mut DIR {
     // SAFETY: libc's opendir; `name` is a NUL-terminated path.
     unsafe { OPENDIR.get()(name) }
 }
 
-fn readdir(d: *mut DIR) -> *mut dirent {
-    // SAFETY: libc's readdir on a stream libc opened.
+fn readdir(d: *mut DIR) -> *const u8 {
+    // SAFETY: libc's readdir or readdir64 on a stream libc opened.
     unsafe { READDIR.get()(d) }
 }
 
@@ -58,12 +94,28 @@ fn cannot_be_dir(d_type: u8) -> bool {
     !matches!(d_type, DT_DIR | DT_LNK | DT_UNKNOWN)
 }
 
-/// A cached `readdir` result. `dirent` comes first, so the `d_name` libbyond passes back leads to the entry.
+/// A cached `readdir` result. The record comes first, so the `d_name` libbyond passes back leads to the entry.
 #[repr(C)]
 pub(super) struct Entry {
-    pub(super) dirent: dirent,
+    record: Record,
     /// Whether it is a directory, once checked.
     is_dir: OnceLock<bool>,
+}
+
+impl Entry {
+    fn name_ptr(&self) -> *const c_char {
+        (&raw const self.record).cast::<c_char>().wrapping_add(*NAME_AT.get())
+    }
+
+    pub(super) fn name(&self) -> &CStr {
+        // SAFETY: the record holds a NUL-terminated name at the layout's offset.
+        unsafe { CStr::from_ptr(self.name_ptr()) }
+    }
+
+    pub(super) fn d_type(&self) -> u8 {
+        // SAFETY: `d_type` is the byte before `d_name`, inside the record.
+        unsafe { *self.name_ptr().sub(1) as u8 }
+    }
 }
 
 type Listing = Arc<[Entry]>;
@@ -105,19 +157,20 @@ pub(super) fn read_listing(path: *const c_char) -> Option<Listing> {
     if d.is_null() {
         return None;
     }
+    let name = *NAME_AT.get();
     let entries = std::iter::from_fn(|| {
         let e = readdir(d);
         if e.is_null() {
             return None;
         }
-        // The header and name only: an entry can be shorter than `dirent` (glibc before 2.37, the `inodes` fix).
-        // SAFETY: `e` is readdir's entry, with a NUL-terminated name.
-        let mut copy: dirent = unsafe { std::mem::zeroed() };
+        // The header and name only: an entry can be shorter than its struct (glibc before 2.37, the `inodes` fix).
+        let mut record = Record([0; size_of::<dirent64>()]);
+        // SAFETY: `e` is readdir's record, with a NUL-terminated name at `name`; a record holds any name.
         unsafe {
-            let len = CStr::from_ptr((&raw const (*e).d_name).cast()).count_bytes().min(255);
-            std::ptr::copy_nonoverlapping(e.cast::<u8>(), (&raw mut copy).cast(), offset_of!(dirent, d_name) + len);
+            let len = CStr::from_ptr(e.add(name).cast()).count_bytes().min(255);
+            std::ptr::copy_nonoverlapping(e, record.0.as_mut_ptr(), name + len);
         }
-        Some(Entry { dirent: copy, is_dir: OnceLock::new() })
+        Some(Entry { record, is_dir: OnceLock::new() })
     })
     .collect();
     closedir(d);
@@ -207,12 +260,12 @@ unsafe extern "C" fn list_opendir(path: *const c_char) -> *mut DIR {
     Box::into_raw(Box::new(Cursor { listing, pos: 0 })).cast()
 }
 
-unsafe extern "C" fn list_readdir(d: *mut DIR) -> *mut dirent {
+unsafe extern "C" fn list_readdir(d: *mut DIR) -> *const Record {
     // SAFETY: `d` is a cursor from `list_opendir`.
     let c = unsafe { &mut *d.cast::<Cursor>() };
-    let Some(e) = c.listing.get(c.pos) else { return std::ptr::null_mut() };
+    let Some(e) = c.listing.get(c.pos) else { return std::ptr::null() };
     c.pos += 1;
-    (&raw const e.dirent).cast_mut()
+    &raw const e.record
 }
 
 unsafe extern "C" fn list_closedir(d: *mut DIR) -> c_int {
@@ -224,11 +277,11 @@ unsafe extern "C" fn list_closedir(d: *mut DIR) -> c_int {
 /// Replaces the main listing's `opendir(entry->d_name)`; the entry is one of ours. A directory returns `name` as
 /// its stream: libbyond only checks it isn't null and passes it to [`list_closedir_entry`].
 unsafe extern "C" fn list_opendir_entry(name: *const c_char) -> *mut DIR {
-    // SAFETY: `name` is the `d_name` of an `Entry` from `list_readdir`.
-    let e = unsafe { &*name.sub(offset_of!(dirent, d_name)).cast::<Entry>() };
+    // SAFETY: `name` is the name of an `Entry` from `list_readdir`.
+    let e = unsafe { &*name.sub(*NAME_AT.get()).cast::<Entry>() };
     let is_dir = match e.is_dir.get() {
         Some(&is_dir) => is_dir,
-        None if cannot_be_dir(e.dirent.d_type) => {
+        None if cannot_be_dir(e.d_type()) => {
             SKIPPED.bump();
             *e.is_dir.get_or_init(|| false)
         }
@@ -274,19 +327,23 @@ fn check(core: &Image, sites: &[Site]) -> Result<()> {
 }
 
 /// The main listing's calls, including its `ChangeDir` into the directory and back.
-fn main_listing(core: &Image) -> Result<Vec<Site>> {
-    // push "." ; call opendir ; mov [ebp-54h],eax ; ... loop: call readdir ; lea ebx,[esi+0Bh] (d_name) ;
+fn main_listing(cx: &Ctx) -> Result<Vec<Site>> {
+    let core = cx.core();
+    // push "." ; call opendir ; mov [ebp-54h],eax ; ... loop: call readdir ; lea ebx,[esi+d_name] ;
     // strncmp ; skip "." and ".." ; ... ; call opendir(ebx) ; ... ; push '/' ; ... ; call closedir(entry)
     let list = core.find_unique(
         "83 EC 0C 68 ?? ?? ?? ?? E8 ?? ?? ?? ?? 89 45 AC 83 C4 10 85 C0 0F 84 ?? ?? ?? ?? \
          C7 45 A0 00 00 00 00 8D 74 26 00 83 EC 0C FF 75 AC E8 ?? ?? ?? ?? 89 C6 83 C4 10 85 C0 \
-         0F 84 ?? ?? ?? ?? 83 EC 04 8D 5E 0B FF 75 A4 53 FF 75 A8 E8 ?? ?? ?? ?? 83 C4 10 85 C0 \
-         75 CF 80 7E 0B 2E 75 0D 80 7E 0C 00 74 C3 66 83 7E 0C 2E 74 BC 83 EC 08 8D 45 C0 53 50 \
+         0F 84 ?? ?? ?? ?? 83 EC 04 8D 5E ?? FF 75 A4 53 FF 75 A8 E8 ?? ?? ?? ?? 83 C4 10 85 C0 \
+         75 CF 80 7E ?? 2E 75 0D 80 7E ?? 00 74 C3 66 83 7E ?? 2E 74 BC 83 EC 08 8D 45 C0 53 50 \
          E8 ?? ?? ?? ?? 89 1C 24 E8 ?? ?? ?? ?? 89 C3 83 C4 10 85 C0 74 19 83 EC 08 8D 45 C0 \
          6A 2F 50 E8 ?? ?? ?? ?? 89 1C 24 E8",
         "directory listing",
     )?;
     core.expect(core.ptr_at(list + 4)?, b".\0", "directory listing does not open \".\"")?;
+    let layout = layout(core, &[list + 0x43, list + 0x59], &[list + 0x5F, list + 0x66])?;
+    // The readdir that returns that layout, as the program binds it (checked below).
+    READDIR.set(symbol(layout.readdir)?);
     // Loop end: count < max -> next entry ; push [ebp-54h] ; call closedir
     let list_end = core.find_unique(
         "8B 4D A0 3B 4D 10 8D 41 01 89 45 A0 0F 8C ?? ?? ?? ?? 83 EC 0C FF 75 AC E8 ?? ?? ?? ?? \
@@ -318,18 +375,21 @@ fn main_listing(core: &Image) -> Result<Vec<Site>> {
     ];
     check(core, &sites)?;
     CHANGE_DIR.set(change_dir);
+    NAME_AT.commit(cx, layout.name);
     Ok(sites)
 }
 
 /// The prefix listing's `opendir(entry->d_name)`.
 fn prefix_listing(core: &Image) -> Result<Vec<Site>> {
-    // lea esi,[eax+0Bh] (d_name) ; strncmp ; ... ; strdup(esi) ; call opendir(esi)
+    // lea esi,[eax+d_name] ; strncmp ; ... ; strdup(esi) ; call opendir(esi)
     let complete = core.find_unique(
-        "8D 70 0B FF 75 CC 56 FF 75 D0 E8 ?? ?? ?? ?? 83 C4 10 85 C0 75 D0 8B 45 D4 80 78 0B 2E \
+        "8D 70 ?? FF 75 CC 56 FF 75 D0 E8 ?? ?? ?? ?? 83 C4 10 85 C0 75 D0 8B 45 D4 80 78 ?? 2E \
          0F 84 ?? ?? ?? ?? 8B 45 0C 0F B7 CB 89 4D D4 8B 00 F6 C3 07 0F 84 ?? ?? ?? ?? 83 EC 0C \
          8B 55 D4 83 C3 01 56 8D 04 90 89 45 D4 E8 ?? ?? ?? ?? 8B 4D D4 89 01 89 34 24 E8",
         "prefix directory listing",
     )?;
+    // Either layout: the replacement reads only `d_type`, the byte before the name.
+    layout(core, &[complete + 2, complete + 0x1B], &[])?;
     let sites = vec![(complete + 0x54, OPENDIR.addr(), complete_opendir_entry as *const () as usize)];
     check(core, &sites)?;
     Ok(sites)
@@ -340,12 +400,11 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     // libc's, as the program binds them.
     OPENDIR.set(symbol(c"opendir")?);
-    READDIR.set(symbol(c"readdir")?);
     CLOSEDIR.set(symbol(c"closedir")?);
     let write = |sites: &[Site]| sites.iter().try_for_each(|&(call, _, with)| core.call(call, 5, with));
     let mut parts = cx.parts();
     parts.named("listing cache", || {
-        let sites = main_listing(core)?;
+        let sites = main_listing(cx)?;
         *lock(&CACHE) = Some(Dirs::default());
         PENDING.set(None)?;
         write(&sites)

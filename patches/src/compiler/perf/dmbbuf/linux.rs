@@ -1,4 +1,4 @@
-//! `dmbbuf`, Linux: libbyond's `fopen` call sites call [`fopen`].
+//! `dmbbuf`, Linux: libbyond's `fopen` and `fopen64` call sites call [`fopen`] and [`fopen64`].
 
 use std::ffi::{CStr, c_char};
 
@@ -11,14 +11,13 @@ use crate::base::{Result, ensure};
 
 type Fopen = unsafe extern "C" fn(*const c_char, *const c_char) -> *mut FILE;
 
-/// `fopen`, then the buffer for a `.dmb`.
+/// The buffer for `f` if it is a `.dmb`; `f`.
 ///
 /// # Safety
-/// `name` and `mode` are C strings (libbyond's `fopen` call).
-unsafe extern "C" fn fopen(name: *const c_char, mode: *const c_char) -> *mut FILE {
-    // SAFETY: C strings (caller); `f` is the stream just opened.
+/// `name` is null or a C string; `f` is null or the stream just opened from it.
+unsafe fn buffered(name: *const c_char, f: *mut FILE) -> *mut FILE {
+    // SAFETY: a C string and its open stream (caller).
     unsafe {
-        let f = libc::fopen(name, mode);
         if !f.is_null()
             && !name.is_null()
             && is_dmb(CStr::from_ptr(name).to_bytes())
@@ -26,18 +25,39 @@ unsafe extern "C" fn fopen(name: *const c_char, mode: *const c_char) -> *mut FIL
         {
             BUFFERED.bump();
         }
-        f
     }
+    f
+}
+
+/// # Safety
+/// As libc's `fopen`.
+unsafe extern "C" fn fopen(name: *const c_char, mode: *const c_char) -> *mut FILE {
+    // SAFETY: libc's fopen with the caller's arguments.
+    unsafe { buffered(name, libc::fopen(name, mode)) }
+}
+
+/// # Safety
+/// As libc's `fopen64`.
+unsafe extern "C" fn fopen64(name: *const c_char, mode: *const c_char) -> *mut FILE {
+    // SAFETY: libc's fopen64 with the caller's arguments.
+    unsafe { buffered(name, libc::fopen64(name, mode)) }
 }
 
 pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
-    let sites = core.import_calls("fopen", libc::fopen as Fopen)?;
-    ensure!(!sites.is_empty(), "no fopen call sites");
-    for &s in &sites {
+    let mut sites = Vec::new();
+    for (name, libc_fn, ours) in
+        [("fopen", libc::fopen as Fopen, fopen as Fopen), ("fopen64", libc::fopen64 as Fopen, fopen64 as Fopen)]
+    {
+        for s in core.import_calls(name, libc_fn)? {
+            sites.push((s, ours));
+        }
+    }
+    ensure!(!sites.is_empty(), "no fopen or fopen64 call sites");
+    for &(s, ours) in &sites {
         // A call or a tail jump: keep the opcode.
         let op = core.u8_at(s)?;
-        core.write_code(s, &branch(op, s, fopen as Fopen, 5))?;
+        core.write_code(s, &branch(op, s, ours, 5))?;
     }
     Ok(format!("{} KB .dmb buffer, {} fopen sites", BUFFER / 1024, sites.len()))
 }

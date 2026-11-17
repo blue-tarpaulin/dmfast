@@ -1,6 +1,6 @@
 //! `DMFAST_VERIFY=1`: each cache hit re-reads its directory and compares.
 
-use std::ffi::{CStr, c_char};
+use std::ffi::c_char;
 
 use super::linux::{Entry, Stat, change_now, read_listing, stat};
 use crate::base::driver::{Counter, verify};
@@ -23,7 +23,5 @@ pub(super) fn hit(path: *const c_char, listing: &[Entry], st: Option<Stat>) {
 }
 
 fn same_entries(a: &[Entry], b: &[Entry]) -> bool {
-    // SAFETY: copied names are NUL-terminated.
-    let name = |e: &Entry| unsafe { CStr::from_ptr(e.dirent.d_name.as_ptr()) };
-    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.dirent.d_type == y.dirent.d_type && name(x) == name(y))
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.d_type() == y.d_type() && x.name() == y.name())
 }
