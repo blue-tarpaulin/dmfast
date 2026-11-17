@@ -284,7 +284,10 @@ def fixes():
 def suite():
     S.setdefault("suite", "n/a")
     if (dmtests.SUITE / "Tests").is_dir():
-        failed, S["suite"] = dmtests.check(FAST, STOCK, cache=SUITE_CACHE)
+        # Stock's verdicts are cached per real build: a requested "516.latest" is a different build over time.
+        real = (re.findall(r"\d{3}\.\d{4}", run(STOCK, DM, [], WORK)[1]) or [VERSION])[0]
+        cache = Path(SUITE_CACHE) / real if SUITE_CACHE else None
+        failed, S["suite"] = dmtests.check(FAST, STOCK, cache=cache)
         if failed:
             fail("the DM test suite differs between stock and dmfast")
             S["suite"] = f"FAIL: {S['suite']}"
