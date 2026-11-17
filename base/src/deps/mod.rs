@@ -7,7 +7,8 @@
 //!   as a fingerprint, not as code: its leading bytes (a signature), its length, where its wildcards are, and a
 //!   hash of the rest.
 //! - Globals: the writable globals such a function uses have the known number of code references (relocations).
-//! - Callers: unhooked writers have the known number of `call` sites.
+//! - Callers: unhooked writers have the known number of `call` sites. The count also picks such a function out of
+//!   byte-identical copies (the same code for another table: its global is a wildcard).
 //!
 //! A new BYOND build that changes any of this disables the patch until accepted (`depsig.py --accept`).
 
@@ -54,7 +55,7 @@ pub(crate) fn check(tables: &[&[Dep]], core: &Image) -> Guard {
     let code = core.hays(Some(true)).unwrap_or_default();
 
     let deps: Vec<&Dep> = tables.iter().copied().flatten().collect();
-    let found = locate(&deps, &code);
+    let found = locate(&deps, &code, |at| core.call_sites(at).map_or(0, |s| s.len() as u32));
 
     // Globals: count code references (relocated words in code) to each matched form's globals.
     let present = |v: &Variant| v.globals.iter().enumerate().filter(|&(_, &off)| off != ABSENT);
@@ -111,8 +112,13 @@ pub(crate) fn check(tables: &[&[Dep]], core: &Image) -> Guard {
 }
 
 /// The first form of each dep that occurs exactly once: where its prefix matches (all prefixes searched in one
-/// pass) and the bytes there hash to its fingerprint. (address, form).
-fn locate<'a>(deps: &[&'a Dep], code: &[crate::scan::Hay]) -> Vec<Option<(usize, &'a Variant)>> {
+/// pass) and the bytes there hash to its fingerprint; of several such places, the one whose number of `call` sites
+/// (`calls`) the dep accepts. (address, form).
+fn locate<'a>(
+    deps: &[&'a Dep],
+    code: &[crate::scan::Hay],
+    calls: impl Fn(usize) -> u32,
+) -> Vec<Option<(usize, &'a Variant)>> {
     let pats: Vec<Vec<Option<u8>>> =
         deps.iter().flat_map(|d| d.variants).map(|v| crate::scan::parse(v.prefix).unwrap_or_default()).collect();
     let mut hits = crate::scan::find_patterns(code, &pats).into_iter();
@@ -128,10 +134,13 @@ fn locate<'a>(deps: &[&'a Dep], code: &[crate::scan::Hay]) -> Vec<Option<(usize,
             let mut first = None;
             for v in dep.variants {
                 // Every form's hits are consumed, matched or not, to stay in step with `pats`.
-                let h = hits.next().unwrap_or_default();
+                let mut at = hits.next().unwrap_or_default();
                 if first.is_none() {
-                    let mut at = h.into_iter().filter(|&at| fits(at, v));
-                    if let (Some(at), None) = (at.next(), at.next()) {
+                    at.retain(|&at| fits(at, v));
+                    if at.len() > 1 && !dep.callers.is_empty() {
+                        at.retain(|&at| dep.callers.contains(&calls(at)));
+                    }
+                    if let [at] = at[..] {
                         first = Some((at, v));
                     }
                 }
@@ -161,8 +170,9 @@ mod tests {
         let v = |hash| Variant { prefix: "55 8B EC A1", len: 10, holes: &[(4, 4)], hash, globals: &[] };
         let right: &'static [Variant] = Box::leak(Box::new([v(hash)]));
         let wrong: &'static [Variant] = Box::leak(Box::new([v(hash ^ 1), v(hash)]));
-        let at =
-            |deps: Dep, code: &[(usize, &[u8])]| locate(&[&deps], code)[0].map(|(at, f)| (at, f as *const Variant));
+        let at = |deps: Dep, code: &[(usize, &[u8])]| {
+            locate(&[&deps], code, |_| 0)[0].map(|(at, f)| (at, f as *const Variant))
+        };
 
         let mut one = vec![0xCCu8; 4];
         one.extend(FORM);
@@ -181,5 +191,28 @@ mod tests {
         let mut other = one.clone();
         other.extend([0x55, 0x8B, 0xEC, 0xA1, 1, 2, 3, 4, 0xC2, 0x00]);
         assert_eq!(at(dep(right), &[(0x1000, &other[..])]), Some((0x1004, &right[0] as *const _)));
+    }
+
+    /// Of byte-identical copies, the one whose number of call sites the dep accepts; none if that isn't one.
+    #[test]
+    fn twins_split_by_callers() {
+        static FORMS: std::sync::LazyLock<[Variant; 1]> = std::sync::LazyLock::new(|| {
+            [Variant { prefix: "55 8B EC A1", len: 10, holes: &[(4, 4)], hash: fnv1a(&FORM, &[(4, 4)]), globals: &[] }]
+        });
+        let mut two = vec![0xCCu8; 4];
+        two.extend(FORM);
+        two.extend([0xCC; 4]);
+        two.extend([0x55, 0x8B, 0xEC, 0xA1, 9, 9, 9, 9, 0xC3, 0x90]);
+        let code = [(0x1000, &two[..])];
+        let calls = |at: usize| if at == 0x1012 { 2 } else { 1 };
+        let at = |callers: &'static [u32]| {
+            let d = Dep { keys: &["x"], globals: &[], callers, variants: &FORMS[..] };
+            locate(&[&d], &code, calls)[0].map(|(at, _)| at)
+        };
+        assert_eq!(at(&[2]), Some(0x1012));
+        assert_eq!(at(&[1, 3]), Some(0x1004));
+        assert_eq!(at(&[3]), None);
+        assert_eq!(at(&[1, 2]), None);
+        assert_eq!(at(&[]), None);
     }
 }

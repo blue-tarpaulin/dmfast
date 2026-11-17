@@ -10,6 +10,8 @@ one of the builds listed above it (which must be in <builds dir>) and checks it 
 
     py tools/depsig.py <builds dir>                  check every build against deps.rs
     py tools/depsig.py <builds dir> --accept <v,..>  also accept what those builds changed
+    --at <build>:<win|lin>:<name>=<address>         where a changed function is that no known form or prefix finds
+                                                    (its leading bytes changed); repeatable
 
 <builds dir>/<version>/ holds byondcore.dll and libbyond.so from that version's zips. A build that doesn't
 match is reported with an instruction diff and the counts that changed, and nothing is written: only
@@ -200,6 +202,9 @@ ANCHOR = {
         "FF FF 83 EC 0C FF 75 D4 89 55 A4 E8 ?? ?? ?? ?? 83 C4 10 8B 55 A4 0F B7 C8 89 4D A8 DB 45 A8 D9 45 D4 D9 C9 "
         "DF E9 DD D8",
 }
+
+# --at: (build, os, MANIFEST name) -> the function's address in that build.
+AT = {}
 
 md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
 md.detail = True
@@ -492,9 +497,9 @@ class Entry:
         self.since = None  # the first build checked (a patch that only installs from there)
 
 
-def find_form(img, fingerprint):
+def find_form(img, fingerprint, callers=None):
     """Address of the form if it occurs exactly once (its signature matches and the bytes there hash right), as
-    the runtime checks it."""
+    the runtime checks it; of several, the one whose call site count is in `callers` (a dep's accepted counts)."""
     prefix, n, holes, h = fingerprint
     toks = prefix.split()
     hits = []
@@ -502,13 +507,15 @@ def find_form(img, fingerprint):
         o = img.to_off(va)
         if any(s <= o and o + n <= s + m for s, m in img.exec) and fnv1a(img.data[o:o + n], holes) == h:
             hits.append(va)
+    if len(hits) > 1 and callers:
+        hits = [va for va in hits if img.calls[va] in callers]
     return hits[0] if len(hits) == 1 else None
 
 
 def locate(entry, img):
     """(form, address) of the first form that occurs exactly once, as the runtime picks it."""
     for f in entry.forms:
-        va = find_form(img, f.fingerprint)
+        va = find_form(img, f.fingerprint, entry.callers)
         if va is not None:
             return f, va
     return None
@@ -522,7 +529,7 @@ def rebuild(entry, os_, imgs):
         if f.raw is not None or not have:
             continue
         for v in have:
-            va = find_form(imgs[v], f.fingerprint)
+            va = find_form(imgs[v], f.fingerprint, entry.callers)
             if va is None:
                 continue
             raw, fixed = pattern(imgs[v], va, entry.split)
@@ -536,16 +543,19 @@ def rebuild(entry, os_, imgs):
     return None
 
 
-def find_changed(entry, img):
+def find_changed(entry, img, version):
     """(closest form, address) of a function no known form matches, by its leading bytes: the longest lead
-    (down to 16 bytes, if the function changed early) that is still unique; else, on Linux, the function
-    holding the entry's ANCHOR pattern."""
+    (down to 16 bytes, if the function changed early) that is still unique; else where --at puts it in this build;
+    else, on Linux, the function holding the entry's ANCHOR pattern."""
     for n0 in range(PREFIX, 15, -8):
         for f in (f for f in entry.forms if f.raw is not None):
             n = min(n0, len(f.raw))
             hits = matches(img, f.raw[:n], f.fixed[:n])
             if len(hits) == 1:
                 return f, hits[0]
+    va = AT.get((version, img.os, entry.name))
+    if va is not None and entry.forms and entry.forms[0].raw is not None:
+        return entry.forms[0], va
     ida = ANCHOR.get((img.os, entry.name))
     if ida and entry.forms and entry.forms[0].raw is not None:
         toks = ida.split()
@@ -568,7 +578,7 @@ def update(entry, os_, imgs, accept, problems):
         what = f"{os_} {entry.name} in {v}"
         m = locate(entry, img)
         if m is None:
-            c = find_changed(entry, img)
+            c = find_changed(entry, img, v)
             if c is None:
                 missing = sorted(set().union(*(f.builds for f in entry.forms if f.raw is None)))
                 problems.append(f"{what}: not found" + (f" (no bytes for the forms of {' '.join(missing)}: "
@@ -713,6 +723,11 @@ def main():
     accept = set()
     if "--accept" in sys.argv:
         accept = set(sys.argv[sys.argv.index("--accept") + 1].split(","))
+    for i, arg in enumerate(sys.argv):
+        if arg == "--at":
+            where, addr = sys.argv[i + 1].rsplit("=", 1)
+            build, os_, name = where.split(":", 2)
+            AT[(build, os_, name)] = int(addr, 16)
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     path = os.path.join(here, "patches", "src", "deps.rs")
     names = [(o, n) for o, _, n, _, _ in MANIFEST]
