@@ -9,11 +9,11 @@
 
 use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
+use crate::base::Result;
 use crate::base::code::{live_u32, read};
 use crate::base::driver::verify;
 use crate::base::feature::{Feature, Hosts, install};
 use crate::base::image::Image;
-use crate::base::{Result, ensure};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -135,13 +135,9 @@ unsafe extern "C" fn lookup(map: usize, name: u32, depth: u32, flag: u32) -> u32
     }
 }
 
-/// Points the lookup's callers at [`lookup`], except calls in code an earlier feature rewrote or matched.
+/// Points the lookup's callers at [`lookup`].
 fn redirect(core: &Image, f: usize) -> Result<String> {
-    let calls: Vec<usize> = core.calls_to(f)?.iter().copied().filter(|&c| !core.claimed(c, 5)).collect();
-    ensure!(!calls.is_empty(), "proc name lookup: no callers");
-    for &c in &calls {
-        core.retarget(c + 1, lookup as LookupFn)?;
-    }
+    let calls = core.redirect_calls(f, lookup as LookupFn)?;
     verify::ORIGINAL.set(f);
     Ok(core.report(&calls))
 }

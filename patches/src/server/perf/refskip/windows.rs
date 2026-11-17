@@ -120,16 +120,8 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
     dispatch(core, dec, 1, DEC_RETURN, &DEC_AT)?;
     INC_AT.original.set(inc);
     DEC_AT.original.set(dec);
-    // A call inside code an earlier feature rewrote or matched keeps calling the function.
-    let retarget = |f: usize, stub: *const ()| -> Result<usize> {
-        let calls: Vec<usize> = core.calls_to(f)?.iter().copied().filter(|&c| !core.claimed(c, 5)).collect();
-        ensure!(!calls.is_empty(), "reference count: no callers");
-        for &c in &calls {
-            core.retarget(c + 1, stub)?;
-        }
-        Ok(calls.len())
-    };
-    let (inc_calls, dec_calls) = (retarget(inc, inc_stub as *const ())?, retarget(dec, dec_stub as *const ())?);
+    let inc_calls = core.redirect_calls(inc, inc_stub as unsafe extern "C" fn())?.len();
+    let dec_calls = core.redirect_calls(dec, dec_stub as unsafe extern "C" fn())?.len();
     Ok(format!(
         "at +{:#x}, +{:#x}: {inc_calls} and {dec_calls} calls; {n} types return at once, {h} call their helper",
         inc - core.base,

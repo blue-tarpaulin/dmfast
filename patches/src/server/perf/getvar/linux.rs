@@ -1,10 +1,11 @@
-//! `getvar`, Linux: GetVariable's prologue is rewritten in place, the user var read's goes through [`var_read`].
-//! Both install, or neither.
+//! `getvar`, Linux: GetVariable keeps its bytes (auxtools 3 finds it by its prologue): its callers go to a copy of
+//! the prologue with the new loads, which jumps back into it. The user var read's prologue goes through
+//! [`var_read`]. Both install, or neither.
 
 use std::arch::naked_asm;
 
 use crate::base::Result;
-use crate::base::code::{Addr, Stub};
+use crate::base::code::{Addr, Stub, trampoline};
 use crate::base::feature::Ctx;
 
 const GETVAR: &str = "55 89 E5 57 56 53 83 EC 5C F3 0F 7E 4D 0C 8B 75 08 8B 5D 14 66 0F 6F C1 66 0F 7E CA 66 0F 73 D0 20 \
@@ -14,6 +15,9 @@ const VAR_READ: &str = "55 57 56 53 83 EC 44 F3 0F 7E 44 24 5C 8B 5C 24 58 0F 29
 /// prologue match is a cold twin without it).
 const UNDEFINED: &[u8] = b"undefined variable %s/var/%s\0";
 const ERROR_SPAN: usize = 0x400;
+
+/// GetVariable's prologue before the loads: push ebp ; mov ebp,esp ; push edi ; push esi ; push ebx ; sub esp,5Ch.
+const GETVAR_PROLOGUE: usize = 9;
 
 /// GetVariable at +9 (`ebp` frame; out, Value at +0Ch, ..): stock's `movq xmm1,[ebp+0Ch] ; mov esi,[ebp+8] ;
 /// mov ebx,[ebp+14h] ; movdqa xmm0,xmm1 ; movd edx,xmm1 ; psrlq xmm0,32` as dword loads: edx = lo,
@@ -79,11 +83,14 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
         core.rely(p, push.len())?;
     }
 
-    let sites = [(getvar + 9, GETVAR_NEW.len()), (read + READ_AT, READ_BACK - READ_AT)];
-    core.untouched(&sites)?;
+    core.untouched(&[(read + READ_AT, READ_BACK - READ_AT)])?;
+    let fast = trampoline(
+        &[core.bytes(getvar, GETVAR_PROLOGUE)?, &GETVAR_NEW].concat(),
+        getvar + GETVAR_PROLOGUE + GETVAR_NEW.len(),
+    )?;
+    let calls = core.redirect_calls(getvar, fast)?.len();
     BACK.set(read + READ_BACK);
-    core.write_code(getvar + 9, &GETVAR_NEW)?;
     // jmp var_read, then NOPs up to the call.
     core.write_stub(read + READ_AT, READ_BACK - READ_AT, Stub::new().jmp(var_read as unsafe extern "C" fn()))?;
-    Ok(format!("GetVariable +{:#x}, user var read +{:#x}", getvar - core.base, read - core.base))
+    Ok(format!("GetVariable +{:#x} ({calls} calls), user var read +{:#x}", getvar - core.base, read - core.base))
 }

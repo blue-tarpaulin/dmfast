@@ -1,8 +1,11 @@
-//! `argload`, Linux: rewrites of the three prologues, installed together or not at all.
+//! `argload`, Linux: faster IncRef and DecRef prologues and assign, installed together or not at all. IncRef keeps
+//! its bytes (auxtools 3 finds it by its prologue): its callers go to a copy of the prologue with the new loads,
+//! which jumps back into it. DecRef (auxtools finds it through `ByondValue_DecRef`'s calls) and assign are rewritten
+//! in place.
 
 use std::ffi::CStr;
 
-use crate::base::code::Stub;
+use crate::base::code::{Stub, trampoline};
 use crate::base::feature::Ctx;
 use crate::base::image::Image;
 use crate::base::{Result, ensure};
@@ -16,6 +19,8 @@ const ASSIGN: &str = "83 EC 2C 8B 44 24 30 F3 0F 7E 44 24 34 F3 0F 7E 08 66 0F D
 
 /// How far into the exported wrapper its call of the internal function may be.
 const WRAPPER_SPAN: usize = 0x400;
+/// IncRef's prologue before the loads: push ebp ; mov ebp,esp ; push esi ; push ebx ; sub esp,20h.
+const PROLOGUE: usize = 8;
 
 /// IncRef/DecRef at +8: stock's `movq xmm1,[ebp+8]` split into ecx = lo and `hi` (a register number) = hi, as two
 /// dword loads. xmm1 = lo|hi<<32 and xmm0 = hi as before, no flags touched (22 bytes).
@@ -71,12 +76,13 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
     );
     // eax and ebx: the high dword's register in IncRef and DecRef.
     let (inc, dec) = (refcount(0), refcount(3));
-    core.untouched(&[(incref + 8, inc.len()), (decref + 8, dec.len()), (assign_fn + 7, ASSIGN_LEN)])?;
-    core.write_code(incref + 8, &inc)?;
+    let fast_inc = trampoline(&[core.bytes(incref, PROLOGUE)?, &inc].concat(), incref + PROLOGUE + inc.len())?;
+    core.untouched(&[(decref + 8, dec.len()), (assign_fn + 7, ASSIGN_LEN)])?;
+    let calls = core.redirect_calls(incref, fast_inc)?.len();
     core.write_code(decref + 8, &dec)?;
-    core.write_stub(assign_fn + 7, ASSIGN_LEN, &assign(incref))?;
+    core.write_stub(assign_fn + 7, ASSIGN_LEN, &assign(fast_inc))?;
     Ok(format!(
-        "IncRef +{:#x}, DecRef +{:#x}, assign +{:#x}",
+        "IncRef +{:#x} ({calls} calls), DecRef +{:#x}, assign +{:#x}",
         incref - core.base,
         decref - core.base,
         assign_fn - core.base

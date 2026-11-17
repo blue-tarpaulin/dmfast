@@ -94,12 +94,6 @@ impl Image {
         Ok(())
     }
 
-    /// Whether an earlier feature wrote or relied on any of `addr..addr+len`, so a write there would conflict: for a
-    /// feature that rewrites many sites (call sites) and can leave some as they are.
-    pub fn claimed(&self, addr: usize, len: usize) -> bool {
-        crate::ledger::claimed(addr, len)
-    }
-
     /// Target of the rel8 field at `field` (the instruction ends right after it).
     pub fn rel8(&self, field: usize) -> Result<usize> {
         let [b] = self.array(field)?;

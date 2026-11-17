@@ -100,6 +100,19 @@ impl Image {
         self.write_code(field, &(target.code_addr().wrapping_sub(field + 4) as u32).to_le_bytes())
     }
 
+    /// Points every `call` to `target` at `to` instead, except calls inside code an earlier feature wrote or relied
+    /// on (those keep calling `target`): the way to replace a function that other tools find by its bytes, which stay
+    /// as they are. The call sites moved; `Err` if there are none.
+    pub fn redirect_calls(&self, target: usize, to: impl CodeAddr) -> Result<Vec<usize>> {
+        let to = to.code_addr();
+        let sites: Vec<usize> = self.calls_to(target)?.iter().copied().filter(|&c| !ledger::claimed(c, 5)).collect();
+        ensure!(!sites.is_empty(), "{target:#x}: no calls to redirect");
+        for &c in &sites {
+            self.retarget(c + 1, to)?;
+        }
+        Ok(sites)
+    }
+
     /// The conditional jump at `at` always jumps: `7x` becomes `EB`, `0F 8x` becomes `90 E9` (the same target). `Err`
     /// if `at` isn't a conditional jump.
     pub fn always_jump(&self, at: usize) -> Result<()> {
