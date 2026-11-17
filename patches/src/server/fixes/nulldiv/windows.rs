@@ -2,6 +2,7 @@
 //! used is left alone: other operators use it.
 
 use std::arch::naked_asm;
+use std::sync::atomic::{AtomicI32, Ordering::Relaxed};
 
 use super::{NULL, NUMBER};
 use crate::base::Result;
@@ -15,13 +16,17 @@ const NULL_CASE: &str = "51 C7 04 24 00 00 00 00 E9 ?? ?? ?? ?? FF B5 E4 FD FF F
 const FINISH_AT: usize = 8;
 /// The number case: `cmp byte [right type],2Ah ; jne ; movss xmm1,[right value] ; ucomiss xmm1,[0.0] ; lahf ;
 /// test ah,44h ; jnp div_by_zero ; movss xmm0,[left] ; divss xmm0,xmm1`.
-const NUMBER_CASE: &str = "80 BD E0 FD FF FF 2A 0F 85 ?? ?? ?? ?? F3 0F 10 8D B0 FD FF FF 0F 2E 0D ?? ?? ?? ?? 9F F6 C4 44 \
+const NUMBER_CASE: &str = "80 BD E0 FD FF FF 2A 0F 85 ?? ?? ?? ?? F3 0F 10 8D ?? FD FF FF 0F 2E 0D ?? ?? ?? ?? 9F F6 C4 44 \
                            0F 8B ?? ?? ?? ?? F3 0F 10 44 CA FC F3 0F 5E C1";
 /// Its `jnp div_by_zero`.
 const ERROR_AT: usize = 32;
-/// The right operand's type and value in the handler's frame (literals in [`NUMBER_CASE`]).
+/// Its `movss xmm1,[ebp+disp32]`'s displacement: the right operand's value in the handler's frame.
+const RIGHT_VALUE_AT: usize = 17;
+/// The right operand's type in the handler's frame (literal in [`NUMBER_CASE`]).
 const RIGHT_TYPE: i32 = -0x220;
-const RIGHT_VALUE: i32 = -0x250;
+
+/// The right operand's value's frame offset, read from the number case.
+static RIGHT_VALUE: AtomicI32 = AtomicI32::new(0);
 
 /// The "Division by zero" error and the null case's original continuation.
 static ERROR: Addr = Addr::new();
@@ -42,7 +47,10 @@ unsafe extern "C" fn null_div() {
         "jne 3f",
         "jmp dword ptr [{error}]",
         "2:",
-        "movss xmm1, dword ptr [ebp + {value}]",
+        "push eax",
+        "mov eax, dword ptr [{value}]",
+        "movss xmm1, dword ptr [ebp + eax]",
+        "pop eax",
         "ucomiss xmm1, dword ptr [{zero}]",
         // Equal and ordered: zero.
         "jp 3f",
@@ -53,7 +61,7 @@ unsafe extern "C" fn null_div() {
         "mov dword ptr [esp], 0",
         "jmp dword ptr [{finish}]",
         ty = const RIGHT_TYPE,
-        value = const RIGHT_VALUE,
+        value = sym RIGHT_VALUE,
         number = const NUMBER,
         null = const NULL,
         zero = sym ZERO,
@@ -75,6 +83,7 @@ pub(super) fn install(cx: &Ctx) -> Result<String> {
     core.expect(index + usize::from(NULL), &[0], "/ dispatch: null does not lead to the null case")?;
     core.expect(index + usize::from(NUMBER), &[3], "/ dispatch: a number does not lead to the number case")?;
     ERROR.set(core.rel32(num + ERROR_AT + 2)?);
+    RIGHT_VALUE.store(core.u32_at(num + RIGHT_VALUE_AT)? as i32, Relaxed);
     FINISH.set(core.rel32(null + FINISH_AT + 1)?);
     core.write_code(table, &(null_div as unsafe extern "C" fn() as usize as u32).to_le_bytes())?;
     Ok(core.report(&[table]))
