@@ -6,6 +6,9 @@ usage: fixtest.py [-s <stock bin dir>] <dmfast bin dir> [key...]
 tests/fixes/<key>.dme must print <key>.expected with DMFAST_FIXES=<key> and =breaking, and not on stock. Each
 tests/fixes/<key>-<name>.dme beside it is only compiled; its errors and warnings follow, as "dm <key>-<name>: ...".
 tests/fixes/keep/*.dme must print the same on stock, safe and extended. A fix that didn't install is n/a.
+A leak fix also has tests/fixes/<key>.leak: an iteration count n, the world's "n" param for memory runs. Its peak
+memory's growth from n to 2n iterations must shrink to under a quarter with DMFAST_FIXES=<key>; then stock may print
+the expected output.
 Stock defaults to the stock programs in backup/ beside dmfast. Exits non-zero on a failure.
 """
 import argparse, contextlib, difflib, os, re, shutil, subprocess, sys, tempfile
@@ -66,6 +69,15 @@ def world(dm, dd, fixes, tests, key, work):
         for p in {str(d), d.as_posix()}:
             text = text.replace(p, "#dir")
     return text, byond.dmfast_lines(dm_out + dd_out + log)
+
+
+def growth(dd, fixes, work, key, n):
+    """MB the world tests/<key>.dme that world() last built in work/t peaks higher at 2n iterations than at n, or None if
+    a run failed."""
+    env = byond.env(dd.parent, DMFAST_FIXES=fixes)
+    peaks = [byond.peak([dd, f"{key}.dmb", "-trusted", "-invisible", "-ip", "127.0.0.1", "-params", f"n={i}"],
+                        work / "t", env, 300) for i in (n, 2 * n)]
+    return None if any(rc for rc, _ in peaks) else peaks[1][1] - peaks[0][1]
 
 
 def diff(a, b, la, lb):
@@ -131,17 +143,30 @@ def check(fast, stock=None, keys=()):
                 if got != expected:
                     print(f"::error::fix {key}: wrong output with DMFAST_FIXES={fx}:\n{diff(expected, got, 'expected', 'got')}")
                     bad = True
+            leak = TESTS / f"{key}.leak"
+            leaks = None  # the memory runs' growth in MB without the fix and with it, for a leak fix
+            if not bad and leak.exists():
+                n = int(leak.read_text("utf-8"))
+                leaks = tuple(growth(fdd, fx, kw, key, n) for fx in ("", key))
+                if None in leaks:
+                    print(f"::error::fix {key}: a memory run failed")
+                    bad = True
+                elif leaks[0] <= 0 or leaks[1] * 4 > leaks[0]:
+                    print(f"::error::fix {key}: from {n} to {2 * n} iterations, memory grows {leaks[0]:.1f} MB without "
+                          f"the fix and {leaks[1]:.1f} MB with it")
+                    bad = True
             if bad:
                 result(key, "fail", "FAIL")
             elif stock_out == expected and key == "inodes" and os.stat(kw).st_ino < 2**32:
                 print("fix inodes: n/a (this filesystem has 32-bit inode numbers, so stock works too; the output with the fix is right)")
                 result(key, "na", "n/a")
-            elif stock_out == expected:
+            elif stock_out == expected and not leaks:
                 print(f"::warning::fix {key}: stock BYOND already gives the expected output (fixed upstream, or the test doesn't reproduce the bug)")
                 result(key, "na", "not needed")
             else:
                 crash = " (stock BYOND crashes on this test, as expected)" if "\ndd: crashed" in "\n" + stock_out else ""
-                print(f"fix {key}: pass{crash}")
+                memory_run = f" (memory grows {leaks[0]:.1f} MB without the fix, {leaks[1]:.1f} MB with it)" if leaks else ""
+                print(f"fix {key}: pass{crash}{memory_run}")
                 result(key, "pass", "ok")
 
         # Regression worlds: stock, safe and extended must agree.

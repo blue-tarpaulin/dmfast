@@ -38,6 +38,34 @@ def run(cmd, cwd, env, limit):
     return rc, out.decode("utf-8", "replace").replace("\r", "")
 
 
+def peak(cmd, cwd, env, limit):
+    """(exit code, peak memory in MB) of a run, as run(): its peak working set (Windows) or resident set (Linux),
+    which shows small leaks a heap's committed reserve hides."""
+    p = subprocess.Popen([str(c) for c in cmd], cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if not WIN:
+        try:
+            _, status, usage = os.wait4(p.pid, 0)  # no timeout: memory runs are short
+        finally:
+            p.returncode = 0
+        return os.waitstatus_to_exitcode(status), usage.ru_maxrss / 1024
+    import ctypes
+    from ctypes import wintypes
+
+    class Counters(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("faults", wintypes.DWORD)] + \
+                   [(n, ctypes.c_size_t) for n in ("peak_ws", "ws", "a", "b", "c", "d", "pagefile", "peak_pagefile")]
+    try:
+        rc = p.wait(limit)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        p.wait()
+        rc = TIMEOUT
+    m = Counters()
+    m.cb = ctypes.sizeof(m)
+    ctypes.windll.psapi.GetProcessMemoryInfo(int(p._handle), ctypes.byref(m), m.cb)
+    return rc, m.peak_ws / 2**20
+
+
 def crashed(rc):
     """A run's exit code means the process died (signal on Linux, NTSTATUS exception on Windows)."""
     return rc in (134, 139) or rc >= 0xC0000000 or (WIN and rc == 3)
