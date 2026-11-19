@@ -4,6 +4,8 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
+- **New patch:** `procshare` (DreamDaemon): each type's proc table keeps only the procs it defines, and calls by name look the rest up in its parents. ~475 MB less memory on tg (~34%) and ~20% faster world load.
+
 ## 8.1.0
 
 - **Fixed:** Fixed support for BYOND 516.1689.

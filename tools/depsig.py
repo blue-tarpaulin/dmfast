@@ -109,16 +109,24 @@ MANIFEST = [
     ("lin", ("iconstates",), "icon_states builder", 0x426890, {}),
     # other runtime patches
     ("win", ("procs",), "proc table find-or-add", 0x10226960, {}),
-    ("win", ("sortmap",), "sorted map merge", 0x1020F2F0, {"callers": True}),
+    ("win", ("sortmap", "procshare"), "sorted map merge", 0x1020F2F0, {"callers": True}),
     ("win", ("sortmap",), "sorted map insert", 0x101EE870, {}),
     ("win", ("crc",), "CRC-32", 0x102455C0, {}),
     ("win", ("varlist",), "var list merge", 0x10117EC0, {}),
     ("win", ("varlist",), "var list pass", 0x1011A960, {}),
     ("win", ("dmicmp",), "icon state name compare", 0x100A5E20, {"split": True}),
     ("lin", ("procs",), "proc table find-or-add", 0x2ED8C0, {}),
-    ("lin", ("sortmap",), "sorted map merge", 0x2ECBD0, {"callers": True}),
+    ("lin", ("sortmap", "procshare"), "sorted map merge", 0x2ECBD0, {"callers": True}),
     ("lin", ("sortmap",), "sorted map insert", 0x2ECAC0, {}),
     ("lin", ("crc",), "CRC-32", 0x4A4C30, {}),
+    # procshare: a type's proc table is written only while it is built (the builder and the merge it calls),
+    # read otherwise only through the getter (whose one caller's name lookup procshare replaces), and freed only by
+    # the teardown's free
+    ("win", ("procshare",), "type proc table builder", 0x101EFF50, {"since": "516.1686"}),
+    ("win", ("procshare",), "type proc table getter", 0x10203070, {"callers": True}),
+    ("win", ("procshare",), "type proc table free", 0x101FC010, {"callers": True}),
+    ("lin", ("procshare",), "type proc table builder", 0x2ED000, {"since": "516.1686"}),
+    ("lin", ("procshare",), "type proc table getter", 0x2EC7C0, {"callers": True}),
     # argload rewrites these prologues in place: the rest of each function must not branch into them or rely
     # on what the rewrite changes (assign: its call's return address, the dead arg slot it writes early)
     ("lin", ("argload",), "value IncRef", 0x2EE220, {"globals": False}),

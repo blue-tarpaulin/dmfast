@@ -12,6 +12,7 @@ pub mod mapskip;
 pub mod msgpool;
 pub mod procname;
 pub mod procs;
+pub mod procshare;
 pub mod refskip;
 pub mod seenclear;
 pub mod sortmap;

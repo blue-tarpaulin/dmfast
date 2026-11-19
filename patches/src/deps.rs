@@ -278,7 +278,7 @@ pub static WINDOWS: &[Dep] = &[
     },
     // dep: sorted map merge
     Dep {
-        keys: &["sortmap"],
+        keys: &["sortmap", "procshare"],
         globals: &[],
         callers: &[2],
         variants: &[
@@ -339,6 +339,38 @@ pub static WINDOWS: &[Dep] = &[
         variants: &[
             // builds: 515.1647 516.1648 516.1649 516.1650 516.1651 516.1652 516.1653 516.1655 516.1656 516.1657 516.1658 516.1659 516.1660 516.1661 516.1662 516.1663 516.1664 516.1665 516.1666 516.1667 516.1668 516.1669 516.1670 516.1671 516.1672 516.1673 516.1674 516.1675 516.1676 516.1677 516.1678 516.1679 516.1680 516.1681 516.1682 516.1683 516.1684 516.1685 516.1686 516.1687 516.1688 516.1689
             Variant { prefix: "55 8B EC 53 56 8B 75 08 57 8B 7D 0C 3B F7 0F 84 7D 00 00 00 85 F6 0F 84 7C 00 00 00 85 FF 74 63 0F BE 06 50 FF 15 ?? ?? ?? ?? 8A F8 8D 76 01 83", len: 0xa0, holes: &[(0x26, 4), (0x3c, 4), (0x56, 4), (0x6a, 4)], hash: 0xf843bdaa0859611c, globals: &[] },
+        ],
+    },
+    // dep: type proc table builder
+    // globals in 516.1688: 0x10430c04 0x10430c00 0x10430c14 0x10430c10 0x10430bcc 0x10430bc8 0x10430bd0
+    Dep {
+        keys: &["procshare"],
+        globals: &[&[77, 78], &[73, 74], &[58], &[24], &[56], &[35], &[9]],
+        callers: &[],
+        variants: &[
+            // builds: 516.1686 516.1687 516.1688 516.1689
+            Variant { prefix: "55 8B EC 83 EC 08 53 8B 5D 0C 56 57 8B 5B 64 3B 1D ?? ?? ?? ?? 0F 83 7F 00 00 00 A1 ?? ?? ?? ?? 8B 1C 98 85 DB 74 73 33 C0 33 F6 66 3B 03 73 6A", len: 0x11b, holes: &[(0x11, 4), (0x1c, 4), (0x3b, 4), (0x4a, 4), (0x61, 4), (0x6d, 4), (0x84, 4), (0x90, 4), (0xaa, 4), (0xba, 4), (0xc5, 4), (0xe9, 4), (0xf2, 4), (0xfe, 4), (0x110, 4)], hash: 0xd4fc44482fcf229c, globals: &[0x11, 0x1c, 0x3b, 0x4a, 0xaa, 0xba, 0xc5] },
+        ],
+    },
+    // dep: type proc table getter
+    // globals in 516.1688: 0x10430bcc 0x10430bd0
+    Dep {
+        keys: &["procshare"],
+        globals: &[&[56, 57, 59, 60], &[9]],
+        callers: &[1],
+        variants: &[
+            // builds: 515.1647 516.1648 516.1649 516.1650 516.1651 516.1652 516.1653 516.1655 516.1656 516.1657 516.1658 516.1659 516.1660 516.1661 516.1662 516.1663 516.1664 516.1665 516.1666 516.1667 516.1668 516.1669 516.1670 516.1671 516.1672 516.1673 516.1674 516.1675 516.1676 516.1677 516.1678 516.1679 516.1680 516.1681 516.1682 516.1683 516.1684 516.1685 516.1686 516.1687 516.1688 516.1689
+            Variant { prefix: "55 8B EC 8B 4D 08 3B 0D ?? ?? ?? ?? 77 0A A1 ?? ?? ?? ?? 8D 04 C8 5D C3 33 C0 5D C3", len: 0x1c, holes: &[(0x8, 4), (0xf, 4)], hash: 0x619cfc83ccd97e21, globals: &[0x8, 0xf] },
+        ],
+    },
+    // dep: type proc table free
+    Dep {
+        keys: &["procshare"],
+        globals: &[],
+        callers: &[3],
+        variants: &[
+            // builds: 515.1647 516.1648 516.1649 516.1650 516.1651 516.1652 516.1653 516.1655 516.1656 516.1657 516.1658 516.1659 516.1660 516.1661 516.1662 516.1663 516.1664 516.1665 516.1666 516.1667 516.1668 516.1669 516.1670 516.1671 516.1672 516.1673 516.1674 516.1675 516.1676 516.1677 516.1678 516.1679 516.1680 516.1681 516.1682 516.1683 516.1684 516.1685 516.1686 516.1687 516.1688 516.1689
+            Variant { prefix: "53 56 8B F1 33 C0 33 DB 66 3B 46 04 73 2E 57 90 0F B7 C3 8D 0C 40 8B 06 FF 74 88 04 8D 3C 88 E8 ?? ?? ?? ?? 33 C0 C7 47 04 00 00 00 00 43 66 89", len: 0x59, holes: &[(0x20, 4), (0x40, 4)], hash: 0xe6dbff4124a6d77a, globals: &[] },
         ],
     },
     // dep: record pool allocator
@@ -837,7 +869,7 @@ pub static LINUX: &[Dep] = &[
     // dep: sorted map merge
     // globals in 516.1688: 0x7f8014 0x7f8018
     Dep {
-        keys: &["sortmap"],
+        keys: &["sortmap", "procshare"],
         globals: &[&[66], &[27]],
         callers: &[1],
         variants: &[
@@ -864,6 +896,28 @@ pub static LINUX: &[Dep] = &[
         variants: &[
             // builds: 515.1647 516.1648 516.1649 516.1650 516.1651 516.1652 516.1653 516.1655 516.1656 516.1657 516.1658 516.1659 516.1660 516.1661 516.1662 516.1663 516.1664 516.1665 516.1666 516.1667 516.1668 516.1669 516.1670 516.1671 516.1672 516.1673 516.1674 516.1675 516.1676 516.1677 516.1678 516.1679 516.1680 516.1681 516.1682 516.1683 516.1684 516.1685 516.1686 516.1687 516.1688 516.1689
             Variant { prefix: "80 3D ?? ?? ?? ?? 00 56 53 8B 4C 24 14 0F 85 80 01 00 00 C6 05 ?? ?? ?? ?? 01 B8 ?? ?? ?? ?? 66 0F 6F 25 ?? ?? ?? ?? 66 0F EF C0 66 0F 6F 2D ??", len: 0x1c6, holes: &[(0x2, 4), (0x15, 4), (0x1b, 4), (0x23, 4), (0x2f, 4), (0x37, 4), (0x189, 4), (0x1bb, 4)], hash: 0xc69c7139b45e5b97, globals: &[0x2, 0x1b, 0x189] },
+        ],
+    },
+    // dep: type proc table builder
+    // globals in 516.1688: 0x7f8094 0x7f8098 0x7f8090 0x7f8054 0x7f8058 0x7f8014 0x7f8018
+    Dep {
+        keys: &["procshare"],
+        globals: &[&[64], &[44], &[8], &[83, 84], &[81, 82], &[66], &[27]],
+        callers: &[],
+        variants: &[
+            // builds: 516.1686 516.1687 516.1688 516.1689
+            Variant { prefix: "55 57 56 53 83 EC 1C 8B 44 24 30 3B 05 ?? ?? ?? ?? 73 2A 3D FF FF 00 00 74 23 69 D0 94 00 00 00 89 D1 03 0D ?? ?? ?? ?? 89 4C 24 0C 74 0F 8B 15", len: 0x15c, holes: &[(0xd, 4), (0x24, 4), (0x30, 4), (0x4d, 4), (0x59, 4), (0x8b, 4), (0x91, 4), (0x9a, 4), (0xb3, 4), (0xc4, 4), (0xe2, 4), (0xf3, 4), (0x139, 4), (0x141, 4), (0x156, 4)], hash: 0xf3215b79f1043da7, globals: &[0xd, 0x24, 0x30, 0x4d, 0x59, 0x8b, 0x9a] },
+        ],
+    },
+    // dep: type proc table getter
+    // globals in 516.1688: 0x7f8094 0x7f8090
+    Dep {
+        keys: &["procshare"],
+        globals: &[&[64, 65], &[8]],
+        callers: &[1],
+        variants: &[
+            // builds: 515.1647 516.1648 516.1649 516.1650 516.1651 516.1652 516.1653 516.1655 516.1656 516.1657 516.1658 516.1659 516.1660 516.1661 516.1662 516.1663 516.1664 516.1665 516.1666 516.1667 516.1668 516.1669 516.1670 516.1671 516.1672 516.1673 516.1674 516.1675 516.1676 516.1677 516.1678 516.1679 516.1680 516.1681 516.1682 516.1683 516.1684 516.1685 516.1686 516.1687 516.1688 516.1689
+            Variant { prefix: "8B 54 24 04 31 C0 39 15 ?? ?? ?? ?? 72 08 A1 ?? ?? ?? ?? 8D 04 D0 C3", len: 0x17, holes: &[(0x8, 4), (0xf, 4)], hash: 0xf8c62c22eb80665a, globals: &[0x8, 0xf] },
         ],
     },
     // dep: value IncRef
@@ -1119,4 +1173,4 @@ pub static LINUX: &[Dep] = &[
 ];
 
 /// Every key the guards name, on either OS: dmfast's tests check that each is a feature.
-pub static KEYS: &[&str] = &["argload", "children", "crc", "dirs", "dmbread", "dmicmp", "fastexit", "filter", "ftell", "getvar", "iconchain", "iconstates", "internidx", "leafskip", "listinit", "lists", "locidx", "mapskip", "msgpool", "parent", "procs", "protos", "resources", "seenclear", "slots", "sortmap", "strings", "strtab", "strtable", "strtree", "treeskip", "turfpf", "turfvar", "varlist", "varread", "vecgrow"];
+pub static KEYS: &[&str] = &["argload", "children", "crc", "dirs", "dmbread", "dmicmp", "fastexit", "filter", "ftell", "getvar", "iconchain", "iconstates", "internidx", "leafskip", "listinit", "lists", "locidx", "mapskip", "msgpool", "parent", "procs", "procshare", "protos", "resources", "seenclear", "slots", "sortmap", "strings", "strtab", "strtable", "strtree", "treeskip", "turfpf", "turfvar", "varlist", "varread", "vecgrow"];

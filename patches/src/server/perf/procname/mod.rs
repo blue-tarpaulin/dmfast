@@ -5,6 +5,7 @@
 //! It's exact: an array's names are unique, so the remembered entry is used only if it still holds the name, within
 //! the array's count, and is then the entry the search would find; what is returned from it is BYOND's own logic.
 //! Anything else runs the search. The callers move, not the function, so tools that find it by its bytes still do.
+//! With `procshare`, calls on a type's table are its own (installed first, so that call is left alone).
 //! No dependency guard: the signature is the whole lookup.
 
 use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
@@ -21,16 +22,22 @@ mod verify;
 #[cfg(windows)]
 mod windows;
 
+#[cfg(target_os = "linux")]
+pub(in crate::server::perf) use linux::LOOKUP;
+#[cfg(windows)]
+pub(in crate::server::perf) use windows::LOOKUP;
+
 pub static PROCNAME: Feature = Feature::perf(
     Hosts::SERVER,
     "procname",
     "proc name lookup",
     install!(windows: windows::install, linux: linux::install),
 )
+.after(&[&super::procshare::PROCSHARE])
 .stats(verify::print_stats);
 
 /// BYOND's lookup: (map, name, depth, flag) -> proc id or 0xFFFF.
-type LookupFn = unsafe extern "C" fn(usize, u32, u32, u32) -> u32;
+pub(in crate::server::perf) type LookupFn = unsafe extern "C" fn(usize, u32, u32, u32) -> u32;
 
 /// The map: entries, then the count (u16). Each entry: name (dword), overrides (dword array), their count (u16),
 /// a flag byte.
@@ -40,7 +47,7 @@ const ENTRY: usize = 12;
 const OVERRIDES: usize = 4;
 const OVERRIDE_COUNT: usize = 8;
 const FLAG: usize = 0xA;
-const NONE: u32 = 0xFFFF;
+pub(in crate::server::perf) const NONE: u32 = 0xFFFF;
 
 const SLOT_BITS: u32 = 12;
 
@@ -64,7 +71,7 @@ fn slot(map: usize, name: u32) -> &'static Slot {
 ///
 /// # Safety
 /// `e` is a live entry.
-unsafe fn answer(e: usize, depth: u32, flag: u32) -> u32 {
+pub(in crate::server::perf) unsafe fn answer(e: usize, depth: u32, flag: u32) -> u32 {
     // SAFETY: a live entry (caller) and its override array.
     unsafe {
         let depth = depth as u8;
@@ -82,7 +89,7 @@ unsafe fn answer(e: usize, depth: u32, flag: u32) -> u32 {
 ///
 /// # Safety
 /// `entries` holds `count` live entries.
-unsafe fn search(entries: usize, count: u32, name: u32) -> Option<u32> {
+pub(in crate::server::perf) unsafe fn search(entries: usize, count: u32, name: u32) -> Option<u32> {
     let (mut lo, mut hi) = (0u32, count);
     while lo < hi {
         let mid = (lo + hi) >> 1;

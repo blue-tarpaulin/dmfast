@@ -47,6 +47,7 @@ on, and how much more peak memory the patch uses. `map_cpu` numbers are with ~50
 | .dmb reader | `dmbread` | both | 1.16 s | 100% | Buffered whole-value reads (.dmb, also savefiles), cached ftell |
 | Proc-table index | `procs` | both | 1.04 s | 91% | Hash index for proc table find-or-add |
 | String tree | `strtree` | both | 0.23 s, +5 MB | 20% | Hash index replaces string tree walks |
+| Own proc tables | `procshare` | both | 0.21 s, −475 MB | 26% | Each type's proc table keeps only the names it defines; calls by name look the rest up in its parents' and remember the answer |
 | Var list merge | `varmerge` | Linux | ~0.1 s | ~7% | Inherited vars append in name order instead of searching for each one's place |
 | CRC-32 | `crc` | both | 0.07 s | 6% | Checksums eight bytes per step |
 | Var list inheritance | `varlist` | Windows | 0.04 s | 4% | Types without own vars reuse the parent's var list |

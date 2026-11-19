@@ -44,6 +44,7 @@ pub static FEATURES: &[&Feature] = &[
     &server::perf::crc::CRC,
     &server::perf::strtable::STRTABLE,
     &server::perf::varlist::VARLIST,
+    &server::perf::procshare::PROCSHARE,
     &server::perf::varmerge::VARMERGE,
     &server::perf::dmicmp::DMICMP,
     &server::perf::iconstates::ICONSTATES,

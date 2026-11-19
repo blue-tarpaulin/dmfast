@@ -105,9 +105,11 @@ impl Image {
     /// as they are. The call sites moved; `Err` if there are none.
     pub fn redirect_calls(&self, target: usize, to: impl CodeAddr) -> Result<Vec<usize>> {
         let to = to.code_addr();
-        let sites: Vec<usize> = self.calls_to(target)?.iter().copied().filter(|&c| !ledger::claimed(c, 5)).collect();
+        let sites: Vec<usize> =
+            self.probe_calls_to(target)?.iter().copied().filter(|&c| !ledger::claimed(c, 5)).collect();
         ensure!(!sites.is_empty(), "{target:#x}: no calls to redirect");
         for &c in &sites {
+            self.rely(c, 5)?;
             self.retarget(c + 1, to)?;
         }
         Ok(sites)
