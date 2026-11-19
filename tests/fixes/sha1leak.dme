@@ -1,0 +1,23 @@
+// sha1leak: sha1() never frees SHA-1's 20-byte digest, and on a file never frees its 4 KB read buffer either. The
+// leak isn't visible from DM: fixtest's memory runs (sha1leak.leak) hash n and 2n texts and a file every 100th,
+// and the default run checks the hashes.
+/proc/leak(n)
+	var/F = file("sha1leak.txt")
+	for(var/i in 1 to n)
+		. = sha1("t[i]")
+		if(i % 100 == 0)
+			. = sha1(F)
+
+/proc/check()
+	var/a = "a" // not a constant: DreamMaker hashes constant text itself
+	world.log << "text: [sha1("[a]bc")]"
+	world.log << "file: [sha1(file("sha1leak.txt"))]" // the file holds "abc"
+
+/world/New()
+	..()
+	var/n = text2num(world.params["n"])
+	if(n)
+		leak(n)
+	else
+		check()
+	shutdown()
