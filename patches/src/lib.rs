@@ -72,6 +72,7 @@ pub static FEATURES: &[&Feature] = &[
     &compiler::fixes::regexstart::REGEXSTART,
     &compiler::fixes::varlimit::VARLIMIT,
     &compiler::fixes::finalpath::FINALPATH,
+    &compiler::fixes::overridetype::OVERRIDETYPE,
     // DreamDaemon bug fixes.
     &server::fixes::urlcrlf::URLCRLF,
     &server::fixes::jsonutf::JSONUTF,

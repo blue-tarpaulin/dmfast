@@ -1,0 +1,8 @@
+found: open metal door
+2: /obj/door/wood/open open wood door open=1
+1: /obj/door/metal/open open metal door open=1
+/obj/door: door door 0
+/obj/door/metal: metal door door 0
+/obj/door/metal/open: open metal metal door open metal door 1
+/obj/door/wood: wood door door 0
+/obj/door/wood/open: wood door open wood door 1

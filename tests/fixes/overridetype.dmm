@@ -1,0 +1,6 @@
+"a" = (/turf,/area)
+"b" = (/obj/door/wood/open,/turf,/area)
+
+(1,1,1) = {"
+ab
+"}

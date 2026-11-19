@@ -1,0 +1,48 @@
+// Forum report 2992612: a subtype named like a proc override on the same type (/obj/door/metal/open and
+// /obj/door/metal/open()) was merged into the override when defined after it (new made nothing, and its var
+// overrides ran as part of the proc), and a duplicate definition when defined before it.
+/world
+	maxx = 2
+	maxy = 1
+	maxz = 1
+
+/obj/door
+	name = "door"
+	var/open = 0
+
+/obj/door/proc/open()
+	open = 1
+	return "door"
+
+// The report's order: the override first.
+/obj/door/metal/open()
+	return "metal [..()]"
+
+/obj/door/metal/open
+	name = "open metal door"
+	open = 1
+
+/obj/door/metal/open/open()
+	return "open metal [..()]"
+
+// The other order, in a block.
+/obj/door/wood
+	open
+		name = "open wood door"
+		open = 1
+	open()
+		return "wood [..()]"
+
+#include "overridetype.dmm"
+
+/world/New()
+	new /obj/door/metal/open(locate(1, 1, 1))
+	var/obj/door/metal/open/found = locate() in world
+	world.log << "found: [found ? found.name : "nothing"]"
+	for(var/obj/door/d in world)
+		world.log << "[d.x]: [d.type] [d.name] open=[d.open]"
+	for(var/T in typesof(/obj/door))
+		var/obj/door/d = new T
+		var/was = d.open
+		world.log << "[T]: [d.open()] [d.name] [was]"
+	shutdown()

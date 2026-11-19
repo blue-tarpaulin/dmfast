@@ -13,6 +13,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New fix:** `sha1leak` (safe): `sha1()` no longer leaks memory.
 - **New fix:** `dbleak` (safe): `/database/query`'s `GetRowData()` and `Columns()` no longer leak their lists.
 - **New fix:** `callleak` (safe): `call(src, /proc/path)(...)` with named args or `arglist()` no longer leaks its args.
+- **New fix:** `overridetype` (extended): a subtype named like a proc override on the same type (`/obj/door/open()` and `/obj/door/open`) is a type of its own, instead of being merged into the proc or being a duplicate definition.
 
 ## 8.1.0
 
