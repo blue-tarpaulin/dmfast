@@ -12,6 +12,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New fix:** `overlayleak` (safe, Windows): using a `/mutable_appearance` whose overlays changed no longer leaks memory.
 - **New fix:** `sha1leak` (safe): `sha1()` no longer leaks memory.
 - **New fix:** `dbleak` (safe): `/database/query`'s `GetRowData()` and `Columns()` no longer leak their lists.
+- **New fix:** `callleak` (safe): `call(src, /proc/path)(...)` with named args or `arglist()` no longer leaks its args.
 
 ## 8.1.0
 

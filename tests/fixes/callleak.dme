@@ -1,0 +1,41 @@
+// callleak: call(src, /proc/path)(args) with named args or arglist() keeps a reference to its args on stock BYOND,
+// so they and what they hold are never freed. refcount() shows it; fixtest's memory runs (callleak.leak) also make n
+// and 2n calls.
+/datum/thing/proc/pr(z, y)
+	return z
+
+/datum/thing/proc/later(z)
+	set waitfor = FALSE
+	sleep(1)
+	world.log << "later: [z[1]], references [refcount(z)]"
+
+/proc/leak(n)
+	var/datum/thing/t = new
+	for(var/i in 1 to n)
+		call(t, /datum/thing/proc/pr)(z = list(i))
+		call(t, /datum/thing/proc/pr)(arglist(list(i, i)))
+
+/proc/check()
+	var/datum/thing/t = new
+	var/datum/o = new
+	var/list/L = list(o, 2)
+	for(var/i in 1 to 3)
+		call(t, /datum/thing/proc/pr)(arglist(L))
+	world.log << "arglist: references [refcount(L)]"
+	var/datum/p = new
+	for(var/i in 1 to 3)
+		call(t, /datum/thing/proc/pr)(z = p)
+	world.log << "named: references [refcount(p)]"
+	world.log << "result: [call(t, /datum/thing/proc/pr)(arglist(list("y" = 1, "z" = "ok")))]"
+	world.log << "text name: [call(t, "pr")(z = "ok")]"
+	call(t, /datum/thing/proc/later)(z = list("kept"))
+	sleep(2)
+
+/world/New()
+	..()
+	var/n = text2num(world.params["n"])
+	if(n)
+		leak(n)
+	else
+		check()
+	shutdown()
