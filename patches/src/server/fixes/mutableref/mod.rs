@@ -1,4 +1,5 @@
-//! `mutableref`: a `/mutable_appearance` keeps the strings and lists it shows alive.
+//! `mutableref` (forum reports 2992947, 2992948 and 2992949): a `/mutable_appearance` keeps the strings and lists it
+//! shows alive.
 //!
 //! A mutable appearance's working copy can borrow another appearance's fields (its strings and overlay lists)
 //! without its own references, as long as it holds a reference on that appearance. `ma.appearance = X` borrows X's
