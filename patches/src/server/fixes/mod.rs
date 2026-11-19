@@ -21,5 +21,6 @@ pub mod profself;
 pub mod rscid;
 pub mod tick;
 pub mod urlcrlf;
+pub mod utf8leak;
 pub mod varoverride;
 pub mod visleak;

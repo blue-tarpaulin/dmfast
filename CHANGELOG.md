@@ -8,6 +8,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New fix:** `mutableref` (safe): a `/mutable_appearance` keeps the look it was given after the source is gone, keeps runtime `render_target`/`render_source`, and no longer leaks the appearance it was made from.
 - **New fix:** `filterleak` (safe): writing a var on a filter no longer leaks memory.
 - **New fix:** `visleak` (safe, Windows): an image put in and taken out of `vis_contents` no longer leaks memory.
+- **New fix:** `utf8leak` (safe): `html_decode()`, `url_decode()` and `params2list()` of text that isn't UTF-8 no longer leak memory.
 
 ## 8.1.0
 

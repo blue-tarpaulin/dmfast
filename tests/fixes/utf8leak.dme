@@ -1,0 +1,25 @@
+// utf8leak: text that isn't UTF-8 (html_decode of "&eacute;", url_decode of "%E9") becomes a string through a
+// converted copy that stock BYOND never frees. The leak isn't visible from DM: fixtest's memory runs (utf8leak.leak)
+// decode n and 2n texts, and the default run checks that decoded strings are right, new or already existing.
+/proc/leak(n)
+	for(var/i in 1 to n)
+		var/s = html_decode("caf&eacute; [i]")
+
+/proc/check()
+	var/a = html_decode("caf&eacute; &copy; [rand(1, 1000000)]")
+	var/b = html_decode("caf&eacute;")
+	var/c = html_decode("caf&eacute;")
+	world.log << "html: [length(a) > 9] [b] [b == c] [length(b)] [text2ascii(b, 4)]"
+	var/d = url_decode("caf%E9")
+	world.log << "url: [d] [d == b] [text2ascii(d, 4)]"
+	var/list/p = params2list("k=%E9t%E9")
+	world.log << "params: [p["k"]] [text2ascii(p["k"], 1)]"
+
+/world/New()
+	..()
+	var/n = text2num(world.params["n"])
+	if(n)
+		leak(n)
+	else
+		check()
+	shutdown()
