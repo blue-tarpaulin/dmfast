@@ -17,6 +17,7 @@ pub mod minmax;
 pub mod mutableref;
 pub mod nulldiv;
 pub mod num2sig;
+pub mod outputleak;
 pub mod overlayleak;
 pub mod pickweight;
 pub mod profcpu;

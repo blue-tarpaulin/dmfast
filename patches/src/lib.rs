@@ -103,6 +103,7 @@ pub static FEATURES: &[&Feature] = &[
     &server::fixes::sha1leak::SHA1LEAK,
     &server::fixes::dbleak::DBLEAK,
     &server::fixes::callleak::CALLLEAK,
+    &server::fixes::outputleak::OUTPUTLEAK,
     // Fixes for both programs.
     &common::fixes::inodes::INODES,
     // Installed last, to skip call sites other features rewrote or matched.
