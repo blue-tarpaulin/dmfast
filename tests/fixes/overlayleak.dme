@@ -1,0 +1,36 @@
+// overlayleak: on Windows, turning a /mutable_appearance's changed overlay or underlay list back into an appearance's
+// (o.appearance = m, o.overlays += m, reading m.appearance) mallocs a block it never uses or frees. The leak isn't
+// visible from DM: fixtest's memory runs (overlayleak.leak) read n and 2n appearances of 50 overlays, and the
+// default run checks that the lists come through.
+/proc/leak(n)
+	var/list/L = list()
+	for(var/i in 1 to 50)
+		L += "k[i]"
+	for(var/i in 1 to n)
+		var/mutable_appearance/m = new
+		m.overlays = L
+		var/a = m.appearance
+
+/proc/check()
+	var/mutable_appearance/m = new
+	m.icon_state = "base"
+	m.overlays += "o1"
+	m.overlays += "o2"
+	m.underlays += "u1"
+	var/obj/o = new
+	o.appearance = m
+	world.log << "assigned: [o.icon_state] [length(o.overlays)] [length(o.underlays)]"
+	var/obj/p = new
+	p.overlays += m
+	world.log << "overlaid: [length(p.overlays)]"
+	var/mutable_appearance/back = new(o.appearance)
+	world.log << "back: [length(back.overlays)] [length(back.underlays)]"
+
+/world/New()
+	..()
+	var/n = text2num(world.params["n"])
+	if(n)
+		leak(n)
+	else
+		check()
+	shutdown()

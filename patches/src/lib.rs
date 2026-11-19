@@ -98,6 +98,7 @@ pub static FEATURES: &[&Feature] = &[
     &server::fixes::filterleak::FILTERLEAK,
     &server::fixes::visleak::VISLEAK,
     &server::fixes::utf8leak::UTF8LEAK,
+    &server::fixes::overlayleak::OVERLAYLEAK,
     // Fixes for both programs.
     &common::fixes::inodes::INODES,
     // Installed last, to skip call sites other features rewrote or matched.
