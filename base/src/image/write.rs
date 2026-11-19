@@ -100,6 +100,12 @@ impl Image {
         self.write_code(field, &(target.code_addr().wrapping_sub(field + 4) as u32).to_le_bytes())
     }
 
+    /// Whether an earlier feature wrote or relied on any of `addr..addr+len`: a write there would conflict with it, so
+    /// a feature that patches many similar sites can leave that one as it is.
+    pub fn claimed(&self, addr: usize, len: usize) -> bool {
+        ledger::claimed(addr, len)
+    }
+
     /// Points every `call` to `target` at `to` instead, except calls inside code an earlier feature wrote or relied
     /// on (those keep calling `target`): the way to replace a function that other tools find by its bytes, which stay
     /// as they are. The call sites moved; `Err` if there are none.

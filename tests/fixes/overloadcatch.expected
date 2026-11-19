@@ -1,0 +1,36 @@
+1: caught +, unset
+2: caught -, unset
+3: caught *, unset
+4: caught |, unset
+5: caught <<, unset
+6: caught >>, unset
+7: caught <, unset
+8: caught <, unset
+9: caught <=>, unset
+10: caught +, unset
+11: caught <<, unset
+12: caught +=, unset
+13: caught <<=, unset
+14: caught :=, unset
+15: caught +, unset
+16: caught cannot read from list, unset
+17: caught thrown text, unset
+18: caught from a proc, unset
+19: caught +, unset
+20: no error, caught inside: inner
+  world/Error: 
+21: no error, /texter
+22: caught -, unset
+23: caught ~=, unset
+24: caught ~=, unset
+25: caught ~!, unset
+26: caught ~, unset
+27: caught ++, unset
+28: caught --, unset
+29: caught [], unset
+30: caught []=, unset
+threw: +
+result: unmodified
+  world/Error: *
+no try: null
+caught 1000 of 1000

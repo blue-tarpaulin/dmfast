@@ -1,0 +1,162 @@
+// A `try` around an operator doesn't catch an error in its overload, which goes to world/Error instead while the
+// statement goes on (forum report 2992875). With the fix the `try` catches it. `"[A]"` (operator"") keeps BYOND's
+// behavior, as in BYOND's own fix.
+/thrower
+	proc/operator+(b)
+		CRASH("+")
+	proc/operator-(b)
+		CRASH("-")
+	proc/operator*(b)
+		CRASH("*")
+	proc/operator|(b)
+		CRASH("|")
+	proc/operator<<(b)
+		CRASH("<<")
+	proc/operator>>(b)
+		CRASH(">>")
+	proc/operator<(b)
+		CRASH("<")
+	proc/operator<=>(b)
+		CRASH("<=>")
+	proc/operator:=(b)
+		CRASH(":=")
+	proc/operator~()
+		CRASH("~")
+	proc/operator~=(b)
+		CRASH("~=")
+	proc/operator++()
+		CRASH("++")
+	proc/operator--()
+		CRASH("--")
+	proc/operator[](i)
+		CRASH("\[]")
+	proc/operator[]=(i, v)
+		CRASH("\[]=")
+
+// Only operator~!, so `~=` falls back on it.
+/negator
+	proc/operator~!(b)
+		CRASH("~!")
+
+/texter
+	proc/operator""()
+		CRASH("text")
+
+/assigner
+	proc/operator+=(b)
+		CRASH("+=")
+	proc/operator<<=(b)
+		CRASH("<<=")
+
+/other
+	var/list/none
+	// A runtime error, not CRASH.
+	proc/operator+(b)
+		return none[b]
+	// A thrown value that isn't an /exception.
+	proc/operator-(b)
+		throw "thrown text"
+	// The error comes from a proc the overload calls.
+	proc/operator*(b)
+		return fail(b)
+	// From an overload the overload uses.
+	proc/operator/(b)
+		var/thrower/t = new
+		return t + b
+	// Caught inside the overload itself.
+	proc/operator%(b)
+		try
+			CRASH("inner")
+		catch(var/exception/e)
+			return "caught inside: [e.name]"
+
+/proc/fail(b)
+	CRASH("from a proc")
+
+/world/Error(exception/e)
+	world.log << "  world/Error: [istype(e) ? e.name : e]"
+
+/proc/op(n)
+	var/thrower/a = new
+	var/assigner/s = new
+	var/other/o = new
+	switch(n)
+		if(1) return a + 1
+		if(2) return a - 1
+		if(3) return a * 2
+		if(4) return a | 2
+		if(5) return a << 1
+		if(6) return a >> 1
+		if(7) return a < 1
+		if(8) return a >= 1
+		if(9) return a <=> 1
+		if(10)
+			a += 1
+		if(11)
+			a <<= 1
+		if(12)
+			s += 1
+		if(13)
+			s <<= 1
+		if(14)
+			a := 1
+		if(15)
+			var/list/l = list(a)
+			l[1] += 1
+		if(16) return o + 5
+		if(17) return o - 1
+		if(18) return o * 1
+		if(19) return o / 1
+		if(20) return o % 1
+		if(21) return "[new /texter]"
+		if(22) return -a
+		if(23) return a ~= 1
+		if(24) return a ~! 1
+		if(25)
+			var/negator/g = new
+			return g ~= 1
+		if(26) return ~a
+		if(27)
+			a++
+		if(28)
+			--a
+		if(29) return a[1]
+		if(30)
+			a[1] = 2
+		else return "end"
+	return "done"
+
+/proc/show(v)
+	return isnull(v) ? "null" : "[v]"
+
+/world/New()
+	for(var/n in 1 to 100)
+		var/r = "unset"
+		try
+			r = op(n)
+			if(r == "end")
+				break
+			world.log << "[n]: no error, [show(r)]"
+		catch(var/e)
+			world.log << "[n]: caught [istype(e, /exception) ? e:name : e], [show(r)]"
+	// The report's snippet. The assignment never happens, as with an error in a proc call.
+	var/thrower/d = new
+	var/exception/caught_exception = EXCEPTION("nothing was thrown")
+	var/result = "unmodified"
+	try
+		result = d + "something"
+	catch(caught_exception);
+	world.log << "threw: [caught_exception.name]"
+	world.log << "result: [show(result)]"
+	// No try: world/Error, and the statement goes on.
+	result = d * 2
+	world.log << "no try: [show(result)]"
+	// Many caught errors in one proc.
+	var/count = 0
+	for(var/i in 1 to 1000)
+		try
+			result = d + i
+		catch
+			count++
+	world.log << "caught [count] of 1000"
+	shutdown()

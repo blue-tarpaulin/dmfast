@@ -17,6 +17,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New fix:** `outputleak` (safe): an `operator<<` overload that outputs with `..()` no longer leaks its args (BYOND 516.1665-1688).
 - **New fix:** `callextleak` (safe): `call_ext()` with `arglist()` no longer leaks its args.
 - **New fix:** `shiftassign` (safe): `<<=` and `>>=` store the result of a shift overload (`operator<<`, `operator<<=`, ...) instead of keeping the original value.
+- **New fix:** `overloadcatch` (extended): a `try` around an operator catches errors thrown in its overload instead of them going to `world/Error`.
 
 ## 8.1.0
 

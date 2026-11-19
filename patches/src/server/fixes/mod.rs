@@ -20,6 +20,7 @@ pub mod nulldiv;
 pub mod num2sig;
 pub mod outputleak;
 pub mod overlayleak;
+pub mod overloadcatch;
 pub mod pickweight;
 pub mod profcpu;
 pub mod profself;
