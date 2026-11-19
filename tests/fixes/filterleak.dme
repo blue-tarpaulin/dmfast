@@ -1,0 +1,46 @@
+// filterleak: a var write on an atom's filter (o.filters[1]:size = 5) rebuilds the atom's filter chain from a copy
+// of the old one; when the new chain already exists, stock BYOND parks the copy's block on its free list and never
+// takes it back, so memory grows by a block per write. The fix reuses parked blocks. The leak isn't visible from DM:
+// fixtest's memory runs (filterleak.leak) make n and 2n writes, and the default run checks that writes land right.
+/proc/leak(n)
+	for(var/i in 1 to n)
+		var/obj/o = new
+		o.filters += filter(type="blur", size=1)
+		var/f = o.filters[1]
+		f:size = 5
+		f:size = 6
+		f:size = 7
+
+/proc/write_many()
+	var/wrong = 0
+	for(var/i in 1 to 20000)
+		var/obj/o = new
+		o.filters += filter(type="blur", size=1)
+		o.filters += filter(type="outline", size=1, color="#ff0000")
+		var/f = o.filters[i % 2 + 1]
+		f:size = i % 7
+		var/g = o.filters[i % 2 + 1]
+		if(g:size != i % 7)
+			wrong++
+	world.log << "writes: [wrong] wrong"
+
+/proc/shared()
+	var/obj/a = new
+	var/obj/b = new
+	a.filters += filter(type="blur", size=2)
+	b.filters += filter(type="blur", size=2)
+	var/f = a.filters[1]
+	f:size = 9
+	world.log << "written: [a.filters[1]:size], other: [b.filters[1]:size]"
+	f:size = 2
+	world.log << "back: [a.filters[1]:size], other: [b.filters[1]:size]"
+
+/world/New()
+	..()
+	var/n = text2num(world.params["n"])
+	if(n)
+		leak(n)
+	else
+		write_many()
+		shared()
+	shutdown()

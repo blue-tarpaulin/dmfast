@@ -4,6 +4,7 @@ pub mod callref;
 pub mod cmperr;
 pub mod dbbignum;
 pub mod dbclose;
+pub mod filterleak;
 pub mod filtername;
 pub mod httpexport;
 pub mod iconchain;
