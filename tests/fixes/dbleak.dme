@@ -1,0 +1,32 @@
+// dbleak: /database/query's GetRowData() and Columns() return lists that keep an extra reference on stock BYOND, so
+// they and what they hold are never freed. refcount() shows it; fixtest's memory runs (dbleak.leak) also read n and
+// 2n rows.
+/proc/leak(n)
+	var/database/db = new("dbleak.db")
+	var/database/query/q = new("SELECT 'value' AS name, 2 AS other")
+	q.Execute(db)
+	q.NextRow()
+	for(var/i in 1 to n)
+		. = q.GetRowData()
+		. = q.Columns()
+
+/proc/check()
+	var/database/db = new("dbleak.db")
+	var/database/query/q = new("SELECT 'value' AS name, 2 AS other")
+	q.Execute(db)
+	q.NextRow()
+	var/list/row = q.GetRowData()
+	var/list/columns = q.Columns()
+	world.log << "row: [row["name"]] [row["other"]], references [refcount(row)]"
+	world.log << "columns: [jointext(columns, ",")], references [refcount(columns)]"
+	world.log << "one column: [q.Columns(1)]"
+
+/world/New()
+	..()
+	fdel("dbleak.db")
+	var/n = text2num(world.params["n"])
+	if(n)
+		leak(n)
+	else
+		check()
+	shutdown()

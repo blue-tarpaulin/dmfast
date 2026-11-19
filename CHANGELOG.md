@@ -11,6 +11,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New fix:** `utf8leak` (safe): `html_decode()`, `url_decode()` and `params2list()` of text that isn't UTF-8 no longer leak memory.
 - **New fix:** `overlayleak` (safe, Windows): using a `/mutable_appearance` whose overlays changed no longer leaks memory.
 - **New fix:** `sha1leak` (safe): `sha1()` no longer leaks memory.
+- **New fix:** `dbleak` (safe): `/database/query`'s `GetRowData()` and `Columns()` no longer leak their lists.
 
 ## 8.1.0
 
