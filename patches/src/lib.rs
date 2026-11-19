@@ -94,6 +94,7 @@ pub static FEATURES: &[&Feature] = &[
     &server::fixes::filtername::FILTERNAME,
     &server::fixes::httpexport::HTTPEXPORT,
     &server::fixes::varoverride::VAROVERRIDE,
+    &server::fixes::mutableref::MUTABLEREF,
     // Fixes for both programs.
     &common::fixes::inodes::INODES,
     // Installed last, to skip call sites other features rewrote or matched.

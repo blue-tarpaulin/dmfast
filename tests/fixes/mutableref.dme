@@ -1,0 +1,63 @@
+// mutableref: after ma.appearance = X a mutable appearance shows X's look, but stock BYOND holds no reference to X:
+// once X is gone its strings are freed and reused by others, and the mutable appearance reads as those. Its
+// render_target and render_source hold no reference either, so a string made at runtime is freed after the
+// statement ("BUG: Bad ref" on stock). churn() makes strings to take the freed ids.
+/proc/churn()
+	var/list/keep = list()
+	for(var/i in 1 to 3000)
+		keep += "churn_[i]_[rand(1, 1000000)]"
+	return keep
+
+/proc/assigned()
+	var/obj/o = new
+	var/tag = "[rand(1, 1000000)]"
+	o.icon_state = "state_[tag]"
+	o.name = "name_[tag]"
+	var/mutable_appearance/ma = new
+	ma.appearance = o.appearance
+	o = null
+	var/list/l = churn()
+	world.log << "icon_state: [ma.icon_state == "state_[tag]" ? "kept" : "lost"]"
+	world.log << "name: [ma.name == "name_[tag]" ? "kept" : "lost"]"
+	ma.dir = WEST
+	world.log << "after a write: [ma.icon_state == "state_[tag]" ? "kept" : "lost"] [ma.dir]"
+	return l
+
+/proc/render()
+	var/mutable_appearance/ma = new
+	var/id = rand(1, 1000000)
+	ma.render_target = "*x_[id]"
+	ma.render_source = "*y_[id]"
+	var/list/l = churn()
+	world.log << "render_target: [ma.render_target == "*x_[id]" ? "kept" : "lost"]"
+	world.log << "render_source: [ma.render_source == "*y_[id]" ? "kept" : "lost"]"
+	var/mutable_appearance/copy = new(ma)
+	world.log << "copied: [copy.render_target == "*x_[id]" ? "kept" : "lost"]"
+	ma = null
+	l += churn()
+	world.log << "copy alone: [copy.render_target == "*x_[id]" ? "kept" : "lost"]"
+	return l
+
+// Mutable appearances made from an appearance and dropped (stock leaks a reference on it each time; the fix must
+// not let go of one too many): the appearance stays right for what still uses it.
+/proc/made()
+	var/obj/o = new
+	var/tag = "[rand(1, 1000000)]"
+	o.icon_state = "made_[tag]"
+	for(var/i in 1 to 200)
+		var/mutable_appearance/ma = new(o.appearance)
+		if(i % 2)
+			ma.dir = EAST
+		if(i % 3 == 0)
+			ma.appearance = o.appearance
+	var/list/l = churn()
+	var/mutable_appearance/ma = new(o.appearance)
+	world.log << "made and dropped: [o.icon_state == "made_[tag]" && ma.icon_state == "made_[tag]" ? "kept" : "lost"]"
+	return l
+
+/world/New()
+	..()
+	assigned()
+	render()
+	made()
+	shutdown()

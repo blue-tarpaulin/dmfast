@@ -1,0 +1,8 @@
+icon_state: kept
+name: kept
+after a write: kept 8
+render_target: kept
+render_source: kept
+copied: kept
+copy alone: kept
+made and dropped: kept

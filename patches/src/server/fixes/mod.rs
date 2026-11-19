@@ -11,6 +11,7 @@ pub mod iconwrap;
 pub mod initvar;
 pub mod jsonutf;
 pub mod minmax;
+pub mod mutableref;
 pub mod nulldiv;
 pub mod num2sig;
 pub mod pickweight;
