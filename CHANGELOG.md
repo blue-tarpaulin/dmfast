@@ -15,6 +15,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New fix:** `callleak` (safe): `call(src, /proc/path)(...)` with named args or `arglist()` no longer leaks its args.
 - **New fix:** `overridetype` (extended): a subtype named like a proc override on the same type (`/obj/door/open()` and `/obj/door/open`) is a type of its own, instead of being merged into the proc or being a duplicate definition.
 - **New fix:** `outputleak` (safe): an `operator<<` overload that outputs with `..()` no longer leaks its args (BYOND 516.1665-1688).
+- **New fix:** `callextleak` (safe): `call_ext()` with `arglist()` no longer leaks its args.
 
 ## 8.1.0
 
