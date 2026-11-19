@@ -96,6 +96,7 @@ pub static FEATURES: &[&Feature] = &[
     &server::fixes::varoverride::VAROVERRIDE,
     &server::fixes::mutableref::MUTABLEREF,
     &server::fixes::filterleak::FILTERLEAK,
+    &server::fixes::visleak::VISLEAK,
     // Fixes for both programs.
     &common::fixes::inodes::INODES,
     // Installed last, to skip call sites other features rewrote or matched.

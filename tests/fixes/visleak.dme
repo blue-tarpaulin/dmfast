@@ -1,0 +1,36 @@
+// visleak: an image put in a vis_contents and taken out keeps its emptied vis_locs list on stock BYOND, which
+// never frees it. The leak isn't visible from DM: fixtest's memory run (visleak.leak) puts n and 2n images through a
+// vis_contents, and the default run checks that images still go in, come out, and show in vis_contents right.
+/proc/leak(n)
+	var/obj/o = new
+	for(var/i in 1 to n)
+		var/image/I = new
+		o.vis_contents += I
+		o.vis_contents -= I
+
+/proc/check()
+	var/obj/a = new
+	var/obj/b = new
+	var/image/I = new
+	I.icon_state = "shared"
+	a.vis_contents += I
+	b.vis_contents += I
+	a.vis_contents -= I
+	world.log << "after one removal: a [length(a.vis_contents)], b [length(b.vis_contents)]"
+	b.vis_contents -= I
+	a.vis_contents += I
+	world.log << "added again: a [length(a.vis_contents)], [a.vis_contents[1] == I]"
+	for(var/i in 1 to 300)
+		var/image/J = new
+		a.vis_contents += J
+		a.vis_contents -= J
+	world.log << "after churn: a [length(a.vis_contents)], [I.icon_state]"
+
+/world/New()
+	..()
+	var/n = text2num(world.params["n"])
+	if(n)
+		leak(n)
+	else
+		check()
+	shutdown()
