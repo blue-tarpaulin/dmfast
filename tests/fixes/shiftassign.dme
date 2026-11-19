@@ -1,0 +1,102 @@
+// `A <<= B` and `A >>= B` keep `A` instead of the shift overload's result (forum report 2992876). With the fix they
+// store the result, as `+=` and `|=` do.
+/shifty
+	var/name
+	var/offset
+
+	New(offset = 0)
+		src.offset = offset
+		name = "shifty [offset]"
+
+	proc/operator<<(b)
+		return new /shifty(offset - b)
+
+	proc/operator>>(b)
+		return new /shifty(offset + b)
+
+	proc/operator+(b)
+		return new /shifty(offset + 10 * b)
+
+	proc/operator|(b)
+		return new /shifty(offset + 100 * b)
+
+/assigner
+	var/name = "assigner"
+
+	proc/operator<<=(b)
+		return "<<= [b]"
+
+	proc/operator>>=(b)
+		return ">>= [b]"
+
+	proc/operator+=(b)
+		return "+= [b]"
+
+// Its assignment overloads return nothing, so `.` (src) is the result: the var keeps it.
+/keeper
+	var/name = "keeper"
+
+	proc/operator<<=(b)
+
+	proc/operator+=(b)
+
+// Its shift overloads return null, which is stored as `+`'s null is.
+/nuller
+	var/name = "nuller"
+
+	proc/operator<<(b)
+		return null
+
+	proc/operator+(b)
+		return null
+
+/holder
+	var/shifty/s = new
+
+/proc/show(label, v)
+	world.log << "[label]: [isnull(v) ? "null" : v]"
+
+/world/New()
+	var/shifty/s = new
+	s <<= 1
+	show("<<=", s)
+	s >>= 3
+	show(">>=", s)
+	s += 1
+	show("+=", s)
+	s |= 1
+	show("|=", s)
+	var/x = new /assigner
+	x <<= 1
+	show("operator<<=", x)
+	x = new /assigner
+	x >>= 2
+	show("operator>>=", x)
+	x = new /assigner
+	x += 3
+	show("operator+=", x)
+	x = new /keeper
+	x <<= 1
+	show("operator<<= returning nothing", x)
+	x += 1
+	show("operator+= returning nothing", x)
+	x = new /nuller
+	x <<= 1
+	show("operator<< returning null", x)
+	x = new /nuller
+	x += 1
+	show("operator+ returning null", x)
+	var/list/l = list(new /shifty(5))
+	l[1] <<= 2
+	show("list item <<=", l[1])
+	l[1] >>= 4
+	show("list item >>=", l[1])
+	var/holder/h = new
+	h.s <<= 7
+	show("datum var <<=", h.s)
+	var/n = 3
+	n <<= 2
+	show("number <<=", n)
+	n >>= 1
+	show("number >>=", n)
+	shutdown()

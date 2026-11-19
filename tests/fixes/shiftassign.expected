@@ -1,0 +1,16 @@
+<<=: shifty -1
+>>=: shifty 2
++=: shifty 12
+|=: shifty 112
+operator<<=: <<= 1
+operator>>=: >>= 2
+operator+=: += 3
+operator<<= returning nothing: keeper
+operator+= returning nothing: keeper
+operator<< returning null: null
+operator+ returning null: null
+list item <<=: shifty 3
+list item >>=: shifty 7
+datum var <<=: shifty -7
+number <<=: 12
+number >>=: 6

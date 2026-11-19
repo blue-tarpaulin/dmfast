@@ -25,6 +25,7 @@ pub mod profcpu;
 pub mod profself;
 pub mod rscid;
 pub mod sha1leak;
+pub mod shiftassign;
 pub mod tick;
 pub mod urlcrlf;
 pub mod utf8leak;
