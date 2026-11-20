@@ -1,5 +1,6 @@
 //! DreamDaemon bug fixes: opt-in, listed in BUGFIXES.md, each with a test world in `tests/fixes/<key>.dme`.
 
+pub mod awaitstack;
 pub mod callextleak;
 pub mod callleak;
 pub mod callref;

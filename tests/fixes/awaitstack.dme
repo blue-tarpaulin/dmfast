@@ -1,0 +1,24 @@
+// awaitstack: a byond,await: call_ext() left its library name or load_ext() handle on the stack under its result on
+// stock BYOND 516.1664-516.1688, so list(7, 8, 9, call_ext(...)()) gave list(8, 9, lib, 1234). By name and by handle,
+// with the result from another thread and from the call itself. awaitstack-gen.sh builds the library.
+#define LATER "byond,await:await_later"
+#define NOW "byond,await:await_now"
+
+var/lib
+
+/proc/test()
+	for(var/fn in list(LATER, NOW))
+		world.log << "[fn] by name: [json_encode(list(7, 8, 9, call_ext(lib, fn)()))]"
+		var/h = load_ext(lib, fn)
+		world.log << "[fn] by handle: [json_encode(list(7, 8, 9, call_ext(h)()))]"
+	shutdown()
+
+/world/New()
+	..()
+	lib = world.system_type == MS_WINDOWS ? "awaitstack.dll" : "./libawaitstack.so"
+	// A result from another thread is picked up while the world ticks.
+	spawn(0)
+		while(1)
+			sleep(1)
+	spawn(0)
+		test()

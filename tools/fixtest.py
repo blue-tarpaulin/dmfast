@@ -36,7 +36,8 @@ def world(dm, dd, fixes, tests, key, work):
     for f in tests.glob(f"{key}-*"):
         (shutil.copytree if f.is_dir() else shutil.copy)(f, t / f.name)
     if (t / f"{key}-gen.sh").exists():
-        subprocess.run([byond.bash(), f"./{key}-gen.sh"], cwd=t, check=True)
+        # The tests dir as $1, for sources several tests share.
+        subprocess.run([byond.bash(), f"./{key}-gen.sh", tests.resolve().as_posix()], cwd=t, check=True)
     env = byond.env(dm.parent, DMFAST_STATS="1", DMFAST_FIXES=fixes)
     _, dm_out = byond.run([dm, f"{key}.dme"], t, env, 120)
     out = ["dm: " + l for l in dm_out.splitlines() if not l.startswith("dmfast") and re.search(r"(error|warning):", l)]

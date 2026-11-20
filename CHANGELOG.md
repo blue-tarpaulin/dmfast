@@ -18,6 +18,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New fix:** `callextleak` (safe): `call_ext()` with `arglist()` no longer leaks its args.
 - **New fix:** `shiftassign` (safe): `<<=` and `>>=` store the result of a shift overload (`operator<<`, `operator<<=`, ...) instead of keeping the original value.
 - **New fix:** `overloadcatch` (extended): a `try` around an operator catches errors thrown in its overload instead of them going to `world/Error`.
+- **New fix:** `awaitstack` (safe): an await `call_ext()` no longer leaves its library name or handle under its result (BYOND 516.1688).
 
 ## 8.1.0
 

@@ -107,6 +107,7 @@ pub static FEATURES: &[&Feature] = &[
     &server::fixes::callextleak::CALLEXTLEAK,
     &server::fixes::shiftassign::SHIFTASSIGN,
     &server::fixes::overloadcatch::OVERLOADCATCH,
+    &server::fixes::awaitstack::AWAITSTACK,
     // Fixes for both programs.
     &common::fixes::inodes::INODES,
     // Installed last, to skip call sites other features rewrote or matched.

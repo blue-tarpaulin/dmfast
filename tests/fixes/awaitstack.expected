@@ -1,0 +1,4 @@
+byond,await:await_later by name: [7,8,9,1234]
+byond,await:await_later by handle: [7,8,9,1234]
+byond,await:await_now by name: [7,8,9,1234]
+byond,await:await_now by handle: [7,8,9,1234]
