@@ -14,7 +14,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New fix:** `dbleak` (safe): `/database/query`'s `GetRowData()` and `Columns()` no longer leak their lists.
 - **New fix:** `callleak` (safe): `call()` and `call_ext()` with `arglist()` or named args no longer leak their args.
 - **New fix:** `overridetype` (extended): a subtype named like a proc override on the same type (`/obj/door/open()` and `/obj/door/open`) is a type of its own, instead of being merged into the proc or being a duplicate definition.
-- **New fix:** `outputleak` (safe): an `operator<<` overload that outputs with `..()` no longer leaks its args (BYOND 516.1665-1688).
+- **New fix:** `outputleak` (safe): `..()` in `operator<<` and `operator>>` overloads no longer leaks its args, including on "bad input src", which BYOND 516.1689 still leaks.
 - **New fix:** `shiftassign` (safe): `<<=` and `>>=` store the result of a shift overload (`operator<<`, `operator<<=`, ...) instead of keeping the original value.
 - **New fix:** `overloadcatch` (extended): a `try` around an operator catches errors thrown in its overload instead of them going to `world/Error`.
 - **New fix:** `await` (safe): await `call_ext()` no longer leaves its library name or handle under its result on BYOND 516.1688, and on 516.1689+ no longer leaks its last arg or breaks its `load_ext()` handle.

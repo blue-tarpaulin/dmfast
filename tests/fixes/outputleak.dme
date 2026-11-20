@@ -1,17 +1,26 @@
-// outputleak: an operator<< overload that outputs with ..() keeps a reference to its args on stock BYOND, so a /sound
-// sent through it (usr << sound) is never freed. refcount() shows it; fixtest's memory runs (outputleak.leak) also send
-// n and 2n sounds.
+// outputleak: ..() in an operator<< or operator>> overload keeps a reference to its args on stock BYOND, so a /sound
+// sent through it (usr << sound) is never freed; so does reading a savefile through operator>>'s ..(), and on every
+// build so does "bad input src" from ..(). refcount() shows it; fixtest's memory runs (outputleak.leak) do n and 2n of
+// each.
 /mob/listener/proc/operator<<(x)
 	return ..()
+
+/datum/reader/proc/operator>>(x, source)
+	return ..(x, source)
 
 /sound/payload/var/list/data
 
 /proc/leak(n)
 	var/mob/listener/m = new
+	var/datum/reader/r = new
 	for(var/i in 1 to n)
 		var/sound/payload/S = new
 		S.data = new /list(20)
 		m << S
+		var/list/L = new /list(20)
+		try
+			r.operator>>(L, L)
+		catch
 
 /proc/check()
 	var/mob/listener/m = new
@@ -27,6 +36,23 @@
 	world.log << "list: references [refcount(L)]"
 	m << "text"
 	world.log << "text: ok"
+	var/datum/reader/r = new
+	var/datum/a = new
+	var/datum/b = new
+	var/error
+	for(var/i in 1 to 3)
+		try
+			r.operator>>(a, b)
+		catch(var/exception/e)
+			error = e.name
+	world.log << "bad input src: [error], references [refcount(a)] [refcount(b)]"
+	var/savefile/F = new
+	F << 5
+	var/got
+	for(var/i in 1 to 3)
+		F.cd = "/"
+		got = r.operator>>(a, F)
+	world.log << "savefile: read [got], references [refcount(a)] [refcount(F)]"
 
 /world/New()
 	..()
