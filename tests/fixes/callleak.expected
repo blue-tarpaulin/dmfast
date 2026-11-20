@@ -3,3 +3,8 @@ named: references 1
 result: ok
 text name: ok
 later: kept, references 1
+byond:noop by name: 1 arg +0, 12 args +0
+byond:noop by handle: 1 arg +0, 12 args +0
+noop_text by name: 1 arg +0, 12 args +0
+noop_text by handle: 1 arg +0, 12 args +0
+failed call: +0

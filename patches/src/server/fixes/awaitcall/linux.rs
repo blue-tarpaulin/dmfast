@@ -1,4 +1,4 @@
-//! `awaitstack`, Linux: the resume holds the proc state in ebx, the sleeper in esi, and the value in xmm0.
+//! `await`, Linux: the resume holds the proc state in ebx, the sleeper in esi, and the value in xmm0.
 
 use crate::base::code::{Cond, Stub};
 use crate::base::image::Image;

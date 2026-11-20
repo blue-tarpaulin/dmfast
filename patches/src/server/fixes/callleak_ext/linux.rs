@@ -1,4 +1,4 @@
-//! `callextleak`, Linux: both opcodes share one buffer, whose address a slot of the interpreter's frame holds
+//! `callleak`, Linux: both call_ext() opcodes share one buffer, whose address a slot of the interpreter's frame holds
 //! (`push [ebp-x]`).
 
 use crate::base::code::Foreign;

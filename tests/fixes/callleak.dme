@@ -1,6 +1,14 @@
-// callleak: call(src, /proc/path)(args) with named args or arglist() keeps a reference to its args on stock BYOND,
-// so they and what they hold are never freed. refcount() shows it; fixtest's memory runs (callleak.leak) also make n
-// and 2n calls.
+// callleak: call() and call_ext() with arglist() or named args keep references to their args on stock BYOND, so
+// they and what they hold are never freed. refcount() shows it; callleak-gen.sh builds the call_ext() library.
+#if DM_VERSION < 516
+#define load_ext(lib, fn) fn
+#define HANDLE_CALL(h) call_ext(lib, h)
+#else
+#define HANDLE_CALL(h) call_ext(h)
+#endif
+
+var/lib
+
 /datum/thing/proc/pr(z, y)
 	return z
 
@@ -9,11 +17,42 @@
 	sleep(1)
 	world.log << "later: [z[1]], references [refcount(z)]"
 
-/proc/leak(n)
+/proc/items(datum/d, n)
+	if(n == 1)
+		return list(d)
+	return list(d, d, d, d, d, d, d, d, d, d, d, d)
+
+/proc/count_ext(fn, handle, n)
+	var/datum/d = new
+	var/list/L = items(d, n)
+	var/h = load_ext(lib, fn)
+	var/before = refcount(d)
+	for(var/i in 1 to 3)
+		if(handle)
+			HANDLE_CALL(h)(arglist(L))
+		else
+			call_ext(lib, fn)(arglist(L))
+	return refcount(d) - before
+
+/proc/failed_ext()
+	var/datum/d = new
+	var/list/L = items(d, 1)
+	var/before = refcount(d)
+	try
+		call_ext(lib, "byond:missing")(arglist(L))
+	catch
+	return refcount(d) - before
+
+/proc/leak_call(n)
 	var/datum/thing/t = new
 	for(var/i in 1 to n)
 		call(t, /datum/thing/proc/pr)(z = list(i))
 		call(t, /datum/thing/proc/pr)(arglist(list(i, i)))
+
+/proc/leak_ext(n)
+	for(var/i in 1 to n)
+		call_ext(lib, "byond:noop")(arglist(list(list(i))))
+		call_ext(lib, "noop_text")(arglist(list(list(i), 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)))
 
 /proc/check()
 	var/datum/thing/t = new
@@ -30,12 +69,18 @@
 	world.log << "text name: [call(t, "pr")(z = "ok")]"
 	call(t, /datum/thing/proc/later)(z = list("kept"))
 	sleep(2)
+	for(var/fn in list("byond:noop", "noop_text"))
+		for(var/handle in 0 to 1)
+			world.log << "[fn] by [handle ? "handle" : "name"]: 1 arg +[count_ext(fn, handle, 1)], 12 args +[count_ext(fn, handle, 12)]"
+	world.log << "failed call: +[failed_ext()]"
 
 /world/New()
-	..()
+	..
+	lib = world.system_type == MS_WINDOWS ? "callleak.dll" : "./libcallleak.so"
 	var/n = text2num(world.params["n"])
 	if(n)
-		leak(n)
+		leak_call(n)
+		leak_ext(n)
 	else
 		check()
 	shutdown()

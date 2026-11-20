@@ -1,17 +1,13 @@
-//! `callextleak` (forum report 2991331): `call_ext()` with `arglist()` no longer leaks a reference to every arg.
+//! `call_ext()` implementation for the combined `callleak` fix: `arglist()` no longer leaks a reference to every arg.
 //!
-//! Both call_ext() opcodes that take an `arglist()` (by library and function name, and by `load_ext()` handle) copy
-//! the list's items into a buffer, referencing each, but the buffer's cleanup does nothing, so every item stays
-//! referenced for good. A list of more than 10 items goes into a block the buffer allocates and never frees. BYOND
-//! 516.1689 releases a short list's items after a call that returns, but not a long list's, nor when the call throws
-//! (fails, or awaits on older builds). The fix notes a long list's block and item count in the buffer's unused inline
-//! slots, and the cleanup, after the call and in the handler for a throwing call, releases the items and frees the
-//! block.
+//! Both call_ext() opcodes that take an `arglist()` copy the list's items into a buffer, referencing each, but the
+//! buffer's cleanup does nothing, so every item stays referenced for good. A long list's allocated block is leaked too.
+//! The cleanup releases the items and frees the block.
 //!
 //! Safe: the cleanup runs when the call is done with the buffer, and the items were referenced for it alone.
 
 use crate::base::code::{self, Foreign};
-use crate::base::feature::{Ctx, Feature, Hosts, Tier, install};
+use crate::base::feature::Ctx;
 use crate::base::image::Image;
 use crate::base::sync::Installed;
 use crate::base::{Result, ensure};
@@ -26,20 +22,8 @@ mod windows;
 #[cfg(windows)]
 use windows as os;
 
-pub static CALLEXTLEAK: Feature = Feature::fix(
-    Hosts::SERVER,
-    "callextleak",
-    "call_ext()(arglist()) releases its args",
-    Tier::Safe,
-    install!(windows: install, linux: install),
-);
-
-/// The buffer's allocation of room for `count` values (cdecl: the buffer, the count): its inline slots while they
-/// last, else a new block.
 type AllocFn = unsafe extern "C" fn(usize, u32) -> usize;
 
-/// BYOND's allocation and value release, the C runtime's `free`, and the buffer's fields: the count of inline slots
-/// in use, and a block's capacity (0: inline).
 struct Found {
     alloc: Foreign<AllocFn>,
     release: Foreign<ReleaseFn>,
@@ -50,8 +34,6 @@ struct Found {
 
 static FOUND: Installed<Found> = Installed::new();
 
-/// In place of the opcodes' allocation: the allocation, and for a block, its address and the item count in the
-/// buffer's first inline slot, which a block leaves unused.
 extern "C" fn alloc(buffer: usize, count: u32) -> usize {
     let f = FOUND.get();
     // SAFETY: BYOND's allocation for its buffer; the inline slot is the buffer's own.
@@ -64,8 +46,6 @@ extern "C" fn alloc(buffer: usize, count: u32) -> usize {
     }
 }
 
-/// In place of the buffer's cleanup (which does nothing): release the items, free a block, and mark the buffer
-/// empty.
 extern "C" fn cleanup(buffer: usize) {
     let f = FOUND.get();
     // SAFETY: the opcode's buffer once the call is done; its items are the values [`alloc`] noted, or the inline ones.
@@ -82,19 +62,15 @@ extern "C" fn cleanup(buffer: usize) {
     }
 }
 
-/// The dword at `at` as shipped, not relied on.
 fn shipped_u32(core: &Image, at: usize) -> Result<u32> {
     let b = core.haystack(at, 4)?;
     Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
 }
 
-/// Where a `call rel32` at `call` goes, as shipped, not relied on.
 fn shipped_target(core: &Image, call: usize) -> Result<usize> {
     Ok((call + 5).wrapping_add(shipped_u32(core, call + 1)? as i32 as usize))
 }
 
-/// The opcodes' calls to the allocation (the buffer as a frame offset at +2 of [`os::ALLOC_CALL`]), and the frame
-/// offsets.
 fn allocs(core: &Image, f: usize) -> Result<(Vec<usize>, Vec<u32>)> {
     let back = os::ALLOC_CALL.split(' ').count() - 1;
     let mut calls = Vec::new();
@@ -109,8 +85,6 @@ fn allocs(core: &Image, f: usize) -> Result<(Vec<usize>, Vec<u32>)> {
     Ok((calls, buffers))
 }
 
-/// The calls to the buffers' cleanup: of the [`os::CLEANUP`] calls for one of `buffers` (at +2) to a bare return, the
-/// ones to the function the first allocation's buffer is cleaned up with next. Each buffer must have one.
 fn cleanups(core: &Image, first: usize, buffers: &[u32]) -> Result<Vec<usize>> {
     let mut found = Vec::new();
     for pat in os::CLEANUP {
@@ -143,7 +117,7 @@ fn cleanups(core: &Image, first: usize, buffers: &[u32]) -> Result<Vec<usize>> {
     Ok(calls)
 }
 
-fn install(cx: &Ctx) -> Result<String> {
+pub(super) fn install(cx: &Ctx) -> Result<String> {
     let core = cx.core();
     let f = core.find_unique(os::ALLOC, "call_ext(arglist()) buffer allocation")?;
     let free = os::free(core, f)?;

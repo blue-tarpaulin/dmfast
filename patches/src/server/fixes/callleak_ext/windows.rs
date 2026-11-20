@@ -1,4 +1,4 @@
-//! `callextleak`, Windows: each opcode's buffer is a local of the interpreter's frame (`lea eax,[ebp-x]`).
+//! `callleak`, Windows: each call_ext() opcode's buffer is a local of the interpreter's frame (`lea eax,[ebp-x]`).
 
 use crate::base::code::Foreign;
 use crate::base::image::Image;

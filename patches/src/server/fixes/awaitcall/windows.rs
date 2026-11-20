@@ -1,4 +1,4 @@
-//! `awaitstack`, Windows: the resume holds the proc state in ebx and the sleeper in edi.
+//! `await`, Windows: the resume holds the proc state in ebx and the sleeper in edi.
 
 use crate::base::Result;
 use crate::base::code::{Cond, Stub};

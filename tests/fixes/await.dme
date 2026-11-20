@@ -1,7 +1,5 @@
-// awaitargs: on stock BYOND 516.1689, a byond,await: call_ext() with args keeps a reference to its last arg, and
-// releases its load_ext() handle, so the handle's second call fails ("is not an external function"). refcount()
-// shows it, by name and by handle, with the result from another thread and from the call itself; fixtest's memory
-// runs (awaitargs.leak) also make n and 2n calls. awaitargs-gen.sh builds the library.
+// await: await call_ext() no longer leaves its library name or load_ext() handle under its result (516.1688),
+// leaks its last arg, or breaks a handle's second call (516.1689+). await-gen.sh builds the library.
 #define LATER "byond,await:await_later"
 #define NOW "byond,await:await_now"
 
@@ -32,12 +30,15 @@ var/lib
 		for(var/fn in list(LATER, NOW))
 			for(var/handle in 0 to 1)
 				world.log << "[fn] by [handle ? "handle" : "name"]: [count(fn, handle)]"
+		for(var/fn in list(LATER, NOW))
+			world.log << "[fn] by name: [json_encode(list(7, 8, 9, call_ext(lib, fn)()))]"
+			var/h = load_ext(lib, fn)
+			world.log << "[fn] by handle: [json_encode(list(7, 8, 9, call_ext(h)()))]"
 	shutdown()
 
 /world/New()
-	..()
-	lib = world.system_type == MS_WINDOWS ? "awaitargs.dll" : "./libawaitargs.so"
-	// A result from another thread is picked up while the world ticks.
+	..
+	lib = world.system_type == MS_WINDOWS ? "await.dll" : "./libawait.so"
 	spawn(0)
 		while(1)
 			sleep(1)
