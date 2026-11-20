@@ -20,6 +20,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New fix:** `overloadcatch` (extended): a `try` around an operator catches errors thrown in its overload instead of them going to `world/Error`.
 - **New fix:** `awaitstack` (safe): an await `call_ext()` no longer leaves its library name or handle under its result (BYOND 516.1688).
 - **New fix:** `awaitargs` (safe): an await `call_ext()` with args no longer leaks its last arg or breaks its `load_ext()` handle (BYOND 516.1689).
+- **New client fix:** `minlayout` (safe): setting a control's size or position while the window is minimized no longer breaks the layout.
 
 ## 8.1.0
 
