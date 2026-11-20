@@ -1,0 +1,45 @@
+// awaitargs: on stock BYOND 516.1689, a byond,await: call_ext() with args keeps a reference to its last arg, and
+// releases its load_ext() handle, so the handle's second call fails ("is not an external function"). refcount()
+// shows it, by name and by handle, with the result from another thread and from the call itself; fixtest's memory
+// runs (awaitargs.leak) also make n and 2n calls. awaitargs-gen.sh builds the library.
+#define LATER "byond,await:await_later"
+#define NOW "byond,await:await_now"
+
+var/lib
+
+/proc/count(fn, handle)
+	var/datum/a = new
+	var/datum/b = new
+	var/h = load_ext(lib, fn)
+	var/before_a = refcount(a)
+	var/before_b = refcount(b)
+	for(var/i in 1 to 3)
+		try
+			if(handle)
+				call_ext(h)(a, b)
+			else
+				call_ext(lib, fn)(a, b)
+		catch(var/exception/e)
+			return "call [i]: [e.name]"
+	return "+[refcount(a) - before_a] +[refcount(b) - before_b]"
+
+/proc/test()
+	var/n = text2num(world.params["n"])
+	if(n)
+		for(var/i in 1 to n)
+			call_ext(lib, NOW)(list(i))
+	else
+		for(var/fn in list(LATER, NOW))
+			for(var/handle in 0 to 1)
+				world.log << "[fn] by [handle ? "handle" : "name"]: [count(fn, handle)]"
+	shutdown()
+
+/world/New()
+	..()
+	lib = world.system_type == MS_WINDOWS ? "awaitargs.dll" : "./libawaitargs.so"
+	// A result from another thread is picked up while the world ticks.
+	spawn(0)
+		while(1)
+			sleep(1)
+	spawn(0)
+		test()

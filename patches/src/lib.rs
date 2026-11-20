@@ -108,6 +108,7 @@ pub static FEATURES: &[&Feature] = &[
     &server::fixes::shiftassign::SHIFTASSIGN,
     &server::fixes::overloadcatch::OVERLOADCATCH,
     &server::fixes::awaitstack::AWAITSTACK,
+    &server::fixes::awaitargs::AWAITARGS,
     // Fixes for both programs.
     &common::fixes::inodes::INODES,
     // Installed last, to skip call sites other features rewrote or matched.

@@ -45,6 +45,13 @@ struct Await {
 
 static AWAIT: Installed<Await> = Installed::new();
 
+/// The resume hook: where it is, and the stack position and pointer offsets it reads.
+pub(super) struct Hook {
+    pub(super) site: usize,
+    pub(super) pos: usize,
+    pub(super) stack: usize,
+}
+
 /// Called by the resume before it pushes the result onto `state`'s stack (which it always does for an await sleeper:
 /// they're made without flags): for an await `sleeper`, pop and release the call's leftover operand.
 extern "C" fn pop(state: usize, sleeper: usize) {
@@ -63,7 +70,8 @@ extern "C" fn pop(state: usize, sleeper: usize) {
     }
 }
 
-fn install(cx: &Ctx) -> Result<String> {
+/// Finds `Byond_Return`'s resume of an await sleeper and hooks it with [`pop`].
+pub(super) fn hook(cx: &Ctx) -> Result<Hook> {
     let core = cx.core();
     let (sleeper, resume) = os::lookup(core)?;
     let site = core.find_unique_in(resume, 0x100, os::HOOK, "await resume push")?;
@@ -74,5 +82,10 @@ fn install(cx: &Ctx) -> Result<String> {
     let stub = os::stub(core, site, pop)?;
     core.untouched(&[(site, os::HOOK_LEN)])?;
     core.jump(site, os::HOOK_LEN, stub)?;
-    Ok(core.report(&[site]))
+    Ok(Hook { site, pos, stack })
+}
+
+fn install(cx: &Ctx) -> Result<String> {
+    let h = hook(cx)?;
+    Ok(cx.core().report(&[h.site]))
 }

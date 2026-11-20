@@ -1,4 +1,4 @@
-// The call_ext() functions callextleak.dme and awaitstack.dme call. Built by their -gen.sh.
+// The call_ext() functions callextleak.dme, awaitstack.dme, and awaitargs.dme call. Built by their -gen.sh.
 use std::ffi::{c_char, c_void};
 
 /// byondapi's CByondValue.
