@@ -5,7 +5,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 ## Unreleased
 
 - **New patch:** `procshare` (DreamDaemon): each type's proc table keeps only the procs it defines, and calls by name look the rest up in its parents. ~475 MB less memory on tg (~34%) and ~20% faster world load.
-- **New fix:** `mutableref` (safe): a `/mutable_appearance` keeps the look it was given after the source is gone, keeps runtime `render_target`/`render_source`, and no longer leaks the appearance it was made from.
+- **New fix:** `mutableref` (safe): a `/mutable_appearance` keeps its look after its source is deleted, keeps `render_target` and `render_source` set at runtime, and no longer leaks the appearance it was made from.
 - **New fix:** `filterleak` (safe): writing a var on a filter no longer leaks memory.
 - **New fix:** `visleak` (safe, Windows): an image put in and taken out of `vis_contents` no longer leaks memory.
 - **New fix:** `utf8leak` (safe): `html_decode()`, `url_decode()` and `params2list()` of text that isn't UTF-8 no longer leak memory.
@@ -13,11 +13,12 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 - **New fix:** `sha1leak` (safe): `sha1()` no longer leaks memory.
 - **New fix:** `dbleak` (safe): `/database/query`'s `GetRowData()` and `Columns()` no longer leak their lists.
 - **New fix:** `callleak` (safe): `call()` and `call_ext()` with `arglist()` or named args no longer leak their args.
-- **New fix:** `overridetype` (extended): a subtype named like a proc override on the same type (`/obj/door/open()` and `/obj/door/open`) is a type of its own, instead of being merged into the proc or being a duplicate definition.
-- **New fix:** `outputleak` (safe): `..()` in `operator<<` and `operator>>` overloads no longer leaks its args, including on "bad input src", which BYOND 516.1689 still leaks.
-- **New fix:** `shiftassign` (safe): `<<=` and `>>=` store the result of a shift overload (`operator<<`, `operator<<=`, ...) instead of keeping the original value.
-- **New fix:** `overloadcatch` (extended): a `try` around an operator catches errors thrown in its overload instead of them going to `world/Error`.
-- **New fix:** `await` (safe): await `call_ext()` no longer leaves its library name or handle under its result on BYOND 516.1688, and on 516.1689+ no longer leaks its last arg or breaks its `load_ext()` handle.
+- **New fix:** `overridetype` (extended): a subtype with the same name as a proc on its type (`/obj/door/open` and `/obj/door/open()`) is its own type instead of being merged into the proc or reported as a duplicate.
+- **New fix:** `outputleak` (safe): `..()` in `operator<<` and `operator>>` overloads no longer leaks its args, including when `>>` fails with "bad input src".
+- **New fix:** `inputop` (safe): `A >> x` with an `operator>>` overload no longer crashes DreamDaemon or corrupts memory.
+- **New fix:** `shiftassign` (safe): `<<=` and `>>=` with a shift overload (`operator<<`, `operator<<=`, ...) store its result instead of leaving the var unchanged.
+- **New fix:** `overloadcatch` (extended): a `try` around an operator catches errors thrown in its overload instead of sending them to `world/Error`.
+- **New fix:** `await` (safe): `call_ext()` with await no longer leaves its library name or handle under its result, leaks its last arg, or breaks its `load_ext()` handle.
 - **New client fix:** `minlayout` (safe): setting a control's size or position while the window is minimized no longer breaks the layout.
 
 ## 8.1.0

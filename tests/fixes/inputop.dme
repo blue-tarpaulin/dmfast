@@ -1,0 +1,17 @@
+// inputop: an overloaded >> input statement wrote 8 zero bytes through a stale frame pointer before calling
+// operator>> (a crash on stock 516.1688, heap damage on 516.1689). The loop gives damage a chance to show.
+/datum/source/proc/operator>>(value)
+	return "overloaded input"
+
+/world/New()
+	..()
+	var/datum/source/S = new
+	var/result
+	var/list/L = list()
+	for(var/i in 1 to 1000)
+		L += "s[i]"
+		S >> result
+	world.log << "result: [result]"
+	world.log << "first arg: [S.operator>>() == "overloaded input" ? "ok" : "bad"]"
+	world.log << "list intact: [L.len] [L[500]]"
+	shutdown()

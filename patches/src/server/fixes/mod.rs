@@ -13,6 +13,7 @@ pub mod httpexport;
 pub mod iconchain;
 pub mod iconwrap;
 pub mod initvar;
+pub mod inputop;
 pub mod jsonutf;
 pub mod minmax;
 pub mod mutableref;

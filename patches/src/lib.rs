@@ -104,6 +104,7 @@ pub static FEATURES: &[&Feature] = &[
     &server::fixes::dbleak::DBLEAK,
     &server::fixes::callleak::CALLLEAK,
     &server::fixes::outputleak::OUTPUTLEAK,
+    &server::fixes::inputop::INPUTOP,
     &server::fixes::shiftassign::SHIFTASSIGN,
     &server::fixes::overloadcatch::OVERLOADCATCH,
     &server::fixes::awaitcall::AWAIT,
