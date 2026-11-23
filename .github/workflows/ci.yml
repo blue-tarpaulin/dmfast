@@ -176,13 +176,17 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: dmfast-install
-      # gcc-multilib: tests/fixes/profcpu-gen.sh builds a 32-bit helper library.
+      # gcc-multilib: tests/fixes/profcpu-gen.sh builds a 32-bit helper library, and links the call_ext() ones below.
       - name: Install 32-bit runtime libraries
         if: runner.os == 'Linux'
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update -qq
           sudo apt-get install -y -qq libc6:i386 libstdc++6:i386 libgcc-s1:i386 zlib1g:i386 libssl-dev:i386 libcurl4:i386 unzip gcc-multilib
+      # tests/fixes/await-gen.sh and callleak-gen.sh build their call_ext() library with rustc for 32-bit.
+      - name: Rust target for the test libraries
+        shell: bash
+        run: rustup target add ${{ runner.os == 'Windows' && 'i686-pc-windows-msvc' || 'i686-unknown-linux-gnu' }}
       - uses: actions/cache@v6
         id: tg
         with:
