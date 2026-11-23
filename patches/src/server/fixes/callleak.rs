@@ -20,7 +20,8 @@ pub static CALLLEAK: Feature = Feature::fix(
     "call() and call_ext() arglists release their args",
     Tier::Safe,
     install!(windows: install, linux: install),
-);
+)
+.since(516_1648);
 
 fn install(cx: &Ctx) -> Result<String> {
     let mut parts = cx.parts();

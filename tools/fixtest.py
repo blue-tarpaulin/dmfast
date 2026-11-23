@@ -5,7 +5,8 @@ usage: fixtest.py [-s <stock bin dir>] <dmfast bin dir> [key...]
 
 tests/fixes/<key>.dme must print <key>.expected with DMFAST_FIXES=<key> and =breaking, and not on stock. Each
 tests/fixes/<key>-<name>.dme beside it is only compiled; its errors and warnings follow, as "dm <key>-<name>: ...".
-tests/fixes/keep/*.dme must print the same on stock, safe and extended. A fix that didn't install is n/a.
+tests/fixes/keep/*.dme must print the same on stock, safe and extended. A fix that didn't install is n/a, and so is
+one whose test stock's compiler can't build (it needs a newer BYOND).
 A leak fix also has tests/fixes/<key>.leak: an iteration count n, the world's "n" param for memory runs. Its peak
 memory's growth from n to 2n iterations must shrink to under a quarter with DMFAST_FIXES=<key>; then stock may print
 the expected output.
@@ -72,6 +73,12 @@ def world(dm, dd, fixes, tests, key, work):
     return text, byond.dmfast_lines(dm_out + dd_out + log)
 
 
+def compiles(dm, t, key):
+    """Whether dm builds <key>.dme in t (where world() left the test's files)."""
+    byond.run([dm, f"{key}.dme"], t, byond.env(dm.parent), 120)
+    return (t / f"{key}.dmb").exists()
+
+
 def growth(dd, fixes, work, key, n):
     """MB the world tests/<key>.dme that world() last built in work/t peaks higher at 2n iterations than at n, or None if
     a run failed."""
@@ -120,6 +127,10 @@ def check(fast, stock=None, keys=()):
             fixed, stats = world(fdm, fdd, key, TESTS, key, kw)
             if not any(l.startswith(f"dmfast: fix {key}: ") for l in stats):
                 if "dm: no .dmb\n" in fixed:  # a DreamDaemon fix can't have installed if the world never ran
+                    if not compiles(sdm, kw / "t", key):
+                        print(f"fix {key}: n/a (the test needs a newer BYOND: stock doesn't compile it either)")
+                        result(key, "na", "n/a")
+                        continue
                     print(f"::error::fix {key}: the test didn't compile with DMFAST_FIXES={key}:\n{fixed}", end="")
                     result(key, "fail", "FAIL")
                     continue
