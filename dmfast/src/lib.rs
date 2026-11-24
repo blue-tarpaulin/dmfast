@@ -13,6 +13,7 @@ use dmfast_base as base;
 /// The private submodule's patches, built in when it is checked out (`build.rs`).
 #[cfg(dmfast_private)]
 #[path = "../../patches-private/src/lib.rs"]
+#[rustfmt::skip] // so `cargo fmt` works without the submodule; it has its own `rustfmt.toml`
 mod private;
 #[cfg(dmfast_private)]
 const PRIVATE: &[&base::feature::Feature] = private::FEATURES;
@@ -22,7 +23,7 @@ const PRIVATE: &[&base::feature::Feature] = &[];
 #[cfg(test)]
 mod validate;
 
-const VERSION: &str = concat!("DMFAST ", env!("CARGO_PKG_VERSION"));
+const VERSION: &str = concat!("DMFAST ", env!("DMFAST_VERSION"));
 
 static CONFIG: base::driver::Config = base::driver::Config {
     lists: &[dmfast_patches::FEATURES, PRIVATE],

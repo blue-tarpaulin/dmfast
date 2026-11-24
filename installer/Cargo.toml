@@ -14,4 +14,5 @@ windows-sys = { version = "0.61.2", features = ["Win32_UI_Shell", "Win32_Foundat
 [build-dependencies]
 object = { version = "0.40.0", default-features = false, features = ["read_core", "elf", "std"] }
 winresource = "0.1.31"
+dmfast-format = { path = "../format" }
 dmfast-seeker = { path = "../seeker" }

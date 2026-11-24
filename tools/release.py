@@ -1,11 +1,14 @@
-"""Build the combined Windows + Linux installer: dist/dmfast-install.exe.
+"""Build the combined Windows + Linux installer: dist/dmfast-install.exe, or dist/dmfast-install-oss.exe for the open-source edition.
 
-usage: py tools/release.py [--distro NAME]
+usage: py tools/release.py [--distro NAME] [--edition oss|full]
 
 Run on Windows with WSL. Builds the Windows installer natively and the Linux installer inside WSL (needs
 Rust with the i686-unknown-linux-gnu target and 32-bit glibc dev files on a system like Debian 12, whose glibc 2.36
 binds nothing past BYOND's floor of 2.34; see README), then packs both into one file with dmfast-pack. The result is a
 normal Windows executable that Linux runs with `sh dmfast-install.exe <bin dir>`.
+
+--edition picks the edition (DMFAST_EDITION for cargo): oss leaves the private patches out, full requires them. The
+default is DMFAST_EDITION if set, else full when patches-private is checked out and oss when it isn't.
 """
 import argparse
 import os
@@ -30,9 +33,13 @@ def run(cmd, **kw):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--distro', help='WSL distribution to build the Linux installer in (default: WSL default)')
+    ap.add_argument('--edition', choices=['oss', 'full'], help='oss: without the private patches; full: with them')
     a = ap.parse_args()
     wsl = ['wsl'] + (['-d', a.distro] if a.distro else []) + ['--']
     os.makedirs(DIST, exist_ok=True)
+    have = os.path.exists(os.path.join(ROOT, 'patches-private', 'src', 'lib.rs'))
+    edition = a.edition or os.environ.get('DMFAST_EDITION') or ('full' if have else 'oss')
+    os.environ['DMFAST_EDITION'] = edition
 
     run(['cargo', 'build', '--release', '-p', 'dmfast-install'])
     win = os.path.join(ROOT, 'target', 'release', 'dmfast-install.exe')
@@ -43,12 +50,12 @@ def main():
     script = (
         'set -e; source ~/.cargo/env 2>/dev/null || true; '
         f'cd {shlex.quote(root_wsl)}; '
-        f'CARGO_TARGET_DIR={WSL_TARGET} cargo build --release -p dmfast-install; '
+        f'DMFAST_EDITION={edition} CARGO_TARGET_DIR={WSL_TARGET} cargo build --release -p dmfast-install; '
         f'cp {WSL_TARGET}/release/dmfast-install {shlex.quote(root_wsl + "/dist/dmfast-install-linux")}'
     )
     run(wsl + ['bash', '-c', script])
 
-    out = os.path.join(DIST, 'dmfast-install.exe')
+    out = os.path.join(DIST, 'dmfast-install-oss.exe' if edition == 'oss' else 'dmfast-install.exe')
     run(['cargo', 'run', '-q', '--release', '-p', 'dmfast-pack', '--', win, linux, out])
     os.remove(linux)
 

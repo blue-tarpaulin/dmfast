@@ -4,6 +4,8 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
+- **New:** `dmfast-install-oss.exe`, we now release a build only using the open-source code, without the private patches.
+
 ## 8.2.0
 
 - **New feature:** `--offline` (DreamDaemon): `DreamDaemon game.dmb 5000 --offline` skips BYOND's hub connection for a faster startup time.

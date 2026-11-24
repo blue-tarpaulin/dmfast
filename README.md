@@ -15,6 +15,9 @@ Supports BYOND 515 and 516. Patches that don't work will disable themselves auto
 
 Download `dmfast-install.exe` from [Releases](https://github.com/blue-tarpaulin/dmfast/releases).
 
+If you want a version only using open source code, download `dmfast-install-oss.exe`.
+It leaves out the [private patches](CONTRIBUTING.md#build), including every [client patch](CLIENT.md).
+
 Close BYOND, then double-click `dmfast-install.exe`.
 
 It'll find BYOND and walk you through the setup, or you can drag your BYOND install on top of it. 

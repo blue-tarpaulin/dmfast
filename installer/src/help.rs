@@ -3,7 +3,7 @@
 /// First line of the help and of the guided install.
 macro_rules! banner {
     () => {
-        concat!("dmfast ", env!("CARGO_PKG_VERSION"), ": Robusts BYOND's toolchain - Greytide Worldwide 2026")
+        concat!("dmfast ", env!("DMFAST_VERSION"), ": Robusts BYOND's toolchain - Greytide Worldwide 2026")
     };
 }
 
@@ -11,7 +11,7 @@ pub const BANNER: &str = banner!();
 
 pub const VERSION: &str = concat!(
     "dmfast ",
-    env!("CARGO_PKG_VERSION"),
+    env!("DMFAST_VERSION"),
     " - Greytide Worldwide 2026\n\nBundles mimalloc (https://github.com/microsoft/mimalloc),\n\
      MIT License, Copyright (c) 2018-2026 Microsoft Corporation, Daan Leijen."
 );

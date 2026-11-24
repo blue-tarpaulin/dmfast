@@ -20,18 +20,25 @@ env:
   CARGO_TERM_COLOR: never
 
 jobs:
+  # Each job with `suffix` builds both editions: "" with the private patches, "-oss" (open source) without them.
   windows:
-    name: Build (Windows)
+    name: Build (Windows${{ matrix.suffix }})
     runs-on: windows-latest
+    strategy:
+      matrix:
+        suffix: ["", "-oss"]
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/patches
+        if: matrix.suffix == ''
         with:
           key: ${{ secrets.DMFAST_PATCHES_KEY }}
       - name: Add Rust target
         shell: bash
         run: rustup component add clippy && rustup target add i686-pc-windows-msvc
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.suffix }}
       - name: Clippy (dmfast.dll)
         shell: bash
         run: cargo clippy --release --locked -p dmfast -p dmfast-base -p dmfast-patches --target i686-pc-windows-msvc -- -D warnings
@@ -46,15 +53,18 @@ jobs:
         run: cargo build --release --locked -p dmfast-install
       - uses: actions/upload-artifact@v7
         with:
-          name: windows
+          name: windows${{ matrix.suffix }}
           path: target/release/dmfast-install.exe
           if-no-files-found: error
 
   linux:
-    name: Build (Linux)
+    name: Build (Linux${{ matrix.suffix }})
     runs-on: ubuntu-latest
     # Debian 12 (glibc 2.36): binds nothing past glibc 2.34, BYOND 516's floor, which the installer's build checks.
     container: debian:12
+    strategy:
+      matrix:
+        suffix: ["", "-oss"]
     steps:
       - name: Install build tools
         run: |
@@ -62,15 +72,21 @@ jobs:
           apt-get install -y -qq --no-install-recommends git openssh-client ca-certificates curl build-essential gcc-multilib
       - uses: actions/checkout@v7
       - uses: ./.github/actions/patches
+        if: matrix.suffix == ''
         with:
           key: ${{ secrets.DMFAST_PATCHES_KEY }}
       - uses: ./.github/actions/rust-linux
         with:
           components: clippy,rustfmt
+      # `cargo fmt` skips the private module (`#[rustfmt::skip]` in dmfast/src/lib.rs); rustfmt checks it directly.
       - name: Format
         shell: bash
-        run: cargo fmt --all --check
+        run: |
+          cargo fmt --all --check
+          if [ -e patches-private/src/lib.rs ]; then rustfmt --check patches-private/src/lib.rs; fi
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.suffix }}
       - name: Clippy (libdmfast.so)
         shell: bash
         run: cargo clippy --release --locked -p dmfast -p dmfast-base -p dmfast-patches --target i686-unknown-linux-gnu -- -D warnings
@@ -84,60 +100,67 @@ jobs:
           cp target/release/dmfast-install dmfast-install-linux
       - uses: actions/upload-artifact@v7
         with:
-          name: linux
+          name: linux${{ matrix.suffix }}
           path: dmfast-install-linux
           if-no-files-found: error
 
   pack:
-    name: Pack installer
+    name: Pack installer${{ matrix.suffix }}
     needs: [windows, linux]
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        suffix: ["", "-oss"]
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/patches
-        with:
-          key: ${{ secrets.DMFAST_PATCHES_KEY }}
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/download-artifact@v8 # all of this run's artifacts so far: windows and linux
+      - uses: actions/download-artifact@v8 # this run's artifacts so far: windows and linux of both editions
         with:
           path: parts
       - name: Pack
+        env:
+          EXE: dmfast-install${{ matrix.suffix }}.exe
         run: |
           mkdir -p dist
-          cargo run -q --release --locked -p dmfast-pack -- parts/windows/dmfast-install.exe parts/linux/dmfast-install-linux dist/dmfast-install.exe
-          sha256sum dist/dmfast-install.exe
+          cargo run -q --release --locked -p dmfast-pack -- parts/windows${{ matrix.suffix }}/dmfast-install.exe parts/linux${{ matrix.suffix }}/dmfast-install-linux "dist/$EXE"
+          sha256sum "dist/$EXE"
       - uses: actions/upload-artifact@v7
         with:
-          name: dmfast-install
-          path: dist/dmfast-install.exe
+          name: dmfast-install${{ matrix.suffix }}
+          path: dist/dmfast-install${{ matrix.suffix }}.exe
           if-no-files-found: error
 
   # False positives: submit at https://www.microsoft.com/wdsi/filesubmission.
   scan:
-    name: Defender scan
+    name: Defender scan${{ matrix.suffix }}
     needs: pack
     runs-on: windows-latest
+    strategy:
+      matrix:
+        suffix: ["", "-oss"]
+    env:
+      EXE: dmfast-install${{ matrix.suffix }}.exe
     permissions:
       contents: read
       issues: write
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: dmfast-install
+          name: dmfast-install${{ matrix.suffix }}
       - name: Scan with Windows Defender
         id: scan
         shell: pwsh
         run: |
           $mp = "C:\Program Files\Windows Defender\MpCmdRun.exe"
           & $mp -SignatureUpdate | Out-Null
-          $exe = (Resolve-Path dmfast-install.exe).Path
+          $exe = (Resolve-Path $env:EXE).Path
           $out = & $mp -Scan -ScanType 3 -File $exe -DisableRemediation 2>&1 | Out-String
           $code = $LASTEXITCODE
           Write-Host $out
           $out | Out-File -FilePath defender_output.txt -Encoding utf8
           # MpCmdRun: 0 = clean, 2 = threat found, anything else = the scan itself failed.
           if ($code -eq 2) {
-            Write-Host "::error::Windows Defender flagged dmfast-install.exe"
+            Write-Host "::error::Windows Defender flagged $env:EXE"
             "detection=true" >> $env:GITHUB_OUTPUT
             exit 1
           } elseif ($code -ne 0) {
@@ -152,11 +175,12 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           gh issue create --repo "$GITHUB_REPOSITORY" \
-            --title "Windows Defender flagged dmfast-install.exe (${GITHUB_REF_NAME})" \
-            --body "$(printf 'Windows Defender flagged the installer built by %s (ref `%s`, sha256 `%s`).\n\nSubmit it as a false positive (software developer) at https://www.microsoft.com/wdsi/filesubmission; it is attached to the run as the `dmfast-install` artifact.\n\n```\n%s\n```\n' "$RUN_URL" "$GITHUB_REF_NAME" "$(sha256sum dmfast-install.exe | cut -d' ' -f1)" "$(cat defender_output.txt)")"
+            --title "Windows Defender flagged $EXE (${GITHUB_REF_NAME})" \
+            --body "$(printf 'Windows Defender flagged the installer built by %s (ref `%s`, sha256 `%s`).\n\nSubmit it as a false positive (software developer) at https://www.microsoft.com/wdsi/filesubmission; it is attached to the run as the `%s` artifact.\n\n```\n%s\n```\n' "$RUN_URL" "$GITHUB_REF_NAME" "$(sha256sum "$EXE" | cut -d' ' -f1)" "${EXE%.exe}" "$(cat defender_output.txt)")"
 
+  # The open-source edition only on the latest BYOND: it is the full one minus the private patches.
   compat:
-    name: Compat ${{ matrix.byond }} (${{ matrix.os == 'windows-latest' && 'Windows' || 'Linux' }})
+    name: Compat ${{ matrix.byond }}${{ matrix.suffix }} (${{ matrix.os == 'windows-latest' && 'Windows' || 'Linux' }})
     needs: pack
     strategy:
       fail-fast: false
@@ -164,10 +188,15 @@ jobs:
         os: [windows-latest, ubuntu-latest]
         # No 516.1670: its isinf()/isnan() bug crashes stock.
         byond: ["515.1647", "516.1648", "516.1667", "516.1675", "516.1680", "516.1684", "516.1688", "516.latest"]
+        suffix: [""]
+        include:
+          - { os: windows-latest, byond: 516.latest, suffix: -oss }
+          - { os: ubuntu-latest, byond: 516.latest, suffix: -oss }
     runs-on: ${{ matrix.os }}
     env:
       TG_COMMIT: 1568dbe1daeba67dc20939c6307d07522967e89c
       COMPAT_WORK: ${{ github.workspace }}/compat-work
+      INSTALLER: dmfast-install${{ matrix.suffix }}.exe
     steps:
       - uses: actions/checkout@v7
       - name: Fetch the DM test suite
@@ -175,7 +204,7 @@ jobs:
         run: git submodule update --init --depth 1 tests/dm-test-suite
       - uses: actions/download-artifact@v8
         with:
-          name: dmfast-install
+          name: dmfast-install${{ matrix.suffix }}
       # gcc-multilib: tests/fixes/profcpu-gen.sh builds a 32-bit helper library, and links the call_ext() ones below.
       - name: Install 32-bit runtime libraries
         if: runner.os == 'Linux'
@@ -234,41 +263,42 @@ jobs:
       # One compat.py phase per step; a timed-out phase loses only its own column.
       - name: Install BYOND ${{ matrix.byond }} and dmfast
         shell: bash
-        run: COMPAT_PHASE=setup python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme
+        run: COMPAT_PHASE=setup python3 tools/compat.py "${{ matrix.byond }}" "$INSTALLER" tgstation/tgstation.dme
       - name: Compile tgstation
         shell: bash
-        run: COMPAT_PHASE=project timeout 10m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-project; exit 0; }; exit $rc; }
+        run: COMPAT_PHASE=project timeout 10m python3 tools/compat.py "${{ matrix.byond }}" "$INSTALLER" tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-project; exit 0; }; exit $rc; }
       - name: Verify mode
         shell: bash
-        run: COMPAT_PHASE=verify timeout 10m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-verify; exit 0; }; exit $rc; }
+        run: COMPAT_PHASE=verify timeout 10m python3 tools/compat.py "${{ matrix.byond }}" "$INSTALLER" tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-verify; exit 0; }; exit $rc; }
       - name: World load time
         shell: bash
-        run: COMPAT_PHASE=load timeout 10m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-load; exit 0; }; exit $rc; }
+        run: COMPAT_PHASE=load timeout 10m python3 tools/compat.py "${{ matrix.byond }}" "$INSTALLER" tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-load; exit 0; }; exit $rc; }
       - name: World output
         shell: bash
-        run: COMPAT_PHASE=world timeout 10m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-world; exit 0; }; exit $rc; }
+        run: COMPAT_PHASE=world timeout 10m python3 tools/compat.py "${{ matrix.byond }}" "$INSTALLER" tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-world; exit 0; }; exit $rc; }
       - name: Bug fix tests
         shell: bash
-        run: COMPAT_PHASE=fixes timeout 10m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-fixes; exit 0; }; exit $rc; }
+        run: COMPAT_PHASE=fixes timeout 10m python3 tools/compat.py "${{ matrix.byond }}" "$INSTALLER" tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-fixes; exit 0; }; exit $rc; }
       - name: DM test suite
         shell: bash
-        run: COMPAT_PHASE=suite COMPAT_SUITE_CACHE="${{ github.workspace }}/suite-cache" timeout 15m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-suite; exit 0; }; exit $rc; }
+        run: COMPAT_PHASE=suite COMPAT_SUITE_CACHE="${{ github.workspace }}/suite-cache" timeout 15m python3 tools/compat.py "${{ matrix.byond }}" "$INSTALLER" tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-suite; exit 0; }; exit $rc; }
       - name: auxtools 3
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: COMPAT_PHASE=auxtools timeout 5m python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-auxtools; exit 0; }; exit $rc; }
+        run: COMPAT_PHASE=auxtools timeout 5m python3 tools/compat.py "${{ matrix.byond }}" "$INSTALLER" tgstation/tgstation.dme || { rc=$?; [ $rc = 124 ] && { touch compat-work/timeout-auxtools; exit 0; }; exit $rc; }
       - name: Report
         if: always()
         shell: bash
-        run: COMPAT_PHASE=report python3 tools/compat.py "${{ matrix.byond }}" dmfast-install.exe tgstation/tgstation.dme
+        run: COMPAT_PHASE=report python3 tools/compat.py "${{ matrix.byond }}" "$INSTALLER" tgstation/tgstation.dme
       - name: Keep rust_g out of the tgstation cache
         if: always() && runner.os == 'Linux'
         run: rm -f tgstation/librust_g.so
+      # The open-source edition's rows are oss-compat-*: the release notes' speedups read only compat-*.
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: compat-${{ runner.os }}-${{ matrix.byond }}
+          name: ${{ matrix.suffix && 'oss-' || '' }}compat-${{ runner.os }}-${{ matrix.byond }}
           path: compat-*.md
           if-no-files-found: ignore
 
@@ -280,7 +310,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: compat-*
+          pattern: "*compat-*"
           merge-multiple: true
       - name: Summary
         run: |

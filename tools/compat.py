@@ -5,8 +5,8 @@ usage: compat.py [--phase PHASE] [--work DIR] [--suite-cache DIR] <BYOND version
 
 Checks: identical .dmb, verify mode, world load and output, bug fixes (fixtest.py), DM test suite
 (dmtests.py), the newest auxtools 3 release finding BYOND's functions as on stock, and on Windows DreamSeeker's patches
-(installed with --client, checked with --audit). Writes a Markdown row to compat-<os>-<version>.md and
-$GITHUB_STEP_SUMMARY.
+(installed with --client, checked with --audit). Writes a Markdown row to compat-<os>-<version>.md (the open-source
+installer, dmfast-install-oss.exe: compat-<os>-<version>-oss.md, its row's version with -oss) and $GITHUB_STEP_SUMMARY.
 Phases (setup project verify load world fixes suite auxtools report) share state through --work; report fails the run.
 """
 import argparse, json, os, re, shutil, statistics, subprocess, sys, tempfile, time, zipfile
@@ -33,8 +33,10 @@ def fail(msg, extra=""):
 
 
 def row(cells):
-    line = "| " + " | ".join(map(str, cells)) + " |"
-    Path(f"compat-{OS}-{VERSION}.md").write_text(line + "\n")
+    """The table row: `cells` after the requested version (with the installer's -oss, if any)."""
+    label = VERSION + ("-oss" if INSTALLER.stem.endswith("-oss") else "")
+    line = "| " + " | ".join(map(str, [label, *cells])) + " |"
+    Path(f"compat-{OS}-{label}.md").write_text(line + "\n")
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         open(os.environ["GITHUB_STEP_SUMMARY"], "a").write(line + "\n")
 
@@ -42,7 +44,7 @@ def row(cells):
 def stop(result, note):
     """A build with nothing to compare (no download, stock broken): record it, pass, no more phases."""
     log(f"== {VERSION} {OS}: {note}")
-    row([VERSION, S.get("real", "-"), OS, result] + [""] * 11)
+    row([S.get("real", "-"), OS, result] + [""] * 11)
     S["done"] = 1
     save()
     sys.exit(0)
@@ -373,7 +375,7 @@ def report():
     log(f"verify mode: {g('verify')}; bug fixes: {g('fixes', 'none')}; DM test suite: {g('suite')}; auxtools: {g('auxtools')}")
     log(f"compiler groups: {count(S.get('compiler'))}; runtime groups: {count(S.get('runtime'))}; disabled: {disabled}")
     log(groups.strip())
-    row([VERSION, real, OS, result, g("t_stock"), g("t_fast"), count(S.get("compiler")), count(S.get("runtime")), disabled,
+    row([real, OS, result, g("t_stock"), g("t_fast"), count(S.get("compiler")), count(S.get("runtime")), disabled,
          g("l_stock"), g("l_fast"), g("verify"), g("w_out"), g("fixes", "none"), g("suite"), g("auxtools")])
     return S["fail"]
 

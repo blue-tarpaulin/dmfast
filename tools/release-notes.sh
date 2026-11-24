@@ -51,9 +51,12 @@ Automatically measured on this release's GitHub Actions runners; your gains depe
 
 On Linux: \`sh dmfast-install.exe ~/byond/bin\`
 
+If you want a version without the closed-source patches, download \`dmfast-install-oss.exe\`.
+
 ### Verify
 
 \`\`\`
 gh attestation verify dmfast-install.exe -R ${GITHUB_REPOSITORY:-blue-tarpaulin/dmfast}
+gh attestation verify dmfast-install-oss.exe -R ${GITHUB_REPOSITORY:-blue-tarpaulin/dmfast}
 \`\`\`
 EOF

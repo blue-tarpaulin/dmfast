@@ -10,3 +10,6 @@ rustc-hash = "2.1.3"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Environment", "Win32_System_Memory", "Win32_System_Threading", "Win32_System_Time"] }
+
+[build-dependencies]
+dmfast-format = { path = "../format" }

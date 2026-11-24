@@ -44,6 +44,7 @@ name = "dmfast"
 version = "8.2.0"
 dependencies = [
  "dmfast-base",
+ "dmfast-format",
  "dmfast-patches",
  "winresource",
 ]
@@ -87,6 +88,7 @@ name = "dmfast-patches"
 version = "8.2.0"
 dependencies = [
  "dmfast-base",
+ "dmfast-format",
  "libc",
  "rustc-hash",
  "windows-sys",

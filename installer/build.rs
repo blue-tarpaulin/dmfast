@@ -19,14 +19,18 @@ fn main() {
     let (triple, file) =
         if windows { ("i686-pc-windows-msvc", "dmfast.dll") } else { ("i686-unknown-linux-gnu", "libdmfast.so") };
     let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("..");
+    // With the private patches or without (`<version>-oss`); `dmfast/build.rs` decides the same (`DMFAST_EDITION`).
+    let private = dmfast_format::edition::private(&root);
+    let version = dmfast_format::edition::version(private);
     let target_dir = PathBuf::from(env::var("OUT_DIR").unwrap()).join("dmfast-target");
     let lib = build_x86(&root, &target_dir, triple, "dmfast", file);
     println!("cargo:rustc-env=DMFAST_LIB={}", lib.display());
+    println!("cargo:rustc-env=DMFAST_VERSION={version}");
     for dir in ["base", "dmfast", "format", "patches", "patches-private"] {
         println!("cargo:rerun-if-changed={}", root.join(dir).display());
     }
-    write_bugfix_list(&root);
-    client_patches(&root, windows);
+    write_bugfix_list(&root, private);
+    client_patches(&root, windows && private);
     if !windows {
         check_glibc(&lib);
         return;
@@ -38,7 +42,7 @@ fn main() {
         .set("FileDescription", "Robusts BYOND's toolchain.")
         .set("CompanyName", "Greytide Worldwide")
         .set("LegalCopyright", "dmfast contributors; bundles mimalloc (MIT, Microsoft Corporation)")
-        .set("OriginalFilename", "dmfast-install.exe")
+        .set("OriginalFilename", if private { "dmfast-install.exe" } else { "dmfast-install-oss.exe" })
         .set_manifest(&MANIFEST.replace("{version}", &format!("{}.0", env!("CARGO_PKG_VERSION"))));
     res.compile().expect("embedding version info / manifest");
 }
@@ -62,7 +66,7 @@ fn build_x86(root: &std::path::Path, target_dir: &std::path::Path, triple: &str,
 /// The private DreamSeeker patches, one folder each (`patches-private/client/<key>/`: `patch.rs` and `patch.spec`),
 /// compiled (with dmfast's version in `DMFAST_VERSION`), checked, and each held to its row in CLIENT.md, then listed
 /// in `$OUT_DIR/client.rs` as `(key, object, spec)` for the installer to include; an empty list when there are none or
-/// the target isn't Windows.
+/// the build leaves the private patches out (`windows` false for a non-Windows target or an open-source build).
 fn client_patches(root: &std::path::Path, windows: bool) {
     let dir = root.join("patches-private").join("client");
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -113,11 +117,17 @@ fn client_doc(root: &std::path::Path) -> Vec<(String, String)> {
 }
 
 /// `--help fixes`: the fix tables of BUGFIXES.md (name, key, tier, OS), written to
-/// `$OUT_DIR/bugfixes.txt` so the list can't drift from the document.
-fn write_bugfix_list(root: &std::path::Path) {
+/// `$OUT_DIR/bugfixes.txt` so the list can't drift from the document. Only the fixes this build has: the open-source
+/// build leaves out the private ones.
+fn write_bugfix_list(root: &std::path::Path, private: bool) {
     let doc = root.join("BUGFIXES.md");
     println!("cargo:rerun-if-changed={}", doc.display());
     let text = std::fs::read_to_string(&doc).expect("reading BUGFIXES.md");
+    let mut keys = Vec::new();
+    fix_keys(&root.join("patches/src"), &mut keys);
+    if private {
+        fix_keys(&root.join("patches-private/src"), &mut keys);
+    }
     let mut out = String::new();
     let mut section = None;
     let mut tier_now = String::new();
@@ -134,6 +144,9 @@ fn write_bugfix_list(root: &std::path::Path) {
             continue;
         }
         let (fix, key, tier, os) = (&cells[1], &cells[2], &cells[3], &cells[4]);
+        if !keys.contains(key) {
+            continue;
+        }
         if tier_now.is_empty() {
             out.push_str(&format!("\n{name}\n"));
         }
@@ -146,6 +159,22 @@ fn write_bugfix_list(root: &std::path::Path) {
     }
     assert!(out.contains("contline"), "no fix rows found in BUGFIXES.md");
     std::fs::write(PathBuf::from(env::var("OUT_DIR").unwrap()).join("bugfixes.txt"), out).unwrap();
+}
+
+/// The keys of the fixes (`Feature::fix(hosts, "key", ...)`) in the `.rs` files under `dir`, if it exists.
+fn fix_keys(dir: &std::path::Path, keys: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for path in entries.map(|e| e.expect("listing the patches").path()) {
+        if path.is_dir() {
+            fix_keys(&path, keys);
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            let text = std::fs::read_to_string(&path).expect("reading a patch");
+            for call in text.split("Feature::fix(").skip(1) {
+                let key = call.split('"').nth(1).unwrap_or_else(|| panic!("{}: a fix without a key", path.display()));
+                keys.push(key.to_owned());
+            }
+        }
+    }
 }
 
 /// Runs as the invoking user (it relaunches itself elevated only when the target needs it). `{version}`

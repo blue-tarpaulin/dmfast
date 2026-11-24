@@ -2,7 +2,7 @@
 
 ## Build
 
-Some patches live in a private submodule (`patches-private`). Most of the tool builds without it, but releases include patches from it.
+Some patches live in a private submodule (`patches-private`). Most of the tool builds without it, but releases include patches from it. Without it, you get the open-source build (`dmfast-install-oss.exe`).
 
 We believe that openly publishing certain portions of BYOND internals is not what Lummox wants at the moment. 
  However, there's a description of what each one does - and for the optional bugfixes, a bit more detail on how these were accomplished if one wanted to port these to BYOND.
@@ -15,6 +15,10 @@ If you want to view the private patches or contribute to them, [open an access r
 ```
 git clone --recurse-submodules https://github.com/blue-tarpaulin/dmfast.git
 ```
+
+Without the submodule cloned, you get the open-source-only build.
+To build either edition yourself, set `DMFAST_EDITION` for any `cargo` command: `oss` or `full`.
+For example, `DMFAST_EDITION=oss cargo build --release -p dmfast-install`.
 
 Windows:
 
@@ -38,9 +42,10 @@ Single installer for both:
 
 ```
 py tools/release.py --distro Debian
+py tools/release.py --distro Debian --edition oss
 ```
 
-Output: `dist/dmfast-install.exe` - works on both operating systems.
+Output: `dist/dmfast-install.exe` (`dmfast-install-oss.exe` with an oss-only build) - works on both operating systems.
 
 ## Writing a patch
 
