@@ -8,7 +8,7 @@ mod patch;
 
 pub(crate) use patch::{alloc_exec, free_exec, poke_code, poke_data, seal_exec};
 
-use std::ffi::OsString;
+use std::ffi::{OsString, c_char, c_int};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 use crate::driver::Config;
@@ -19,12 +19,14 @@ pub(crate) const CORE_NAME: &str = "libbyond.so";
 /// The page size mappings use.
 pub(crate) const PAGE: usize = 4096;
 
-/// The library's constructor body: drop this library from `LD_PRELOAD`, install `config`'s features, and print their
-/// counters at exit under `DMFAST_STATS`.
+/// The library's constructor body: keep the program's arguments ([`crate::args`]), drop this library from
+/// `LD_PRELOAD`, install `config`'s features, and print their counters at exit under `DMFAST_STATS`.
 ///
 /// # Safety
-/// Called from the constructor: every object is mapped and relocated, no other thread exists.
-pub unsafe fn init(config: &'static Config) {
+/// Called from the constructor, with `main`'s `argc` and `argv`: every object is mapped and relocated, no other
+/// thread exists.
+pub unsafe fn init(config: &'static Config, argc: c_int, argv: *mut *const c_char) {
+    crate::args::set_argv(usize::try_from(argc).unwrap_or(0), argv);
     remove_from_preload();
     let Some(host) = Host::current() else { return };
     // SAFETY: called from the constructor (caller).

@@ -4,6 +4,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 
 ## Unreleased
 
+- **New feature:** `--offline` (DreamDaemon): `DreamDaemon game.dmb 5000 --offline` skips BYOND's hub connection for a faster startup time.
 - **New patch:** `procshare` (DreamDaemon): each type's proc table keeps only the procs it defines, and calls by name look the rest up in its parents. ~475 MB less memory on tg (~34%) and ~20% faster world load.
 - **New fix:** `mutableref` (safe): a `/mutable_appearance` keeps its look after its source is deleted, keeps `render_target` and `render_source` set at runtime, and no longer leaks the appearance it was made from.
 - **New fix:** `filterleak` (safe): writing a var on a filter no longer leaks memory.

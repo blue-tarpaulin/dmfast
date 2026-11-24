@@ -40,15 +40,16 @@ pub extern "system" fn DllMain(_module: *mut std::ffi::c_void, reason: u32, _res
     unsafe { base::windows::dll_main(&CONFIG, reason) }
 }
 
+// glibc calls constructors with `main`'s arguments.
 #[cfg(target_os = "linux")]
 #[used]
 #[unsafe(link_section = ".init_array")]
-static INIT: extern "C" fn() = init;
+static INIT: extern "C" fn(std::ffi::c_int, *mut *const std::ffi::c_char) = init;
 
 #[cfg(target_os = "linux")]
-extern "C" fn init() {
-    // SAFETY: this is the library's constructor.
-    unsafe { base::linux::init(&CONFIG) }
+extern "C" fn init(argc: std::ffi::c_int, argv: *mut *const std::ffi::c_char) {
+    // SAFETY: this is the library's constructor, with `main`'s arguments.
+    unsafe { base::linux::init(&CONFIG, argc, argv) }
 }
 
 /// `VERSION`, NUL-terminated: lets the installer tell which dmfast version a library file is.
