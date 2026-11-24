@@ -41,7 +41,7 @@ checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
 
 [[package]]
 name = "dmfast"
-version = "8.1.0"
+version = "8.2.0"
 dependencies = [
  "dmfast-base",
  "dmfast-patches",
@@ -50,7 +50,7 @@ dependencies = [
 
 [[package]]
 name = "dmfast-base"
-version = "8.1.0"
+version = "8.2.0"
 dependencies = [
  "dmfast-format",
  "libc",
@@ -62,11 +62,11 @@ dependencies = [
 
 [[package]]
 name = "dmfast-format"
-version = "8.1.0"
+version = "8.2.0"
 
 [[package]]
 name = "dmfast-install"
-version = "8.1.0"
+version = "8.2.0"
 dependencies = [
  "dmfast-format",
  "dmfast-seeker",
@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "dmfast-patches"
-version = "8.1.0"
+version = "8.2.0"
 dependencies = [
  "dmfast-base",
  "libc",
@@ -94,7 +94,7 @@ dependencies = [
 
 [[package]]
 name = "dmfast-seeker"
-version = "8.1.0"
+version = "8.2.0"
 dependencies = [
  "dmfast-format",
  "iced-x86",
