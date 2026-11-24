@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="848" height="352" viewBox="0 0 848 352" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="dmfast vs stock BYOND 516.1689 on SS13 codebases: compile windows 3.0x faster; compile linux 7.4x faster; time to world/new windows 8.7x faster; time to world/new linux 3.7x faster; in-round cpu windows 31% less; in-round cpu linux 29% less; map_cpu, 16 players windows 38% less; map_cpu, 16 players linux 36% less; memory at world/new 67% less; memory in-round 38% less">
+  <text x="0" y="24" font-size="15" font-weight="600" fill="#1f2328">dmfast vs BYOND <tspan font-weight="400" fill="#59636e" font-size="13">lower is better</tspan></text>
+  <rect x="698" y="13" width="12" height="12" rx="2" fill="#d1d9e0"/>
+  <text x="715" y="24" font-size="12" fill="#59636e">stock</text>
+  <rect x="764" y="13" width="12" height="12" rx="2" fill="#2E46D5"/>
+  <text x="781" y="24" font-size="12" fill="#1f2328" font-weight="600">dmfast</text>
+  <rect x="16.0" y="188.9" width="32.4" height="97.1" rx="3" fill="#d1d9e0"/>
+  <rect x="52.4" y="253.5" width="32.4" height="32.5" rx="3" fill="#2E46D5"/>
+  <rect x="92.8" y="96.0" width="32.4" height="190.0" rx="3" fill="#d1d9e0"/>
+  <rect x="129.2" y="260.2" width="32.4" height="25.8" rx="3" fill="#2E46D5"/>
+  <rect x="183.6" y="96.0" width="32.4" height="190.0" rx="3" fill="#d1d9e0"/>
+  <rect x="220.0" y="264.1" width="32.4" height="21.9" rx="3" fill="#2E46D5"/>
+  <rect x="260.4" y="189.7" width="32.4" height="96.3" rx="3" fill="#d1d9e0"/>
+  <rect x="296.8" y="260.2" width="32.4" height="25.8" rx="3" fill="#2E46D5"/>
+  <rect x="351.2" y="108.7" width="32.4" height="177.3" rx="3" fill="#d1d9e0"/>
+  <rect x="387.6" y="163.7" width="32.4" height="122.3" rx="3" fill="#2E46D5"/>
+  <rect x="428.0" y="96.0" width="32.4" height="190.0" rx="3" fill="#d1d9e0"/>
+  <rect x="464.4" y="151.5" width="32.4" height="134.5" rx="3" fill="#2E46D5"/>
+  <rect x="518.8" y="127.7" width="32.4" height="158.3" rx="3" fill="#d1d9e0"/>
+  <rect x="555.2" y="187.5" width="32.4" height="98.5" rx="3" fill="#2E46D5"/>
+  <rect x="595.6" y="96.0" width="32.4" height="190.0" rx="3" fill="#d1d9e0"/>
+  <rect x="632.0" y="165.1" width="32.4" height="120.9" rx="3" fill="#2E46D5"/>
+  <rect x="686.4" y="197.1" width="32.4" height="88.9" rx="3" fill="#d1d9e0"/>
+  <rect x="722.8" y="256.9" width="32.4" height="29.1" rx="3" fill="#2E46D5"/>
+  <rect x="763.2" y="96.0" width="32.4" height="190.0" rx="3" fill="#d1d9e0"/>
+  <rect x="799.6" y="168.0" width="32.4" height="118.0" rx="3" fill="#2E46D5"/>
+  <text x="32.2" y="182.9" font-size="12" text-anchor="middle" fill="#59636e">23 s</text>
+  <text x="68.6" y="247.5" font-size="12" text-anchor="middle" font-weight="600" fill="#1f2328">7.70 s</text>
+  <text x="68.6" y="213.5" font-size="14" text-anchor="middle" font-weight="700" fill="#2E46D5">3.0x</text>
+  <text x="68.6" y="227.5" font-size="11" text-anchor="middle" font-weight="700" fill="#2E46D5">faster</text>
+  <text x="50.4" y="303" font-size="12" text-anchor="middle" fill="#59636e">Windows</text>
+  <text x="109.0" y="90.0" font-size="12" text-anchor="middle" fill="#59636e">45 s</text>
+  <text x="145.4" y="254.2" font-size="12" text-anchor="middle" font-weight="600" fill="#1f2328">6.10 s</text>
+  <text x="145.4" y="220.2" font-size="14" text-anchor="middle" font-weight="700" fill="#2E46D5">7.4x</text>
+  <text x="145.4" y="234.2" font-size="11" text-anchor="middle" font-weight="700" fill="#2E46D5">faster</text>
+  <text x="127.2" y="303" font-size="12" text-anchor="middle" fill="#59636e">Linux</text>
+  <text x="199.8" y="90.0" font-size="12" text-anchor="middle" fill="#59636e">7.50 s</text>
+  <text x="236.2" y="258.1" font-size="12" text-anchor="middle" font-weight="600" fill="#1f2328">0.86 s</text>
+  <text x="236.2" y="224.1" font-size="14" text-anchor="middle" font-weight="700" fill="#2E46D5">8.7x</text>
+  <text x="236.2" y="238.1" font-size="11" text-anchor="middle" font-weight="700" fill="#2E46D5">faster</text>
+  <text x="218.0" y="303" font-size="12" text-anchor="middle" fill="#59636e">Windows</text>
+  <text x="276.6" y="183.7" font-size="12" text-anchor="middle" fill="#59636e">3.80 s</text>
+  <text x="313.0" y="254.2" font-size="12" text-anchor="middle" font-weight="600" fill="#1f2328">1.02 s</text>
+  <text x="313.0" y="220.2" font-size="14" text-anchor="middle" font-weight="700" fill="#2E46D5">3.7x</text>
+  <text x="313.0" y="234.2" font-size="11" text-anchor="middle" font-weight="700" fill="#2E46D5">faster</text>
+  <text x="294.8" y="303" font-size="12" text-anchor="middle" fill="#59636e">Linux</text>
+  <text x="367.4" y="102.7" font-size="12" text-anchor="middle" fill="#59636e">28 s</text>
+  <text x="403.8" y="157.7" font-size="12" text-anchor="middle" font-weight="600" fill="#1f2328">19 s</text>
+  <text x="403.8" y="123.7" font-size="14" text-anchor="middle" font-weight="700" fill="#2E46D5">31%</text>
+  <text x="403.8" y="137.7" font-size="11" text-anchor="middle" font-weight="700" fill="#2E46D5">less</text>
+  <text x="385.6" y="303" font-size="12" text-anchor="middle" fill="#59636e">Windows</text>
+  <text x="444.2" y="90.0" font-size="12" text-anchor="middle" fill="#59636e">30 s</text>
+  <text x="480.6" y="145.5" font-size="12" text-anchor="middle" font-weight="600" fill="#1f2328">21 s</text>
+  <text x="480.6" y="111.5" font-size="14" text-anchor="middle" font-weight="700" fill="#2E46D5">29%</text>
+  <text x="480.6" y="125.5" font-size="11" text-anchor="middle" font-weight="700" fill="#2E46D5">less</text>
+  <text x="462.4" y="303" font-size="12" text-anchor="middle" fill="#59636e">Linux</text>
+  <text x="535.0" y="121.7" font-size="12" text-anchor="middle" fill="#59636e">4.75</text>
+  <text x="571.4" y="181.5" font-size="12" text-anchor="middle" font-weight="600" fill="#1f2328">2.95</text>
+  <text x="571.4" y="147.5" font-size="14" text-anchor="middle" font-weight="700" fill="#2E46D5">38%</text>
+  <text x="571.4" y="161.5" font-size="11" text-anchor="middle" font-weight="700" fill="#2E46D5">less</text>
+  <text x="553.2" y="303" font-size="12" text-anchor="middle" fill="#59636e">Windows</text>
+  <text x="611.8" y="90.0" font-size="12" text-anchor="middle" fill="#59636e">5.70</text>
+  <text x="648.2" y="159.1" font-size="12" text-anchor="middle" font-weight="600" fill="#1f2328">3.63</text>
+  <text x="648.2" y="125.1" font-size="14" text-anchor="middle" font-weight="700" fill="#2E46D5">36%</text>
+  <text x="648.2" y="139.1" font-size="11" text-anchor="middle" font-weight="700" fill="#2E46D5">less</text>
+  <text x="630.0" y="303" font-size="12" text-anchor="middle" fill="#59636e">Linux</text>
+  <text x="702.6" y="191.1" font-size="12" text-anchor="middle" fill="#59636e">690 MB</text>
+  <text x="739.0" y="250.9" font-size="12" text-anchor="middle" font-weight="600" fill="#1f2328">226 MB</text>
+  <text x="739.0" y="216.9" font-size="14" text-anchor="middle" font-weight="700" fill="#2E46D5">67%</text>
+  <text x="739.0" y="230.9" font-size="11" text-anchor="middle" font-weight="700" fill="#2E46D5">less</text>
+  <text x="720.8" y="303" font-size="12" text-anchor="middle" fill="#59636e">at world/New</text>
+  <text x="779.4" y="90.0" font-size="12" text-anchor="middle" fill="#59636e">1.47 GB</text>
+  <text x="815.8" y="162.0" font-size="12" text-anchor="middle" font-weight="600" fill="#1f2328">916 MB</text>
+  <text x="815.8" y="128.0" font-size="14" text-anchor="middle" font-weight="700" fill="#2E46D5">38%</text>
+  <text x="815.8" y="142.0" font-size="11" text-anchor="middle" font-weight="700" fill="#2E46D5">less</text>
+  <text x="797.6" y="303" font-size="12" text-anchor="middle" fill="#59636e">In-round</text>
+  <text x="88.8" y="322" font-size="13" font-weight="600" text-anchor="middle" fill="#1f2328">Compile</text>
+  <text x="256.4" y="322" font-size="13" font-weight="600" text-anchor="middle" fill="#1f2328">Time to world/New</text>
+  <text x="424.0" y="322" font-size="13" font-weight="600" text-anchor="middle" fill="#1f2328">In-round CPU</text>
+  <text x="591.6" y="322" font-size="13" font-weight="600" text-anchor="middle" fill="#1f2328">map_cpu, 16 players</text>
+  <text x="759.2" y="322" font-size="13" font-weight="600" text-anchor="middle" fill="#1f2328">Memory</text>
+  <line x1="0" y1="286.5" x2="848" y2="286.5" stroke="#d1d9e0"/>
+  <text x="0" y="344" font-size="11" fill="#59636e">dmfast 8.2 vs BYOND 516.1689. In-round CPU: processor time Daemon used in 5m of a loaded round.</text>
+</svg>
