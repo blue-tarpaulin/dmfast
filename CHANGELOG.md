@@ -5,6 +5,7 @@ Write changes under `## Unreleased`. Before tagging a release, rename that headi
 ## Unreleased
 
 - **New:** `dmfast-install-oss.exe`, we now release a build only using the open-source code, without the private patches.
+- **Fix:** Fixed a typo in `--offline` back to the intended `-offline` to match the other DreamDaemon flags.
 
 ## 8.2.0
 

@@ -41,7 +41,7 @@ dmfast-install [options] <BYOND or bin folder, dm.exe or dreamdaemon.exe>
      dmfast-install --uninstall "C:\Program Files (x86)\BYOND"
 
   DreamDaemon flags dmfast adds:
-     --offline          skip BYOND's hub connection (faster startup)
+     -offline           skip BYOND's hub connection (faster startup)
 
 Close BYOND first. Double-click this exe for a guided install, or drag BYOND onto it.
 Re-run this installer after a BYOND update."#
@@ -69,7 +69,7 @@ dmfast-install [options] <BYOND or bin folder, DreamMaker or DreamDaemon>
      dmfast-install --uninstall ~/byond
 
   DreamDaemon flags dmfast adds:
-     --offline          skip BYOND's hub connection (faster startup)
+     -offline           skip BYOND's hub connection (faster startup)
 
 Close BYOND first. Run it with no arguments in a terminal for a guided install.
 Re-run this installer after a BYOND update."#

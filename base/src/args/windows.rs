@@ -48,15 +48,15 @@ mod tests {
     fn removed(line: &str) -> String {
         let mut buf: Vec<u16> = line.encode_utf16().chain([0]).collect();
         // SAFETY: a NUL-terminated buffer only this test uses.
-        unsafe { remove_from(buf.as_mut_ptr(), "--offline") };
+        unsafe { remove_from(buf.as_mut_ptr(), "-offline") };
         String::from_utf16_lossy(&buf[..buf.iter().position(|&u| u == 0).unwrap()])
     }
 
     #[test]
     fn removes_whole_unquoted_arguments() {
-        assert_eq!(removed("dd.exe w.dmb 5000 --offline -trusted"), "dd.exe w.dmb 5000 -trusted");
-        assert_eq!(removed("dd.exe --OFFLINE\t--offline x"), "dd.exe x");
-        let kept = r#""C:\by --offline\dd.exe" "a --offline b" --offlinex x--offline"#;
+        assert_eq!(removed("dd.exe w.dmb 5000 -offline -trusted"), "dd.exe w.dmb 5000 -trusted");
+        assert_eq!(removed("dd.exe -OFFLINE\t-offline x"), "dd.exe x");
+        let kept = r#""C:\by -offline\dd.exe" "a -offline b" -offlinex x-offline --offline"#;
         assert_eq!(removed(kept), kept);
     }
 }

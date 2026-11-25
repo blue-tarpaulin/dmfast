@@ -1,4 +1,4 @@
-//! `offline`: DreamDaemon's `--offline` skips BYOND's own hub connection. DreamDaemon looks the hub up on its main
+//! `offline`: DreamDaemon's `-offline` skips BYOND's own hub connection. DreamDaemon looks the hub up on its main
 //! thread before the world starts, and again later, which stalls startup on a slow or missing network.
 //!
 //! The socket library's address lookup (`SocketLib::GetSocketAddress`) fails at once for the hub's names, as it does
@@ -22,7 +22,7 @@ mod windows;
 pub static OFFLINE: Feature = Feature::fix(
     Hosts::SERVER,
     "offline",
-    "--offline: no BYOND hub connection",
+    "-offline: no BYOND hub connection",
     Tier::Safe,
     install!(windows: windows::install, linux: linux::install),
 )
@@ -30,7 +30,7 @@ pub static OFFLINE: Feature = Feature::fix(
 .offered_if(|_| args::has(FLAG))
 .finish(take_flag);
 
-const FLAG: &str = "--offline";
+const FLAG: &str = "-offline";
 
 /// The lookup's callback: the address, or null if the name didn't resolve.
 type Found = unsafe extern "C" fn(*mut c_void, *mut c_void);
