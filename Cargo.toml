@@ -5,7 +5,7 @@ members = ["dmfast", "base", "format", "patches", "seeker", "installer", "packer
 default-members = ["installer"]
 
 [workspace.package]
-version = "8.2.0"
+version = "8.2.1"
 
 [profile.release]
 panic = "abort"
